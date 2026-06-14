@@ -10,6 +10,8 @@ logger = logging.getLogger("data")
 
 
 def load_hf_dataset(path, **kwargs):
+    logger.info(f"Loading dataset from {path} with args {kwargs}")
+    logger.info(f"Available datasets: {datasets.get_dataset_config_names(path)}")
     dataset = datasets.load_dataset(path, **kwargs)
     return dataset
 

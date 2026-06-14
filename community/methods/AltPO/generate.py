@@ -35,7 +35,8 @@ Question: {question}\nAnswer: {answer}\n"""+INST_QAS_LLAMA3_INSTR+"""<|eot_id|>
 """+"""Alternate Answer :"""
 
 
-HF_HOME = os.getenv('HF_HOME', '~/.cache/huggingface')
+# HF_HOME = os.getenv('HF_HOME', '~/.cache/huggingface')
+hf_home = os.getenv("HF_HUB_CACHE", default=None)
 
 def get_model(config):
     # Check if the model name is in the predefined list or not

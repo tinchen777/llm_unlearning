@@ -1,4 +1,4 @@
-handler: FinetuneTrainer
+handler: LoraFinetuneTrainer
 args:
   per_device_train_batch_size: 8
   per_device_eval_batch_size: 16
@@ -7,12 +7,11 @@ args:
   bf16: True
   bf16_full_eval: True
   logging_steps: 5
-  output_dir: ${paths.output_dir}
+  output_dir: ${paths.output_dir}/peft
   logging_dir: ${trainer.args.output_dir}/logs
   report_to: tensorboard
   ddp_find_unused_parameters: None
-  # gradient_checkpointing: False
-  gradient_checkpointing: True
+  gradient_checkpointing: Ture
   optim: paged_adamw_32bit
   save_strategy: 'no'
   save_only_model: True
@@ -26,3 +25,11 @@ args:
   eval_strategy: 'no'
   num_train_epochs: 10
   seed: 0
+method_args:                    # 新增 method_args，传入 LoRA 超参
+    lora_config:
+      r: 8
+      lora_alpha: 32
+      target_modules: ["q_proj", "v_proj"]   # 按模型架构调整
+      lora_dropout: 0.05
+      bias: "none"
+      task_type: "CAUSAL_LM"      # 根据任务调整，如 SEQ_CLS

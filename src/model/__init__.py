@@ -6,7 +6,8 @@ import torch
 import logging
 from model.probe import ProbedLlamaForCausalLM
 
-hf_home = os.getenv("HF_HOME", default=None)
+# hf_home = os.getenv("HF_HOME", default=None)
+hf_home = os.getenv("HF_HUB_CACHE", default=None)
 
 logger = logging.getLogger(__name__)
 
