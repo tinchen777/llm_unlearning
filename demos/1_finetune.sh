@@ -17,6 +17,11 @@
 set -e
 cd "$(dirname "$0")/.."   # 切到仓库根目录
 
+# 共享集群必看: 只暴露一张【空闲】GPU, 否则 HF Trainer 会在所有可见卡上启用
+# DataParallel, 往被别人占满的卡复制模型而 CUDA OOM。先 `nvidia-smi` 选空闲卡,
+# 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/1_finetune.sh` 覆盖。
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
 MODEL=Llama-3.2-1B-Instruct
 
 python src/train.py --config-name=train.yaml \
