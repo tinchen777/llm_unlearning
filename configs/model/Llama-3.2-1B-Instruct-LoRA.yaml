@@ -3,11 +3,11 @@
 # `src/model/__init__.py:get_model` uses to wrap the base model with a LoRA
 # adapter (via the `peft` library). Remove/omit `peft_args` to train full weights.
 model_args:
-  pretrained_model_name_or_path: "meta-llama/Llama-3.2-1B-Instruct"
+  pretrained_model_name_or_path: "unsloth/Llama-3.2-1B-Instruct"
   attn_implementation: 'flash_attention_2'
   torch_dtype: bfloat16
 tokenizer_args:
-  pretrained_model_name_or_path: "meta-llama/Llama-3.2-1B-Instruct"
+  pretrained_model_name_or_path: "unsloth/Llama-3.2-1B-Instruct"
 peft_args:
   # mirrors peft.LoraConfig
   r: 8

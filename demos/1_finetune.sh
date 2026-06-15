@@ -35,3 +35,7 @@ python src/train.py --config-name=train.yaml \
 #
 # 多卡训练把 `python src/train.py` 换成:
 #   accelerate launch --config_file configs/accelerate/default_config.yaml src/train.py ...
+
+
+python src/train.py --config-name=unlearn.yaml experiment=unlearn/tofu/default \
+  forget_split=forget10 retain_split=retain90 trainer=GradAscent task_name=SAMPLE_UNLEARN
