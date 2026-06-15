@@ -61,8 +61,49 @@ def get_model(model_cfg: DictConfig):
         raise ValueError(
             f"Error {e} while fetching model using {model_handler}.from_pretrained()."
         )
+    # Optional: wrap the loaded base model with a PEFT/LoRA adapter.
+    # This is additive and only triggers when a `peft_args` block is present in
+    # the model config, so existing (non-LoRA) configs are unaffected.
+    peft_args = model_cfg.get("peft_args", None)
+    if peft_args is not None:
+        model = get_peft_lora_model(model, peft_args)
+
     tokenizer = get_tokenizer(tokenizer_args)
     return model, tokenizer
+
+
+def get_peft_lora_model(model, peft_args: DictConfig):
+    """Wrap a base causal LM with a LoRA adapter using the `peft` library.
+
+    Args:
+        model: a freshly loaded base model (e.g. AutoModelForCausalLM).
+        peft_args (DictConfig): LoRA hyper-parameters. Recognised keys mirror
+            `peft.LoraConfig` (r, lora_alpha, lora_dropout, target_modules,
+            bias, task_type, ...). An optional `path` key can point to an
+            existing adapter checkpoint to resume/evaluate instead of creating
+            a fresh adapter.
+    """
+    try:
+        from peft import LoraConfig, get_peft_model, PeftModel
+    except ImportError as e:
+        raise ImportError(
+            "LoRA finetuning requires the `peft` library. Install it with "
+            "`pip install peft`."
+        ) from e
+
+    with open_dict(peft_args):
+        adapter_path = peft_args.pop("path", None)
+
+    if adapter_path is not None:
+        # Load a previously trained LoRA adapter on top of the base model.
+        model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True)
+        logger.info(f"Loaded existing LoRA adapter from {adapter_path}")
+    else:
+        lora_config = LoraConfig(**peft_args)
+        model = get_peft_model(model, lora_config)
+        logger.info("Created a new LoRA adapter on top of the base model.")
+    model.print_trainable_parameters()
+    return model
 
 
 def _add_or_replace_eos_token(tokenizer, eos_token: str) -> None:
