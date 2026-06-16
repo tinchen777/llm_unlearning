@@ -1,5 +1,5 @@
 
-from .utils import compute_dpo_loss
+from ..utils import compute_dpo_loss
 from .grad_diff import GradDiff
 
 

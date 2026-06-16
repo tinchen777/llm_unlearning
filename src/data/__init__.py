@@ -1,5 +1,6 @@
-from typing import Dict, Any, Union
+
 from omegaconf import DictConfig
+from typing import Dict, Any, Union
 
 from .qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .collators import DataCollatorForSupervisedDataset
@@ -44,12 +45,13 @@ def get_datasets(dataset_cfgs: Union[Dict, DictConfig], **kwargs):
     return dataset
 
 
-def get_data(data_cfg: DictConfig, mode="train", **kwargs):
-    data = {}
-    data_cfg = dict(data_cfg)
-    anchor = data_cfg.pop("anchor", "forget")
-    for split, dataset_cfgs in data_cfg.items():
-        data[split] = get_datasets(dataset_cfgs, **kwargs)
+def get_data(data_cfg: DictConfig, mode: str, **kwargs):
+    data: Dict[str, Any] = {}
+    new_data_cfg = dict(data_cfg)
+    anchor: str = new_data_cfg.pop("anchor", "forget")
+    for split, dataset_cfgs in new_data_cfg.items():
+        data[str(split)] = get_datasets(dataset_cfgs, **kwargs)
+
     if mode == "train":
         return data
     elif mode == "unlearn":

@@ -22,7 +22,7 @@ cd "$(dirname "$0")/.."
 
 MODEL=Llama-3.2-1B-Instruct
 
-python src/train.py --config-name=unlearn.yaml \
+CUDA_VISIBLE_DEVICES=0 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=GradDiff \
@@ -34,7 +34,7 @@ python src/train.py --config-name=unlearn.yaml \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
   task_name=demo_unlearn_graddiff_1 \
-  --cfg job --resolve
+  # --cfg job --resolve
 
 # 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
 # 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:

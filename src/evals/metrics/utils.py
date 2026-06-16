@@ -10,7 +10,7 @@ import torch
 from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
 import warnings
 
-from ...data.utils import IGNORE_INDEX
+from data.utils import IGNORE_INDEX
 
 
 def dict_transpose(evals):

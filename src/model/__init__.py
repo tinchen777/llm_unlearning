@@ -15,7 +15,7 @@ def _register_model(model_class):
     MODEL_REGISTRY[model_class.__name__] = model_class
 
 
-def get_dtype(model_args):
+def get_dtype(model_args: DictConfig):
     with open_dict(model_args):
         torch_dtype = model_args.pop("torch_dtype", None)
     if model_args.get("attn_implementation", None) == "flash_attention_2":
@@ -37,13 +37,10 @@ def get_dtype(model_args):
 
 
 def get_model(model_cfg: DictConfig):
-    # FIXME
-    print(model_cfg)
-    print(type(model_cfg))
-    
     assert model_cfg is not None and model_cfg.model_args is not None, ValueError(
         "Model config not found or model_args absent in configs/model."
     )
+    
     model_args = model_cfg.model_args
     tokenizer_args = model_cfg.tokenizer_args
     torch_dtype = get_dtype(model_args)
