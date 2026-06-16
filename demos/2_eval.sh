@@ -18,6 +18,10 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# 共享集群必看: 只暴露一张【空闲】GPU 评测。先 `nvidia-smi` 选空闲卡,
+# 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/2_eval.sh` 覆盖。
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
 MODEL=Llama-3.2-1B-Instruct
 
 python src/eval.py --config-name=eval.yaml \
