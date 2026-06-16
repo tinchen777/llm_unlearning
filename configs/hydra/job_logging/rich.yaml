@@ -5,10 +5,13 @@
 version: 1
 formatters:
   rich:
-    # %(name)s = logger name (e.g. evaluator / metrics / __main__). RichHandler
-    # renders time+level itself; the logger name must be put in this format string.
-    format: "[%(name)s] %(message)s"
-    datefmt: "[%X]"
+    # Custom formatter (src/log_utils.py): colors the logger name and escapes
+    # the message so brackets in log text aren't parsed as Rich markup.
+    (): log_utils.RichNameFormatter
+    name_style: "bold cyan"   # change to any Rich style, e.g. "magenta", "bold green"
+  plain:
+    # Plain text for the log file (no color markup written to disk).
+    format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"
 handlers:
   rich:
     class: rich.logging.RichHandler
@@ -17,10 +20,10 @@ handlers:
     show_time: true
     show_level: true
     show_path: false
-    markup: false   # safer: don't parse [..] in log text (URLs/brackets) as rich markup
+    markup: true   # required so the name's [bold cyan]..[/] tags are colored
   file:
     class: logging.FileHandler
-    formatter: rich
+    formatter: plain
     filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
 root:
   level: INFO
