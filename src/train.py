@@ -3,7 +3,6 @@ from rich.traceback import install
 install(show_locals=True, width=100)
 
 import os
-from rich.logging import RichHandler
 import hydra
 import logging
 from omegaconf import DictConfig
@@ -14,12 +13,6 @@ from trainer import load_trainer
 from trainer.utils import seed_everything
 from evals import get_evaluators
 
-
-logging.basicConfig(
-    level="INFO",
-    format="%(message)s",
-    handlers=[RichHandler(rich_tracebacks=True)]
-)
 
 logger = logging.getLogger("main(train)")
 
