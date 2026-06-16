@@ -1,0 +1,28 @@
+# Hydra job_logging config that routes logs through rich.logging.RichHandler.
+# Select it via the defaults list (override job_logging: rich) in
+# configs/hydra/default.yaml, or per-run on the CLI: `hydra/job_logging=rich`.
+# Requires: pip install rich
+version: 1
+formatters:
+  rich:
+    # %(name)s = logger name (e.g. evaluator / metrics / __main__). RichHandler
+    # renders time+level itself; the logger name must be put in this format string.
+    format: "[%(name)s] %(message)s"
+    datefmt: "[%X]"
+handlers:
+  rich:
+    class: rich.logging.RichHandler
+    formatter: rich
+    rich_tracebacks: true
+    show_time: true
+    show_level: true
+    show_path: false
+    markup: false   # safer: don't parse [..] in log text (URLs/brackets) as rich markup
+  file:
+    class: logging.FileHandler
+    formatter: rich
+    filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
+root:
+  level: INFO
+  handlers: [rich, file]
+disable_existing_loggers: false
