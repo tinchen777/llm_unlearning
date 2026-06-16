@@ -5,7 +5,9 @@
 version: 1
 formatters:
   rich:
-    format: "%(name)s - %(message)s"
+    # %(name)s = logger name (e.g. evaluator / metrics / __main__). RichHandler
+    # renders time+level itself; the logger name must be put in this format string.
+    format: "[%(name)s] %(message)s"
     datefmt: "[%X]"
 handlers:
   rich:
