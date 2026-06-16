@@ -23,6 +23,10 @@ cd "$(dirname "$0")/.."
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export CUDA_VISIBLE_DEVICES=0
+# 共享集群必看: 只暴露一张【空闲】GPU, 否则 HF Trainer 会在所有可见卡上启用
+# DataParallel, 往被别人占满的卡复制模型而 CUDA OOM。先 `nvidia-smi` 选一张空闲卡,
+# 改下面的默认 0, 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/4_unlearn.sh` 覆盖。
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
 MODEL=Llama-3.2-1B-Instruct
 

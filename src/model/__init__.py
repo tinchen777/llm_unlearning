@@ -55,7 +55,7 @@ def get_model(model_cfg: DictConfig):
         # diverge from where `datasets` caches data.
         model = model_cls.from_pretrained(
             pretrained_model_name_or_path=model_path,
-            dtype=torch_dtype,
+            dtype=torch_dtype,  # transformers>=4.56 renamed `torch_dtype` -> `dtype`
             **model_args,
         )
     except Exception as e:
