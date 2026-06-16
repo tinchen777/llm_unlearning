@@ -40,7 +40,6 @@ def get_model(model_cfg: DictConfig):
     assert model_cfg is not None and model_cfg.model_args is not None, ValueError(
         "Model config not found or model_args absent in configs/model."
     )
-    
     model_args = model_cfg.model_args
     tokenizer_args = model_cfg.tokenizer_args
     torch_dtype = get_dtype(model_args)
@@ -56,7 +55,7 @@ def get_model(model_cfg: DictConfig):
         # diverge from where `datasets` caches data.
         model = model_cls.from_pretrained(
             pretrained_model_name_or_path=model_path,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             **model_args,
         )
     except Exception as e:

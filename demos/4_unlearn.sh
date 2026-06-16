@@ -20,9 +20,13 @@
 set -e
 cd "$(dirname "$0")/.."
 
+export HF_HUB_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export CUDA_VISIBLE_DEVICES=0
+
 MODEL=Llama-3.2-1B-Instruct
 
-CUDA_VISIBLE_DEVICES=0 python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=GradDiff \
