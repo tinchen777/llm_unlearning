@@ -3,14 +3,14 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader
 
-from evals.metrics.utils import (
+from .utils import (
     aggregate_to_1D,
     evaluate_probability,
     eval_text_similarity,
     run_batchwise_evals,
     tokenwise_vocab_logprobs,
 )
-from evals.metrics.base import unlearning_metric
+from .base import unlearning_metric
 
 # Supress the info messages logged while calculating rouge using rouge_scorer
 logging.getLogger("absl").setLevel(logging.WARNING)

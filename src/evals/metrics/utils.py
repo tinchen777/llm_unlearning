@@ -8,8 +8,9 @@ import scipy as sc
 from torch import nn
 import torch
 from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
-from data.utils import IGNORE_INDEX
 import warnings
+
+from ...data.utils import IGNORE_INDEX
 
 
 def dict_transpose(evals):

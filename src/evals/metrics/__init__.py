@@ -1,7 +1,8 @@
 from typing import Dict
 from omegaconf import DictConfig
-from evals.metrics.base import UnlearningMetric
-from evals.metrics.memorization import (
+
+from .base import UnlearningMetric
+from .memorization import (
     probability,
     probability_w_options,
     rouge,
@@ -9,8 +10,8 @@ from evals.metrics.memorization import (
     extraction_strength,
     exact_memorization,
 )
-from evals.metrics.privacy import ks_test, privleak, rel_diff
-from evals.metrics.mia import (
+from .privacy import ks_test, privleak, rel_diff
+from .mia import (
     mia_loss,
     mia_min_k,
     mia_min_k_plus_plus,
@@ -18,7 +19,7 @@ from evals.metrics.mia import (
     mia_zlib,
     mia_reference,
 )
-from evals.metrics.utility import (
+from .utility import (
     hm_aggregate,
     classifier_prob,
 )

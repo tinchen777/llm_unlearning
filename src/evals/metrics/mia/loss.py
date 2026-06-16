@@ -2,8 +2,8 @@
 Straight-forward LOSS attack, as described in https://ieeexplore.ieee.org/abstract/document/8429311
 """
 
-from evals.metrics.mia.all_attacks import Attack
-from evals.metrics.utils import evaluate_probability
+from .all_attacks import Attack
+from ..utils import evaluate_probability
 
 
 class LOSSAttack(Attack):

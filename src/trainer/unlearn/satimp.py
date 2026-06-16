@@ -1,5 +1,6 @@
-from trainer.unlearn.grad_diff import GradDiff
-from trainer.utils import compute_satimp_loss
+
+from .grad_diff import GradDiff
+from ..utils import compute_satimp_loss
 
 
 class SatImp(GradDiff):

@@ -25,6 +25,8 @@ defaults:
 
 每个组件是 `configs/<组>/<名>.yaml`。这样模型、训练器、数据、评测彼此解耦。
 
+> effective_batch = per_device_train_batch_size × gradient_accumulation_steps × 卡数
+
 ### 2. experiment 包：一次性覆盖一整组默认值
 `configs/experiment/finetune/tofu/default.yaml` 顶部用 `# @package _global_`
 + `override`，把上面的默认值整组替换并设好实验超参：

@@ -1,4 +1,5 @@
-from trainer.unlearn.base import UnlearnTrainer
+
+from .base import UnlearnTrainer
 
 
 class GradAscent(UnlearnTrainer):

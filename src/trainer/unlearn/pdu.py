@@ -1,7 +1,8 @@
+
 import torch
 from transformers import TrainerCallback
 
-from trainer.unlearn.grad_diff import GradDiff
+from .grad_diff import GradDiff
 
 
 class PDU(GradDiff):

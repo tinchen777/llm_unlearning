@@ -1,4 +1,5 @@
-from evals.base import Evaluator
+
+from .base import Evaluator
 
 
 class TOFUEvaluator(Evaluator):

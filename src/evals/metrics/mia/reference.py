@@ -2,8 +2,8 @@
 Reference-based attacks.
 """
 
-from evals.metrics.mia.all_attacks import Attack
-from evals.metrics.utils import evaluate_probability
+from .all_attacks import Attack
+from ..utils import evaluate_probability
 
 
 class ReferenceAttack(Attack):

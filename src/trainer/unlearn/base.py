@@ -1,23 +1,15 @@
-from typing import Any, Optional, Union
 
 import torch
 from torch import nn
 from copy import deepcopy
+from transformers.trainer_pt_utils import nested_detach
+from transformers.utils import is_sagemaker_mp_enabled
+from accelerate.utils import is_deepspeed_available
 from packaging import version
-from trainer.base import FinetuneTrainer
+from typing import Any, Optional, Union
 
-from transformers.trainer_pt_utils import (
-    nested_detach,
-)
+from ..base import FinetuneTrainer
 
-
-from transformers.utils import (
-    is_sagemaker_mp_enabled,
-)
-
-from accelerate.utils import (
-    is_deepspeed_available,
-)
 
 if is_sagemaker_mp_enabled():
     from smdistributed.modelparallel import __version__ as SMP_VERSION

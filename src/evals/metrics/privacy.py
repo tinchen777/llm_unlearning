@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import ks_2samp
-from evals.metrics.base import unlearning_metric, logger
+
+from .base import unlearning_metric, logger
 
 
 @unlearning_metric(name="ks_test")

@@ -2,18 +2,18 @@
 Attack implementations.
 """
 
+import logging
 from transformers import AutoModelForCausalLM
 
-from evals.metrics.base import unlearning_metric
-from evals.metrics.mia.loss import LOSSAttack
-from evals.metrics.mia.min_k import MinKProbAttack
-from evals.metrics.mia.min_k_plus_plus import MinKPlusPlusAttack
-from evals.metrics.mia.gradnorm import GradNormAttack
-from evals.metrics.mia.zlib import ZLIBAttack
-from evals.metrics.mia.reference import ReferenceAttack
+from ..base import unlearning_metric
+from .loss import LOSSAttack
+from .min_k import MinKProbAttack
+from .min_k_plus_plus import MinKPlusPlusAttack
+from .gradnorm import GradNormAttack
+from .zlib import ZLIBAttack
+from .reference import ReferenceAttack
+from .utils import mia_auc
 
-from evals.metrics.mia.utils import mia_auc
-import logging
 
 logger = logging.getLogger("metrics")
 

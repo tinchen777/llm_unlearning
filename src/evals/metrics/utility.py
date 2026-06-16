@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from evals.metrics.utils import aggregate_to_1D
-from evals.metrics.base import unlearning_metric
+from .utils import aggregate_to_1D
+from .base import unlearning_metric
 
 
 @unlearning_metric(name="hm_aggregate")

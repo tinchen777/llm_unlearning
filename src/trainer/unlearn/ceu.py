@@ -1,7 +1,8 @@
-from trainer.unlearn.base import UnlearnTrainer
 
 import torch
 import torch.nn.functional as F
+
+from .base import UnlearnTrainer
 
 
 def cross_entropy_unlearning_loss(

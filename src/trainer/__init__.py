@@ -3,19 +3,19 @@ from typing import Dict, Any
 from omegaconf import DictConfig
 from transformers import Trainer, TrainingArguments
 
-from trainer.base import FinetuneTrainer
-from trainer.unlearn.grad_ascent import GradAscent
-from trainer.unlearn.grad_diff import GradDiff
-from trainer.unlearn.npo import NPO
-from trainer.unlearn.dpo import DPO
-from trainer.unlearn.simnpo import SimNPO
-from trainer.unlearn.rmu import RMU
-from trainer.unlearn.undial import UNDIAL
-from trainer.unlearn.ceu import CEU
-from trainer.unlearn.satimp import SatImp
-from trainer.unlearn.wga import WGA
-from trainer.unlearn.pdu import PDU
-from trainer.unlearn.bounded_grad_diff import BoundedGradDiff
+from .base import FinetuneTrainer
+from .unlearn.grad_ascent import GradAscent
+from .unlearn.grad_diff import GradDiff
+from .unlearn.npo import NPO
+from .unlearn.dpo import DPO
+from .unlearn.simnpo import SimNPO
+from .unlearn.rmu import RMU
+from .unlearn.undial import UNDIAL
+from .unlearn.ceu import CEU
+from .unlearn.satimp import SatImp
+from .unlearn.wga import WGA
+from .unlearn.pdu import PDU
+from .unlearn.bounded_grad_diff import BoundedGradDiff
 
 
 import logging

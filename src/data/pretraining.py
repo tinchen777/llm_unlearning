@@ -1,6 +1,7 @@
 # import torch
 from torch.utils.data import Dataset
-from data.utils import (
+
+from .utils import (
     load_hf_dataset,
     add_dataset_index,
     preprocess_pretraining_instance,

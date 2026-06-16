@@ -1,5 +1,6 @@
-from trainer.utils import compute_undial_loss
-from trainer.unlearn.grad_diff import GradDiff
+
+from ..utils import compute_undial_loss
+from .grad_diff import GradDiff
 
 
 class UNDIAL(GradDiff):

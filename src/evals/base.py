@@ -1,7 +1,8 @@
 import os
 import json
 import logging
-from evals.metrics import get_metrics
+
+from .metrics import get_metrics
 
 logger = logging.getLogger("evaluator")
 
@@ -90,7 +91,7 @@ class Evaluator:
                     )
                 self.save_logs(self.summarize(logs), summary_file_path)
                 continue
-            _ = logs.pop(metric_name, None)  # overwriting existing evals if present
+            _ = logs.pop(metric_name, None)  # overwriting existing  if present
             kwargs = {
                 "tokenizer": kwargs.get("tokenizer", None),
                 "template_args": kwargs.get("template_args", None),

@@ -1,7 +1,8 @@
+
 import torch.nn.functional as F
 
-from trainer.utils import compute_batch_nll
-from trainer.unlearn.grad_diff import GradDiff
+from ..utils import compute_batch_nll
+from .grad_diff import GradDiff
 
 
 class SimNPO(GradDiff):

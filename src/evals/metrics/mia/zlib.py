@@ -4,8 +4,8 @@ zlib-normalization Attack: https://www.usenix.org/system/files/sec21-carlini-ext
 
 import zlib
 
-from evals.metrics.mia.all_attacks import Attack
-from evals.metrics.utils import (
+from .all_attacks import Attack
+from ..utils import (
     evaluate_probability,
     extract_target_texts_from_processed_data,
 )

@@ -1,15 +1,14 @@
-from evals.metrics.mia.all_attacks import AllAttacks
-from evals.metrics.mia.loss import LOSSAttack
-from evals.metrics.mia.reference import ReferenceAttack
-from evals.metrics.mia.zlib import ZLIBAttack
-from evals.metrics.mia.min_k import MinKProbAttack
-from evals.metrics.mia.min_k_plus_plus import MinKPlusPlusAttack
-from evals.metrics.mia.gradnorm import GradNormAttack
-
-from sklearn.metrics import roc_auc_score
-
 
 import numpy as np
+from sklearn.metrics import roc_auc_score
+
+from .all_attacks import AllAttacks
+from .loss import LOSSAttack
+from .reference import ReferenceAttack
+from .zlib import ZLIBAttack
+from .min_k import MinKProbAttack
+from .min_k_plus_plus import MinKPlusPlusAttack
+from .gradnorm import GradNormAttack
 
 
 def get_attacker(attack: str):

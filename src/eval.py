@@ -1,9 +1,9 @@
 import hydra
 from omegaconf import DictConfig
 
-from trainer.utils import seed_everything
-from model import get_model
-from evals import get_evaluators
+from .trainer.utils import seed_everything
+from .model import get_model
+from .evals import get_evaluators
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="eval.yaml")

@@ -1,6 +1,8 @@
+
 import copy
-from trainer.utils import compute_kl_divergence
-from trainer.unlearn.base import UnlearnTrainer
+
+from ..utils import compute_kl_divergence
+from .base import UnlearnTrainer
 
 
 class GradDiff(UnlearnTrainer):

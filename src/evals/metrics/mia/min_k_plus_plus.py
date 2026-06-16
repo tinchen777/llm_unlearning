@@ -1,7 +1,8 @@
 import torch as torch
 import numpy as np
-from evals.metrics.mia.min_k import MinKProbAttack
-from evals.metrics.utils import tokenwise_vocab_logprobs, tokenwise_logprobs
+
+from .min_k import MinKProbAttack
+from ..utils import tokenwise_vocab_logprobs, tokenwise_logprobs
 
 
 class MinKPlusPlusAttack(MinKProbAttack):

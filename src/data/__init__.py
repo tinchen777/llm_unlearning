@@ -1,12 +1,10 @@
 from typing import Dict, Any, Union
 from omegaconf import DictConfig
 
-from data.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
-from data.collators import (
-    DataCollatorForSupervisedDataset,
-)
-from data.unlearn import ForgetRetainDataset
-from data.pretraining import PretrainingDataset, CompletionDataset
+from .qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
+from .collators import DataCollatorForSupervisedDataset
+from .unlearn import ForgetRetainDataset
+from .pretraining import PretrainingDataset, CompletionDataset
 
 DATASET_REGISTRY: Dict[str, Any] = {}
 COLLATOR_REGISTRY: Dict[str, Any] = {}

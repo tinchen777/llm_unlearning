@@ -18,7 +18,7 @@
 """
 
 import torch
-from trainer.unlearn.grad_diff import GradDiff
+from .grad_diff import GradDiff
 
 
 class BoundedGradDiff(GradDiff):

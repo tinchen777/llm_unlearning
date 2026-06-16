@@ -4,8 +4,9 @@ experimented for pre-training data and LLMs in https://arxiv.org/abs/2402.17012
 """
 
 import torch
-from evals.metrics.mia.all_attacks import Attack
-from evals.metrics.utils import tokenwise_logprobs
+
+from .all_attacks import Attack
+from ..utils import tokenwise_logprobs
 
 
 # DO NOT use gradnorm in a way so that it runs when your accumulated gradients during training aren't used yet

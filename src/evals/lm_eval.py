@@ -5,7 +5,7 @@ from lm_eval.models.hf_vlms import HFLM
 from lm_eval.tasks import TaskManager
 from lm_eval import simple_evaluate
 
-from evals.base import Evaluator
+from .base import Evaluator
 
 
 logger = logging.getLogger("evaluator")

@@ -1,5 +1,6 @@
-from trainer.unlearn.grad_diff import GradDiff
-from trainer.utils import compute_wga_loss
+
+from .grad_diff import GradDiff
+from ..utils import compute_wga_loss
 
 
 class WGA(GradDiff):

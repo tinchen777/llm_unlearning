@@ -1,8 +1,9 @@
 from typing import Dict, Any
 from omegaconf import DictConfig
-from evals.tofu import TOFUEvaluator
-from evals.muse import MUSEEvaluator
-from evals.lm_eval import LMEvalEvaluator
+
+from .tofu import TOFUEvaluator
+from .muse import MUSEEvaluator
+from .lm_eval import LMEvalEvaluator
 
 EVALUATOR_REGISTRY: Dict[str, Any] = {}
 

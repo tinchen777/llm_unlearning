@@ -33,7 +33,8 @@ python src/train.py --config-name=unlearn.yaml \
   retain_split=retain90 \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_unlearn_graddiff
+  task_name=demo_unlearn_graddiff_1 \
+  --cfg job --resolve
 
 # 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
 # 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:

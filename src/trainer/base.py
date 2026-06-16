@@ -2,11 +2,11 @@
 
 import logging
 import os
-from typing import Any, Dict, List, Optional, Union
-
 from torch.utils.data import Dataset
 from transformers import Trainer
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from typing import Any, Dict, List, Optional, Union
+
 
 logger = logging.getLogger(__name__)
 

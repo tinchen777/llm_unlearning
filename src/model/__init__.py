@@ -3,7 +3,8 @@ from omegaconf import DictConfig, open_dict
 from typing import Dict, Any
 import torch
 import logging
-from model.probe import ProbedLlamaForCausalLM
+
+from .probe import ProbedLlamaForCausalLM
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ def get_dtype(model_args):
 
 
 def get_model(model_cfg: DictConfig):
+    # FIXME
+    print(model_cfg)
+    print(type(model_cfg))
+    
     assert model_cfg is not None and model_cfg.model_args is not None, ValueError(
         "Model config not found or model_args absent in configs/model."
     )

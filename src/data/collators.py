@@ -1,7 +1,8 @@
 import torch
 import transformers
 from typing import Dict, Sequence
-from data.utils import IGNORE_INDEX
+
+from .utils import IGNORE_INDEX
 
 
 class DataCollatorForSupervisedDataset(object):

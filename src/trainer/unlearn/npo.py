@@ -1,5 +1,6 @@
-from trainer.utils import compute_dpo_loss
-from trainer.unlearn.grad_diff import GradDiff
+
+from .utils import compute_dpo_loss
+from .grad_diff import GradDiff
 
 
 class NPO(GradDiff):
