@@ -2,8 +2,8 @@
 
 # enable rich logging (requires `pip install rich`)
 defaults:
-  - override hydra_logging: rich   # Hydra's own framework logs
-  - override job_logging: rich     # your application logs (the ones you usually care about)
+  - override hydra_logging: colorlog   # Hydra's own framework logs
+  - override job_logging: colorlog     # your application logs (the ones you usually care about)
   # To revert to the old style: change these to `colorlog`, or per-run e.g.
   # `hydra/job_logging=colorlog hydra/hydra_logging=colorlog`.
 

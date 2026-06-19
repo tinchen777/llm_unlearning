@@ -4,6 +4,7 @@ install(show_locals=True, width=100)
 
 import os
 import hydra
+from cobra_color import cstr
 import logging
 from omegaconf import DictConfig
 
@@ -12,6 +13,7 @@ from model import get_model
 from trainer import load_trainer
 from trainer.utils import seed_everything
 from evals import get_evaluators
+from log_utils import step_logging
 
 
 logger = logging.getLogger("main(train)")
@@ -24,30 +26,28 @@ def main(cfg: DictConfig):
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {os.environ.get('CUDA_VISIBLE_DEVICES', 'Not Set')}")
 
+    # Set seed for reproducibility
     seed_everything(cfg.trainer.args.seed)
+    # Load model and tokenizer
     mode = cfg.get("mode", "train")
     model_cfg = cfg.model
     template_args = model_cfg.template_args
-    assert model_cfg is not None, "Invalid model yaml passed in train config."
-    logger.info(f"Loading model")
-    model, tokenizer = get_model(model_cfg)
-    logger.info(f"Loaded model with args {model_cfg.model_args}")
+    with step_logging(logger, "[1/5]", "model", model_cfg):
+        assert model_cfg is not None, "Invalid model yaml passed in train config."
+        model, tokenizer = get_model(model_cfg)
 
     # Load Dataset
     data_cfg = cfg.data
-    logger.info(f"Loading data")
-    data = get_data(
-        data_cfg, mode=mode, tokenizer=tokenizer, template_args=template_args
-    )
-    logger.info(f"Loaded data with config: {data_cfg}")
+    with step_logging(logger, "[2/5]", "data", data_cfg):
+        data = get_data(
+            data_cfg, mode=mode, tokenizer=tokenizer, template_args=template_args
+        )
 
     # Load collator
     collator_cfg = cfg.collator
-    logger.info(f"Loading collator")
-    collator = get_collators(collator_cfg, tokenizer=tokenizer)
-    logger.info(f"Loaded collator with config {collator_cfg}")
+    with step_logging(logger, "[3/5]", "collator", collator_cfg):
+        collator = get_collators(collator_cfg, tokenizer=tokenizer)
 
-    # Get Trainer
     trainer_cfg = cfg.trainer
     assert trainer_cfg is not None, ValueError("Please set trainer")
 
@@ -55,23 +55,28 @@ def main(cfg: DictConfig):
     evaluators = None
     eval_cfgs = cfg.get("eval", None)
     if eval_cfgs:
-        evaluators = get_evaluators(
-            eval_cfgs=eval_cfgs,
-            template_args=template_args,
-            model=model,
-            tokenizer=tokenizer,
-        )
+        with step_logging(logger, "[4/5]", "evaluators", eval_cfgs):
+            evaluators = get_evaluators(
+                eval_cfgs=eval_cfgs,
+                template_args=template_args,
+                model=model,
+                tokenizer=tokenizer,
+            )
+    else:
+        logger.info(cstr("[4/5]", fg="y", styles="bold") + cstr(" No evaluators found in config, skipping evaluation setup.", styles="bold"))
 
-    trainer, trainer_args = load_trainer(
-        trainer_cfg=trainer_cfg,
-        model=model,
-        train_dataset=data.get("train", None),
-        eval_dataset=data.get("eval", None),
-        processing_class=tokenizer,
-        data_collator=collator,
-        evaluators=evaluators,
-        template_args=template_args,
-    )
+    # Get Trainer
+    with step_logging(logger, "[5/5]", "trainer", trainer_cfg):
+        trainer, trainer_args = load_trainer(
+            trainer_cfg=trainer_cfg,
+            model=model,
+            train_dataset=data.get("train", None),
+            eval_dataset=data.get("eval", None),
+            processing_class=tokenizer,
+            data_collator=collator,
+            evaluators=evaluators,
+            template_args=template_args,
+        )
 
     if trainer_args.do_train:
         trainer.train()

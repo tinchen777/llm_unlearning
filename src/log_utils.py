@@ -1,6 +1,10 @@
 import logging
-
 from rich.markup import escape
+from rich import print
+from cobra_color import cstr
+from omegaconf import DictConfig, OmegaConf
+from contextlib import contextmanager
+from typing import Optional
 
 
 class RichNameFormatter(logging.Formatter):
@@ -26,3 +30,17 @@ class RichNameFormatter(logging.Formatter):
         message = escape(record.getMessage())
         name = f"[{self.name_style}]{escape(record.name)}[/] "
         return name + message
+
+
+@contextmanager
+def step_logging(logger: logging.Logger, step: str, name: str, args: Optional[DictConfig] = None):
+    print()
+    logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Loading {name}", styles="bold"))
+    try:
+        yield
+    finally:
+        if args is not None:
+            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name} with config: ", styles="bold"))
+            print(OmegaConf.to_yaml(args))
+        else:
+            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name}", styles="bold"))
