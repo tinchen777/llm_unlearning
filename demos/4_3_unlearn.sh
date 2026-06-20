@@ -34,9 +34,6 @@ python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=CEU \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
   forget_split=forget10 \
   retain_split=retain90 \
   holdout_split=holdout10 \
@@ -48,9 +45,6 @@ python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=DPO \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
   forget_split=forget10 \
   retain_split=retain90 \
   holdout_split=holdout10 \
@@ -62,9 +56,6 @@ python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=finetune \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
   forget_split=forget10 \
   retain_split=retain90 \
   holdout_split=holdout10 \
@@ -72,32 +63,26 @@ python src/train.py --config-name=unlearn.yaml \
   task_name=demo_unlearn_finetune \
   # --cfg job --resolve
 
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
-  model=${MODEL} \
-  trainer=GradAscent \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_unlearn_GradAscent \
-  # --cfg job --resolve
+# python src/train.py --config-name=unlearn.yaml \
+#   experiment=unlearn/tofu/default \
+#   model=${MODEL} \
+#   trainer=GradAscent \
+#   forget_split=forget10 \
+#   retain_split=retain90 \
+#   holdout_split=holdout10 \
+#   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+#   task_name=demo_unlearn_GradAscent \
+#   # --cfg job --resolve
 
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
-  model=${MODEL} \
-  trainer=GradDiff \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_unlearn_GradDiff \
+# python src/train.py --config-name=unlearn.yaml \
+#   experiment=unlearn/tofu/default \
+#   model=${MODEL} \
+#   trainer=GradDiff \
+#   forget_split=forget10 \
+#   retain_split=retain90 \
+#   holdout_split=holdout10 \
+#   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+#   task_name=demo_unlearn_GradDiff \
   # --cfg job --resolve
 
 

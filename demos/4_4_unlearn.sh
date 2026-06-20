@@ -30,19 +30,60 @@ export CUDA_VISIBLE_DEVICES=0
 
 MODEL=Llama-3.2-1B-Instruct
 
+# python src/train.py --config-name=unlearn.yaml \
+#   experiment=unlearn/tofu/default \
+#   model=${MODEL} \
+#   trainer=CEU \
+#   forget_split=forget10 \
+#   retain_split=retain90 \
+#   holdout_split=holdout10 \
+#   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+#   task_name=demo_unlearn_CEU \
+#   # --cfg job --resolve
+
+# python src/train.py --config-name=unlearn.yaml \
+#   experiment=unlearn/tofu/default \
+#   model=${MODEL} \
+#   trainer=DPO \
+#   forget_split=forget10 \
+#   retain_split=retain90 \
+#   holdout_split=holdout10 \
+#   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+#   task_name=demo_unlearn_DPO \
+#   # --cfg job --resolve
+
+# python src/train.py --config-name=unlearn.yaml \
+#   experiment=unlearn/tofu/default \
+#   model=${MODEL} \
+#   trainer=finetune \
+#   forget_split=forget10 \
+#   retain_split=retain90 \
+#   holdout_split=holdout10 \
+#   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+#   task_name=demo_unlearn_finetune \
+#   # --cfg job --resolve
+
 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
-  trainer=DPO \
-  trainer.args.eval_on_start=False \
+  trainer=GradAscent \
   forget_split=forget10 \
   retain_split=retain90 \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_unlearn_DPO
-
+  task_name=demo_unlearn_GradAscent \
   # --cfg job --resolve
 
-# 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
-# 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:
-#   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
+python src/train.py --config-name=unlearn.yaml \
+  experiment=unlearn/tofu/default \
+  model=${MODEL} \
+  trainer=GradDiff \
+  forget_split=forget10 \
+  retain_split=retain90 \
+  holdout_split=holdout10 \
+  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+  task_name=demo_unlearn_GradDiff \
+  # --cfg job --resolve
+
+
+  
