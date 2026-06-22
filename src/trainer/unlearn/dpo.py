@@ -13,6 +13,14 @@ class DPO(GradDiff):
     def compute_loss(
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
+        """
+        DPO + idk 的一条完整样本嵌套成：
+
+        {
+        "forget": {"original": {...}, "alternate": {...}},
+        "retain": {...},
+        }
+        """
         forget_inputs = inputs["forget"]["original"]
         alternate_inputs = inputs["forget"]["alternate"]
 
