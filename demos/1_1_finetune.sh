@@ -28,6 +28,7 @@ python src/train.py --config-name=train.yaml \
   experiment=finetune/tofu/default \
   model=${MODEL} \
   trainer.args.eval_on_start=False \
-  task_name=tofu_${MODEL}_full \
+  task_name=test/tofu_${MODEL}_full \
 
 # 产物: saves/finetune/tofu_${MODEL}_full
+echo end finetune ${MODEL}

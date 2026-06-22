@@ -28,7 +28,8 @@ export CUDA_VISIBLE_DEVICES=0
 # 改下面的默认 0, 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/4_unlearn.sh` 覆盖。
 # export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
-MODEL=Llama-3.2-1B-Instruct
+# MODEL=Llama-3.2-1B-Instruct
+MODEL=Qwen/Qwen2.5-1.5B-Instruct
 
 echo start BoundedGradDiff
 python src/train.py --config-name=unlearn.yaml \
@@ -66,12 +67,12 @@ echo end CEU
 echo start DPO
 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/idk \
-  model=Llama-3.2-1B-Instruct \
+  model=${MODEL} \
   trainer=DPO \
   trainer.args.eval_on_start=False \
   forget_split=forget10 \
   retain_split=retain90 \
-  retain_logs_path=saves/eval/tofu_Llama-3.2-1B-Instruct_retain90/TOFU_EVAL.json \
+  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
   task_name=test/DPO
 echo end DPO
 
