@@ -28,8 +28,7 @@ export CUDA_VISIBLE_DEVICES=0
 # 改下面的默认 0, 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/4_unlearn.sh` 覆盖。
 # export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
-# MODEL=Llama-3.2-1B-Instruct
-MODEL=Qwen/Qwen2.5-1.5B-Instruct
+MODEL=Llama-3.2-1B-Instruct
 
 echo start BoundedGradDiff
 python src/train.py --config-name=unlearn.yaml \

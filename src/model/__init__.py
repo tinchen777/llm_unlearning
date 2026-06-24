@@ -37,10 +37,12 @@ def get_dtype(model_args: DictConfig):
 
 
 def get_model(model_cfg: DictConfig):
-    assert model_cfg is not None and model_cfg.model_args is not None, ValueError(
-        "Model config not found or model_args absent in configs/model."
-    )
+    assert model_cfg is not None, ValueError("Model config not found.")
+
     model_args = model_cfg.model_args
+    assert model_args is not None, ValueError("model_args absent in configs/model."
+    )
+
     tokenizer_args = model_cfg.tokenizer_args
     torch_dtype = get_dtype(model_args)
     model_handler = model_cfg.get("model_handler", "AutoModelForCausalLM")

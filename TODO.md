@@ -8,11 +8,12 @@
 4. 
 
 
-Llama-3.2-1B-Instruct      # ~1.2B
-Qwen2.5-1.5B-Instruct      # ~1.5B
-phi-1_5                    # ~1.3B
-Llama-3.2-3B-Instruct      # ~3B
-Qwen2.5-3B-Instruct        # ~3B
+<!-- Llama-3.2-1B-Instruct      # ~1.2B 20GB -->
+Qwen2.5-1.5B-Instruct      # ~1.5B retain
+phi-1_5                    # ~1.3B retain
+Llama-3.2-3B-Instruct      # ~3B retain full
+Qwen2.5-3B-Instruct        # ~3B retain full
+retain: 90,95,99
 
 ## 实验设置
 
