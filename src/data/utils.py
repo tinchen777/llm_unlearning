@@ -1,22 +1,29 @@
+
+from __future__ import annotations
 import torch
 import datasets
 import numpy as np
 import logging
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 IGNORE_INDEX = -100  # TODO put in common constants
 
 logger = logging.getLogger("data")
 
 
-def load_hf_dataset(path, **kwargs):
+def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> datasets.Dataset:
     dataset = datasets.load_dataset(path, **kwargs)
+    if add_index:
+        dataset = dataset.add_column("index", np.arange(len(dataset)))
     return dataset
 
 
 def preprocess_chat_instance(
-    tokenizer,
-    template_config: Dict[str, Any],
+    tokenizer: Any,
+    template_config: TrackingConfig,
     prompt_msgs: Union[List[str], str],
     response_msgs: Union[List[str], str],
     max_length: int,
@@ -34,7 +41,7 @@ def preprocess_chat_instance(
 
     Args:
         tokenizer: Tokenizer to apply on text
-        template_config (Dict[str, Any]): Configuration for the chat template (comes from model-specific config).
+        template_config (TrackingConfig): Configuration for the chat template (comes from model-specific config).
         prompt_msgs (Union[List[str], str]): List of prompt messages or a single prompt message string.
         response_msgs (Union[List[str], str]): List of response messages or a single response message string.
         max_length (int): Maximum sequence length after tokenization.
@@ -48,7 +55,7 @@ def preprocess_chat_instance(
         assert isinstance(response_msgs, str)
         prompt_msgs, response_msgs = [prompt_msgs], [response_msgs]
 
-    if template_config["apply_chat_template"]:
+    if template_config.get("apply_chat_template", False):
         chat = []
         system_prompt = template_config.get("system_prompt", None)
         if system_prompt:
@@ -149,7 +156,7 @@ def preprocess_chat_instance(
 
 
 def preprocess_pretraining_instance(
-    tokenizer,
+    tokenizer: Any,
     prefix: str,
     text_content: str,
     max_length: int,
@@ -192,9 +199,3 @@ def preprocess_pretraining_instance(
     for attr in item:
         item[attr] = torch.tensor(item[attr])
     return item
-
-
-def add_dataset_index(dataset):
-    indexing = np.arange(len(dataset))
-    dataset = dataset.add_column("index", indexing)
-    return dataset

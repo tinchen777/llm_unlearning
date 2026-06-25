@@ -1,93 +1,84 @@
 
-from omegaconf import DictConfig
-from typing import Dict, Any, Union
+from __future__ import annotations
+from typing import Dict, Any, Union, TYPE_CHECKING
 
 from .qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .collators import DataCollatorForSupervisedDataset
 from .unlearn import ForgetRetainDataset
 from .pretraining import PretrainingDataset, CompletionDataset
 
+if TYPE_CHECKING:
+    from torch.utils.data import Dataset
+    from utils.config import TrackingConfig
+
 DATASET_REGISTRY: Dict[str, Any] = {}
 COLLATOR_REGISTRY: Dict[str, Any] = {}
 
 
-def _register_data(data_class):
-    DATASET_REGISTRY[data_class.__name__] = data_class
+def _register_data(data_cls):
+    DATASET_REGISTRY[data_cls.__name__] = data_cls
 
 
-def _register_collator(collator_class):
-    COLLATOR_REGISTRY[collator_class.__name__] = collator_class
+def _register_collator(collator_cls):
+    COLLATOR_REGISTRY[collator_cls.__name__] = collator_cls
 
 
-def _load_single_dataset(dataset_name, dataset_cfg: DictConfig, **kwargs):
-    dataset_handler_name = dataset_cfg.get("handler")
-    assert dataset_handler_name is not None, ValueError(
-        f"{dataset_name} handler not set"
-    )
-    dataset_handler = DATASET_REGISTRY.get(dataset_handler_name)
-    if dataset_handler is None:
-        raise NotImplementedError(
-            f"{dataset_handler_name} not implemented or not registered"
-        )
-    dataset_args = dataset_cfg.args
-    return dataset_handler(**dataset_args, **kwargs)
-
-
-def get_datasets(dataset_cfgs: Union[Dict, DictConfig], **kwargs):
-    dataset = {}
-    for dataset_name, dataset_cfg in dataset_cfgs.items():
-        access_name = dataset_cfg.get("access_key", dataset_name)
-        dataset[access_name] = _load_single_dataset(dataset_name, dataset_cfg, **kwargs)
-    if len(dataset) == 1:
-        # return a single dataset
-        return list(dataset.values())[0]
-    # return mapping to multiple datasets
-    return dataset
-
-
-def get_data(data_cfg: DictConfig, mode: str, **kwargs):
-    data: Dict[str, Any] = {}
-    new_data_cfg = dict(data_cfg)
-    anchor: str = new_data_cfg.pop("anchor", "forget")
-    for split, dataset_cfgs in new_data_cfg.items():
-        data[str(split)] = get_datasets(dataset_cfgs, **kwargs)
+def get_data(data_cfg: TrackingConfig, mode: str, **kwargs):
+    data: Dict[str, Union[Dataset, Dict[str, Dataset]]] = {}
+    for split_name, split_cfg in data_cfg.items():
+        if split_name != "anchor":
+            data[split_name] = get_datasets(split_cfg, **kwargs)
 
     if mode == "train":
         return data
     elif mode == "unlearn":
-        unlearn_splits = {k: v for k, v in data.items() if k not in ("eval", "test")}
-        unlearn_dataset = ForgetRetainDataset(**unlearn_splits, anchor=anchor)
-        data["train"] = unlearn_dataset
-        for split in unlearn_splits:
-            data.pop(split)
+        data["train"] = ForgetRetainDataset(
+            forget=data["forget"],
+            retain=data["retain"],
+            anchor=data_cfg.get("anchor", "forget")
+        )
+        for split_name in [k for k in data if k not in ("train", "eval", "test")]:
+            data.pop(split_name)
     return data
 
 
-def _get_single_collator(collator_name: str, collator_cfg: DictConfig, **kwargs):
-    collator_handler_name = collator_cfg.get("handler")
-    assert collator_handler_name is not None, ValueError(
-        f"{collator_name} handler not set"
-    )
-    collator_handler = COLLATOR_REGISTRY.get(collator_handler_name)
-    if collator_handler is None:
-        raise NotImplementedError(
-            f"{collator_handler_name} not implemented or not registered"
-        )
-    collator_args = collator_cfg.args
-    return collator_handler(**collator_args, **kwargs)
+def get_datasets(dataset_cfgs: TrackingConfig, **kwargs):
+    dataset: Dict[str, Dataset] = {}
+    for dataset_name, dataset_cfg in dataset_cfgs.items():
+        access_name = dataset_cfg.get("access_key", dataset_name)
+        try:
+            dataset[str(access_name)] = _load_single_dataset(dataset_cfg, **kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error loading dataset `{dataset_name}` in `@{dataset_cfg.loc_choices}` with {dataset_cfg}") from e
+    if len(dataset) == 1:
+        # return a single dataset
+        return next(iter(dataset.values()))
+    # return mapping to multiple datasets
+    return dataset
 
 
-def get_collators(collator_cfgs, **kwargs):
+def _load_single_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
+    dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
+    return dataset_cls(**dataset_cfg.get("args", {}), **kwargs)
+
+
+def get_collators(collator_cfgs: TrackingConfig, **kwargs):
     collators = {}
     for collator_name, collator_cfg in collator_cfgs.items():
-        collators[collator_name] = _get_single_collator(
-            collator_name, collator_cfg, **kwargs
-        )
+        try:
+            collators[collator_name] = _get_single_collator(collator_cfg, **kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error loading collator `{collator_name}` in `@{collator_cfg.loc_choices}` with {collator_cfg}") from e
     if len(collators) == 1:
         # return a single collator
-        return list(collators.values())[0]
+        return next(iter(collators.values()))
     # return collators in a dict
     return collators
+
+
+def _get_single_collator(collator_cfg: TrackingConfig, **kwargs):
+    collator_cls = COLLATOR_REGISTRY[collator_cfg["handler"]]
+    return collator_cls(**collator_cfg.get("args", {}), **kwargs)
 
 
 # Register datasets

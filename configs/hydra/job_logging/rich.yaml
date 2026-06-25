@@ -7,7 +7,7 @@ formatters:
   rich:
     # Custom formatter (src/log_utils.py): colors the logger name and escapes
     # the message so brackets in log text aren't parsed as Rich markup.
-    (): log_utils.RichNameFormatter
+    (): utils.log.RichNameFormatter
     name_style: "bold cyan"   # change to any Rich style, e.g. "magenta", "bold green"
   plain:
     # Plain text for the log file (no color markup written to disk).

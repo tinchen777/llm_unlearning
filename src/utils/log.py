@@ -1,10 +1,15 @@
+
+from __future__ import annotations
 import logging
 from rich.markup import escape
 from rich import print
 from cobra_color import cstr
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from contextlib import contextmanager
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import TrackingConfig
 
 
 class RichNameFormatter(logging.Formatter):
@@ -33,14 +38,19 @@ class RichNameFormatter(logging.Formatter):
 
 
 @contextmanager
-def step_logging(logger: logging.Logger, step: str, name: str, args: Optional[DictConfig] = None):
+def step_logging(logger: logging.Logger, step: str, name: str, cfg: Optional[TrackingConfig] = None, is_skip: bool = False):
     print()
-    logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Loading {name}", styles="bold"))
-    try:
+    # loc of config
+    loc = f" `@{cfg.loc_choices}`" if cfg is not None else ""
+
+    if is_skip:
+        logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Skipping {name}{loc}.", styles="bold"))
         yield
-    finally:
-        if args is not None:
-            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name} with config: ", styles="bold"))
-            print(OmegaConf.to_yaml(args))
+    else:
+        logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Loading {name}{loc} ...", styles="bold"))
+        try:
+            yield
+        except Exception as e:
+            raise RuntimeError(f"Error loading {name}{loc}.") from e
         else:
-            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name}", styles="bold"))
+            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name}{loc}.", styles="bold"))

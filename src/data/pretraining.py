@@ -1,40 +1,38 @@
-# import torch
-from torch.utils.data import Dataset
 
-from .utils import (
-    load_hf_dataset,
-    add_dataset_index,
-    preprocess_pretraining_instance,
-)
+from __future__ import annotations
+import torch
+from torch.utils.data import Dataset
+from typing import Any, Optional, Dict, List, Union, TYPE_CHECKING
+
+from .utils import load_hf_dataset, preprocess_pretraining_instance
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 
 class CompletionDataset(Dataset):
     def __init__(
         self,
-        hf_args,
-        template_args,
-        tokenizer,
-        prefix_key="prompt",
-        text_key="text",
-        max_length=2048,
-        predict_with_generate=False,
-        insert_space=False,
+        hf_args: TrackingConfig,
+        template_args: TrackingConfig,
+        tokenizer: Any,
+        prefix_key: str = "prompt",
+        text_key: str = "text",
+        max_length: int = 2048,
+        predict_with_generate: bool = False,
+        insert_space: bool = False,
     ):
-        super(CompletionDataset, self).__init__()
+        super().__init__()
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.data = load_hf_dataset(**hf_args)
-        self.data = add_dataset_index(self.data)
-        # if either key does not exist in dataset, it is taken as ""
         self.prefix_key = prefix_key
         self.text_key = text_key
         self.predict_with_generate = predict_with_generate
         self.insert_space = insert_space
+        # data
+        self.data = load_hf_dataset(**hf_args, add_index=True)
 
-    def __len__(self):
-        return len(self.data)
-
-    def _process_sample(self, prefix, text_content, index=-1):
+    def _process_sample(self, prefix: str, text_content: str, index: int = -1) -> Dict[str, Union[int, torch.Tensor]]:
         tokenized_data = preprocess_pretraining_instance(
             self.tokenizer,
             prefix,
@@ -43,37 +41,43 @@ class CompletionDataset(Dataset):
             self.predict_with_generate,
             self.insert_space,
         )
-        item_dct = {
+        return {
             "input_ids": tokenized_data["input_ids"],
             "labels": tokenized_data["labels"],
             "attention_mask": tokenized_data["attention_mask"],
+            "index": index
         }
-        if index != -1:
-            item_dct["index"] = index
-        return item_dct
 
-    def __getitem__(self, idx):
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx: int):
         pref = self.data[idx].get(self.prefix_key, "")
         text_content = self.data[idx].get(self.text_key, "")
         index = self.data[idx]["index"]
-        item = self._process_sample(pref, text_content, index)
-        return item
+        return self._process_sample(pref, text_content, index)
 
 
 class PretrainingDataset(Dataset):
     def __init__(
-        self, hf_args, template_args, tokenizer, text_key="text", max_length=2048
+        self,
+        hf_args: TrackingConfig,
+        template_args: TrackingConfig,
+        tokenizer: Any,
+        text_key: str = "text",
+        max_length: int = 2048
     ):
-        super(PretrainingDataset, self).__init__()
+        super().__init__()
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.chunks = self._chunk_raw_text(load_hf_dataset(**hf_args)[text_key])
 
     def _chunk_raw_text(self, raw_text):
         raw_text = "\n\n".join(raw_text)
-        full_token_sequence = self.tokenizer(raw_text, add_special_tokens=False)[
-            "input_ids"
-        ]
+        full_token_sequence = self.tokenizer(
+            raw_text,
+            add_special_tokens=False
+        )["input_ids"]
         num_chunks = len(full_token_sequence) // self.max_length + 1
         chunks = []
         for i in range(num_chunks):
@@ -87,7 +91,7 @@ class PretrainingDataset(Dataset):
     def __len__(self):
         return len(self.chunks)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         return preprocess_pretraining_instance(
             self.tokenizer, "", self.chunks[idx], self.max_length
         )

@@ -1,6 +1,7 @@
+
 import torch
 import transformers
-from typing import Dict, Sequence
+from typing import Dict, Sequence, Optional
 
 from .utils import IGNORE_INDEX
 
@@ -12,7 +13,7 @@ class DataCollatorForSupervisedDataset(object):
         self,
         tokenizer: transformers.PreTrainedTokenizer,
         padding_side: str = "right",
-        index: str = None,
+        index: Optional[str] = None,
     ):
         self.tokenizer = tokenizer
         self.padding_side = padding_side

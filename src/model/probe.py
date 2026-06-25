@@ -1,10 +1,11 @@
-from transformers import AutoConfig, LlamaForCausalLM
+
 import torch
-import torch.nn as nn
+from torch import nn
 import logging
 import gc
 from copy import deepcopy
-from transformers import AutoModelForCausalLM
+from transformers import AutoConfig, LlamaForCausalLM, AutoModelForCausalLM
+from typing import Optional
 
 logger = logging.getLogger("model")
 
@@ -24,17 +25,21 @@ class ProbedLlamaForCausalLM(LlamaForCausalLM):
     def from_pretrained(
         cls,
         pretrained_model_name_or_path: str,
-        head_pretrained_model_name_or_path: str = None,
+        head_pretrained_model_name_or_path: Optional[str] = None,
         n_layers: int = 100,
         freeze_base_model: bool = True,
         **kwargs,
     ):
         config, unused_kwargs = AutoConfig.from_pretrained(
-            pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            pretrained_model_name_or_path,
+            return_unused_kwargs=True,
+            **kwargs
         )
-        config.tie_word_embeddings = False
+        config.tie_word_embeddings = False  # type: ignore
         model: LlamaForCausalLM = super().from_pretrained(
-            pretrained_model_name_or_path, config=config, **unused_kwargs
+            pretrained_model_name_or_path,
+            config=config,
+            **unused_kwargs
         )
 
         # Limit number of transformer layers
@@ -50,7 +55,9 @@ class ProbedLlamaForCausalLM(LlamaForCausalLM):
                 f"Initialising lm_head from {head_pretrained_model_name_or_path}"
             )
             head_model: LlamaForCausalLM = AutoModelForCausalLM.from_pretrained(
-                head_pretrained_model_name_or_path, config=config, **unused_kwargs
+                head_pretrained_model_name_or_path,
+                config=config,
+                **unused_kwargs
             )
             lm_head = deepcopy(head_model.lm_head).to(device)
             model.set_output_embeddings(lm_head)
