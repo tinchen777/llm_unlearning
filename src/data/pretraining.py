@@ -2,7 +2,7 @@
 from __future__ import annotations
 import torch
 from torch.utils.data import Dataset
-from typing import Any, Optional, Dict, List, Union, TYPE_CHECKING
+from typing import Any, Dict, Union, TYPE_CHECKING
 
 from .utils import load_hf_dataset, preprocess_pretraining_instance
 

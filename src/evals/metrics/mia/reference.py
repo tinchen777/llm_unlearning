@@ -2,7 +2,7 @@
 Reference-based attacks.
 """
 
-from .all_attacks import Attack
+from .base import Attack
 from ..utils import evaluate_probability
 
 

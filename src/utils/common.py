@@ -1,8 +1,10 @@
 
 import os
+import json
 import torch
 import random
 import numpy as np
+from typing import Any, Dict
 
 
 def set_seed(seed=42):
@@ -23,3 +25,20 @@ def get_cuda_visible_devices():
     except Exception:
         devices = list(range(num_devices))
     return devices
+
+
+def load_logs_from_file(file_path: str) -> Dict[str, Dict[str, Any]]:
+    """Returns the cache of existing results"""
+    with open(file_path, "r") as f:
+        return json.load(f)
+
+
+def save_logs(logs: Dict[str, Any], file_path: str):
+    """Save the logs in a json file"""
+    logs = dict(sorted(logs.items()))
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    try:
+        with open(file_path, "w") as f:
+            json.dump(logs, f, indent=4)
+    except Exception as e:
+        raise RuntimeError(f"Failed to save {file_path}") from e

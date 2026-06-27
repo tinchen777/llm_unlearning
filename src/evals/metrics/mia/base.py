@@ -2,24 +2,11 @@
 Enum class for attacks. Also contains the base attack class.
 """
 
-from enum import Enum
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
 
 
-# Attack definitions
-class AllAttacks(str, Enum):
-    LOSS = "loss"
-    REFERENCE_BASED = "ref"
-    ZLIB = "zlib"
-    MIN_K = "min_k"
-    MIN_K_PLUS_PLUS = "min_k++"
-    GRADNORM = "gradnorm"
-    RECALL = "recall"
-
-
-# Base attack class
 class Attack:
     def __init__(self, model, data, collator, batch_size, **kwargs):
         """Initialize attack with model and create dataloader."""

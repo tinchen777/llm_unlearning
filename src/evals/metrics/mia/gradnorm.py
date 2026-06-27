@@ -5,7 +5,7 @@ experimented for pre-training data and LLMs in https://arxiv.org/abs/2402.17012
 
 import torch
 
-from .all_attacks import Attack
+from .base import Attack
 from ..utils import tokenwise_logprobs
 
 

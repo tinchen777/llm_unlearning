@@ -1,3 +1,4 @@
+
 import logging
 import torch
 import numpy as np
@@ -20,11 +21,11 @@ logger = logging.getLogger("evaluator")
 @unlearning_metric(name="probability")
 def probability(model, **kwargs):
     """Compute the probabilities by data points and report aggregated average"""
-    data = kwargs["data"]
-    collator = kwargs["collators"]
-    batch_size = kwargs["batch_size"]
-
-    dataloader = DataLoader(data, batch_size=batch_size, collate_fn=collator)
+    dataloader = DataLoader(
+        kwargs["data"],
+        batch_size=kwargs["batch_size"],
+        collate_fn=kwargs["collators"]
+    )
 
     fun_args = {}
     scores_by_index = run_batchwise_evals(
@@ -234,6 +235,7 @@ def extraction_strength(model, **kwargs):
         for log_probs, labels in zip(log_probs_batch, labels_batch):
             valid_len = len(labels)
             preds = torch.argmax(log_probs, dim=-1)
+            k = 0
             for k in range(valid_len):
                 suff_preds = preds[k:]
                 suff_labels = labels[k:]

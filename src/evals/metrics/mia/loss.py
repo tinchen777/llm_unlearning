@@ -2,7 +2,7 @@
 Straight-forward LOSS attack, as described in https://ieeexplore.ieee.org/abstract/document/8429311
 """
 
-from .all_attacks import Attack
+from .base import Attack
 from ..utils import evaluate_probability
 
 

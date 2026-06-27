@@ -7,6 +7,7 @@ from .muse import MUSEEvaluator
 from .lm_eval import LMEvalEvaluator
 
 if TYPE_CHECKING:
+    from .base import Evaluator
     from utils.config import TrackingConfig
 
 EVALUATOR_REGISTRY: Dict[str, Any] = {}
@@ -16,7 +17,7 @@ def _register_evaluator(evaluator_cls):
     EVALUATOR_REGISTRY[evaluator_cls.__name__] = evaluator_cls
 
 
-def get_evaluators(eval_cfgs: TrackingConfig, **kwargs):
+def get_evaluators(eval_cfgs: TrackingConfig, **kwargs) -> Dict[str, Evaluator]:
     evaluators = {}
     for eval_name, eval_cfg in eval_cfgs.items():
         try:
@@ -26,7 +27,7 @@ def get_evaluators(eval_cfgs: TrackingConfig, **kwargs):
     return evaluators
 
 
-def _get_evaluator(eval_cfg: TrackingConfig, **kwargs):
+def _get_evaluator(eval_cfg: TrackingConfig, **kwargs) -> Evaluator:
     eval_cls = EVALUATOR_REGISTRY[eval_cfg["handler"]]
     return eval_cls(eval_cfg, **kwargs)
 

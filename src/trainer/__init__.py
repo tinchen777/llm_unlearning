@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 import logging
 from transformers import Trainer, TrainingArguments
-from typing import Dict, Any, Tuple, TYPE_CHECKING
+from typing import Dict, Tuple, Any, Optional, Union, TYPE_CHECKING
 
 from .base import FinetuneTrainer
 from .unlearn.grad_ascent import GradAscent
@@ -20,11 +20,12 @@ from .unlearn.pdu import PDU
 from .unlearn.bounded_grad_diff import BoundedGradDiff
 
 if TYPE_CHECKING:
+    from torch.utils.data import Dataset
     from utils.config import TrackingConfig
 
 logger = logging.getLogger(__name__)
 
-TRAINER_REGISTRY: Dict[str, Any] = {}
+TRAINER_REGISTRY: Dict[str, type[FinetuneTrainer]] = {}
 
 
 def _register_trainer(trainer_class):
@@ -33,14 +34,14 @@ def _register_trainer(trainer_class):
 
 def load_trainer(
     trainer_cfg: TrackingConfig,
-    model,
-    train_dataset=None,
-    eval_dataset=None,
-    processing_class=None,
-    data_collator=None,
-    evaluators=None,
-    template_args=None,
-) -> Tuple[Trainer, TrainingArguments]:
+    model: Any,
+    train_dataset: Optional[Dataset] = None,
+    eval_dataset: Optional[Dataset] = None,
+    processing_class: Any = None,
+    data_collator: Any = None,
+    evaluators: Any = None,
+    template_args: Any = None,
+) -> Tuple[FinetuneTrainer, TrainingArguments]:
     args = _load_trainer_args(
         trainer_cfg.get("args", {}),
         len(train_dataset) if train_dataset else 0

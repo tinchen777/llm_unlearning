@@ -3,10 +3,12 @@
 import logging
 import os
 from torch.utils.data import Dataset
-from transformers import Trainer
+from transformers import Trainer, ev
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger(__name__)
 

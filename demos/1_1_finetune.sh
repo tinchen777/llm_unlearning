@@ -27,7 +27,7 @@ MODEL=Qwen2.5-1.5B-Instruct
 python src/train.py --config-name=train.yaml \
   experiment=finetune/tofu/default \
   model=${MODEL} \
-  trainer.args.eval_on_start=False \
+  trainer.args.eval_on_start=True \
   trainer.args.num_train_epochs=20 \
   task_name=test/tofu_${MODEL}_x \
 

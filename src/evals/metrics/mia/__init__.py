@@ -1,9 +1,10 @@
-"""
-Attack implementations.
-"""
 
+from __future__ import annotations
+import numpy as np
 import logging
+from sklearn.metrics import roc_auc_score
 from transformers import AutoModelForCausalLM
+from typing import Any, TYPE_CHECKING
 
 from ..base import unlearning_metric
 from .loss import LOSSAttack
@@ -12,17 +13,15 @@ from .min_k_plus_plus import MinKPlusPlusAttack
 from .gradnorm import GradNormAttack
 from .zlib import ZLIBAttack
 from .reference import ReferenceAttack
-from .utils import mia_auc
 
+if TYPE_CHECKING:
+    from .base import Attack
 
 logger = logging.getLogger("metrics")
 
-## NOTE: all MIA attack statistics are signed as required in order to show the
-# same trends as loss (higher the score on an example, less likely the membership)
-
 
 @unlearning_metric(name="mia_loss")
-def mia_loss(model, **kwargs):
+def mia_loss(model: Any, **kwargs):
     return mia_auc(
         LOSSAttack,
         model,
@@ -33,7 +32,7 @@ def mia_loss(model, **kwargs):
 
 
 @unlearning_metric(name="mia_min_k")
-def mia_min_k(model, **kwargs):
+def mia_min_k(model: Any, **kwargs):
     return mia_auc(
         MinKProbAttack,
         model,
@@ -45,7 +44,7 @@ def mia_min_k(model, **kwargs):
 
 
 @unlearning_metric(name="mia_min_k_plus_plus")
-def mia_min_k_plus_plus(model, **kwargs):
+def mia_min_k_plus_plus(model: Any, **kwargs):
     return mia_auc(
         MinKPlusPlusAttack,
         model,
@@ -57,7 +56,7 @@ def mia_min_k_plus_plus(model, **kwargs):
 
 
 @unlearning_metric(name="mia_gradnorm")
-def mia_gradnorm(model, **kwargs):
+def mia_gradnorm(model: Any, **kwargs):
     return mia_auc(
         GradNormAttack,
         model,
@@ -69,7 +68,7 @@ def mia_gradnorm(model, **kwargs):
 
 
 @unlearning_metric(name="mia_zlib")
-def mia_zlib(model, **kwargs):
+def mia_zlib(model: Any, **kwargs):
     return mia_auc(
         ZLIBAttack,
         model,
@@ -81,7 +80,7 @@ def mia_zlib(model, **kwargs):
 
 
 @unlearning_metric(name="mia_reference")
-def mia_reference(model, **kwargs):
+def mia_reference(model: Any, **kwargs):
     if "reference_model_path" not in kwargs:
         raise ValueError("Reference model must be provided in kwargs")
     logger.info(f"Loading reference model from {kwargs['reference_model_path']}")
@@ -98,3 +97,43 @@ def mia_reference(model, **kwargs):
         batch_size=kwargs["batch_size"],
         reference_model=reference_model,
     )
+
+
+def mia_auc(attack_cls: type[Attack], model: Any, data, collator, batch_size, **kwargs):
+    """
+    Compute the MIA AUC and accuracy.
+
+    Parameters:
+      - attack_cls: the attack class to use.
+      - model: the target model.
+      - data: a dict with keys "forget" and "holdout".
+      - collator: data collator.
+      - batch_size: batch size.
+      - kwargs: additional optional parameters (e.g. k, p, tokenizer, reference_model).
+
+    Returns a dict containing the attack outputs, including "acc" and "auc".
+
+    Note on convention: auc is 1 when the forget data is much more likely than the holdout data
+    """
+    # Build attack arguments from common parameters and any extras.
+    attack_args = {
+        "model": model,
+        "collator": collator,
+        "batch_size": batch_size,
+        **kwargs
+    }
+    forget = attack_cls(data=data["forget"], **attack_args).attack()
+    holdout = attack_cls(data=data["holdout"], **attack_args).attack()
+    forget_scores = [elem["score"] for elem in forget["value_by_index"].values()]
+    holdout_scores = [elem["score"] for elem in holdout["value_by_index"].values()]
+
+    scores = np.array(forget_scores + holdout_scores)
+    labels = np.array([0] * len(forget_scores) + [1] * len(holdout_scores))
+    auc_value = roc_auc_score(labels, scores)
+
+    return {
+        "forget": forget,
+        "holdout": holdout,
+        "auc": auc_value,
+        "agg_value": auc_value
+    }

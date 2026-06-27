@@ -1,18 +1,24 @@
+
+from __future__ import annotations
 import logging
 from omegaconf import OmegaConf
-
 from lm_eval.models.hf_vlms import HFLM
 from lm_eval.tasks import TaskManager
 from lm_eval import simple_evaluate
+from typing import TYPE_CHECKING
 
 from .base import Evaluator
+from utils.common import load_logs_from_file, save_logs
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 
 logger = logging.getLogger("evaluator")
 
 
 class LMEvalEvaluator(Evaluator):
-    def __init__(self, eval_cfg, **kwargs):
+    def __init__(self, eval_cfg: TrackingConfig):
         self.name = "LMEval"
         self.eval_cfg = eval_cfg
         self.tasks = OmegaConf.to_container(

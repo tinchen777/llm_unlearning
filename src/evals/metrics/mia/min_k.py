@@ -4,7 +4,7 @@ Min-k % Prob Attack: https://arxiv.org/pdf/2310.16789.pdf
 
 import numpy as np
 
-from .all_attacks import Attack
+from .base import Attack
 from ..utils import tokenwise_logprobs
 
 

@@ -15,6 +15,7 @@ from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 
+logging.getLogger("datasets").setLevel(logging.ERROR)
 logger = logging.getLogger("main(train)")
 
 
@@ -58,12 +59,7 @@ def main(config: DictConfig):
     eval_cfgs = cfg.get("eval", None, allow_none=True)
     if eval_cfgs:
         with step_logging(logger, "[4/5]", "evaluators", eval_cfgs):
-            evaluators = get_evaluators(
-                eval_cfgs=eval_cfgs,
-                template_args=template_args,
-                model=model,
-                tokenizer=tokenizer,
-            )
+            evaluators = get_evaluators(eval_cfgs, template_args=template_args)
     else:
         with step_logging(logger, "[4/5]", "evaluators", is_skip=True):
             evaluators = None
@@ -86,7 +82,8 @@ def main(config: DictConfig):
     if args.do_train:
         trainer.train()
         trainer.save_state()
-        trainer.save_model(args.output_dir)
+        # trainer.save_model(args.output_dir)
+        trainer.save_model()
 
     if args.do_eval:
         trainer.evaluate(metric_key_prefix="eval")

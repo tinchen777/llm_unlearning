@@ -39,7 +39,7 @@ class ProbedLlamaForCausalLM(LlamaForCausalLM):
         model: LlamaForCausalLM = super().from_pretrained(
             pretrained_model_name_or_path,
             config=config,
-            **unused_kwargs
+            **unused_kwargs  # type: ignore
         )
 
         # Limit number of transformer layers
@@ -57,7 +57,7 @@ class ProbedLlamaForCausalLM(LlamaForCausalLM):
             head_model: LlamaForCausalLM = AutoModelForCausalLM.from_pretrained(
                 head_pretrained_model_name_or_path,
                 config=config,
-                **unused_kwargs
+                **unused_kwargs  # type: ignore
             )
             lm_head = deepcopy(head_model.lm_head).to(device)
             model.set_output_embeddings(lm_head)

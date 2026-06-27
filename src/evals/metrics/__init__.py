@@ -1,7 +1,7 @@
-from typing import Dict
-from omegaconf import DictConfig
 
-from .base import UnlearningMetric
+from __future__ import annotations
+from typing import Dict, TYPE_CHECKING
+
 from .memorization import (
     probability,
     probability_w_options,
@@ -24,6 +24,10 @@ from .utility import (
     classifier_prob,
 )
 
+if TYPE_CHECKING:
+    from .base import UnlearningMetric
+    from utils.config import TrackingConfig
+
 METRICS_REGISTRY: Dict[str, UnlearningMetric] = {}
 
 
@@ -31,25 +35,17 @@ def _register_metric(metric):
     METRICS_REGISTRY[metric.name] = metric
 
 
-def _get_single_metric(name: str, metric_cfg, **kwargs):
-    metric_handler_name = metric_cfg.get("handler")
-    assert metric_handler_name is not None, ValueError(f"{name} handler not set")
-    metric = METRICS_REGISTRY.get(metric_handler_name)
-    if metric is None:
-        raise NotImplementedError(
-            f"{metric_handler_name} not implemented or not registered"
-        )
-    pre_compute_cfg = metric_cfg.get("pre_compute", {})
-    pre_compute_metrics = get_metrics(pre_compute_cfg, **kwargs)
-    metric.set_pre_compute_metrics(pre_compute_metrics)
-    return metric
+def get_metrics(metric_cfgs: TrackingConfig):
+    return {metric_name: _get_single_metric(metric_cfg)
+            for metric_name, metric_cfg in metric_cfgs.items()}
 
 
-def get_metrics(metric_cfgs: DictConfig, **kwargs):
-    metrics = {}
-    for metric_name, metric_cfg in metric_cfgs.items():
-        metrics[metric_name] = _get_single_metric(metric_name, metric_cfg, **kwargs)
-    return metrics
+def _get_single_metric(metric_cfg: TrackingConfig):
+    metric_fn = METRICS_REGISTRY[metric_cfg["handler"]]
+    pre_compute_cfgs = metric_cfg.get("pre_compute", None)
+    if pre_compute_cfgs is not None:
+        metric_fn.set_pre_compute_metrics(get_metrics(pre_compute_cfgs))
+    return metric_fn
 
 
 # Register metrics here

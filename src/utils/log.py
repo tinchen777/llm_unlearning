@@ -4,7 +4,6 @@ import logging
 from rich.markup import escape
 from rich import print
 from cobra_color import cstr
-from omegaconf import OmegaConf
 from contextlib import contextmanager
 from typing import Optional, TYPE_CHECKING
 

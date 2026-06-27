@@ -4,7 +4,7 @@ zlib-normalization Attack: https://www.usenix.org/system/files/sec21-carlini-ext
 
 import zlib
 
-from .all_attacks import Attack
+from .base import Attack
 from ..utils import (
     evaluate_probability,
     extract_target_texts_from_processed_data,
