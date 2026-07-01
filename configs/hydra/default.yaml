@@ -16,6 +16,16 @@ run:
 #   subdir: ${hydra.job.num}
 
 job_logging:
+  formatters:
+    colorlog:
+      format: "[%(asctime)s][%(cyan)s%(name)s%(reset)s][%(log_color)s%(levelname)s%(reset)s] - %(message)s"
+      datefmt: "%Y-%m-%d %H:%M:%S"
+
+  loggers:
+    datasets:
+      level: ERROR
+      propagate: false
+
   handlers:
     file:
       # Incorporates fix from https://github.com/facebookresearch/hydra/pull/2242

@@ -1,8 +1,10 @@
 
+from __future__ import annotations
 import logging
 import torch
 import numpy as np
-from torch.utils.data import DataLoader
+from functools import partial
+from typing import Any, Dict, TYPE_CHECKING
 
 from .utils import (
     aggregate_to_1D,
@@ -11,22 +13,24 @@ from .utils import (
     run_batchwise_evals,
     tokenwise_vocab_logprobs,
 )
-from .base import unlearning_metric
+from .base import MetricFunc
+
+if TYPE_CHECKING:
+    from torch.utils.data import DataLoader
+    from utils.config import TrackingConfig
 
 # Supress the info messages logged while calculating rouge using rouge_scorer
 logging.getLogger("absl").setLevel(logging.WARNING)
-logger = logging.getLogger("evaluator")
+logger = logging.getLogger("eval.metric")
 
 
-@unlearning_metric(name="probability")
-def probability(model, **kwargs):
+@MetricFunc
+def probability(model: Any, dataloader: DataLoader, **kwargs):
     """Compute the probabilities by data points and report aggregated average"""
-    dataloader = DataLoader(
-        kwargs["data"],
-        batch_size=kwargs["batch_size"],
-        collate_fn=kwargs["collators"]
-    )
-
+    
+    
+    
+    
     fun_args = {}
     scores_by_index = run_batchwise_evals(
         model, dataloader, evaluate_probability, fun_args, "Calculating loss"
@@ -42,12 +46,12 @@ def probability(model, **kwargs):
     return {"agg_value": np.mean(prob_values), "value_by_index": scores_by_index}
 
 
-@unlearning_metric(name="probability_w_options")
-def probability_w_options(model, **kwargs):
+@MetricFunc
+def probability_w_options(pre_compute: Dict[str, Any], **kwargs):
     """Normalize probabilities of correct answers against false answers for
     open-ended datasets, returning the aggregated value and per-index probabilities."""
-    correct_answer_results = kwargs["pre_compute"]["correct"]["value_by_index"]
-    wrong_answer_results = kwargs["pre_compute"]["wrong"]["value_by_index"]
+    correct_answer_results = pre_compute["correct"]["value_by_index"]
+    wrong_answer_results = pre_compute["wrong"]["value_by_index"]
 
     correct_indices = list(correct_answer_results.keys())
     wrong_indices = list(wrong_answer_results.keys())
@@ -73,29 +77,28 @@ def probability_w_options(model, **kwargs):
     return {"agg_value": np.mean(probs), "value_by_index": value_by_index}
 
 
-@unlearning_metric(name="rouge")
-def rouge(model, **kwargs):
+@MetricFunc
+def rouge(
+    model: Any,
+    tokenizer: Any,
+    dataloader: DataLoader,
+    generation_args: TrackingConfig,
+    rouge_type: str,
+    **kwargs
+):
     """Calculate ROUGE metrics and return the aggregated value along with per-index scores."""
-    tokenizer = kwargs["tokenizer"]
-    data = kwargs["data"]
-    collator = kwargs["collators"]
-    batch_size = kwargs["batch_size"]
-    generation_args = kwargs["generation_args"]
-    dataloader = DataLoader(data, batch_size=batch_size, collate_fn=collator)
-
-    fun_args = {"tokenizer": tokenizer, "generation_args": generation_args}
     scores_by_index = run_batchwise_evals(
         model,
         dataloader,
         eval_text_similarity,
-        fun_args,
+        {"tokenizer": tokenizer, "generation_args": generation_args},
         "Calculating text similarity",
     )
     rouge_values = np.array(
         [
-            evals[kwargs["rouge_type"]]
+            evals[rouge_type]
             for evals in scores_by_index.values()
-            if evals[kwargs["rouge_type"]] is not None
+            if evals[rouge_type] is not None
         ]
     )
     rouge_values = aggregate_to_1D(rouge_values)
@@ -105,36 +108,29 @@ def rouge(model, **kwargs):
     }
 
 
-@unlearning_metric(name="truth_ratio")
-def truth_ratio(model, **kwargs):
+@MetricFunc
+def truth_ratio(aggregator: str, pre_compute: Dict[str, Any], **kwargs):
     """Compute the truth ratio, aggregating false/true scores, and
     return the aggregated value."""
+    aggregators = {
+        # Forget data: It is better if false and true are equally likely,
+        # i.e., tr=false/true is closest to 1.
+        "closer_to_1_better": lambda arr: np.mean(np.minimum(arr, 1 / (arr + 1e-10))),
 
-    # Forget data: It is better if false and true are equally likely,
-    # i.e., tr=false/true is closest to 1.
-    def closer_to_1_better(arr):
-        return np.mean(np.minimum(arr, 1 / (arr + 1e-10)))
+        # Non-forget data: It is better if tr=false/true is lower, i.e.,
+        # 1-tr is higher.
+        "true_better": lambda arr: np.mean(np.maximum(0, 1 - arr)),
 
-    # Non-forget data: It is better if tr=false/true is lower, i.e.,
-    # 1-tr is higher.
-    def true_better(arr):
-        return np.mean(np.maximum(0, 1 - arr))
+        # Extent of knowledge (as used in OpenUnlearning paper's meta-evaluation) uses tr=true/(true+false)
+        "prob_mean": lambda arr: np.mean(arr),
+    }
+    try:
+        aggregator_fn = aggregators[aggregator]
+    except KeyError:
+        raise ValueError(f"Invalid truth ratio aggregator: {aggregator}")
 
-    # Extent of knowledge (as used in OpenUnlearning paper's meta-evaluation) uses tr=true/(true+false)
-    def prob_mean(arr):
-        return np.mean(arr)
-
-    if kwargs["aggregator"] == "closer_to_1_better":
-        aggregator = closer_to_1_better
-    elif kwargs["aggregator"] == "true_better":
-        aggregator = true_better
-    elif kwargs["aggregator"] == "prob_mean":
-        aggregator = prob_mean
-    else:
-        raise ValueError(f"Invalid truth ratio aggregator: {kwargs['aggregator']}")
-
-    correct_answer_results = kwargs["pre_compute"]["correct"]["value_by_index"]
-    wrong_answer_results = kwargs["pre_compute"]["wrong"]["value_by_index"]
+    correct_answer_results = pre_compute["correct"]["value_by_index"]
+    wrong_answer_results = pre_compute["wrong"]["value_by_index"]
 
     correct_indices = list(correct_answer_results.keys())
     wrong_indices = list(wrong_answer_results.keys())
@@ -160,7 +156,7 @@ def truth_ratio(model, **kwargs):
     correct_prob = np.exp(-correct_avg_losses)
     wrong_prob = np.exp(-wrong_avg_losses)
 
-    if kwargs["aggregator"] != "prob_mean":
+    if aggregator != "prob_mean":
         # Original definition from TOFU: wrong / correct
         truth_ratios = wrong_prob / (correct_prob + 1e-10)
     else:
@@ -171,16 +167,12 @@ def truth_ratio(model, **kwargs):
         zip(correct_indices, [{"score": val} for val in truth_ratios])
     )
     truth_ratio_stats = np.array([evals["score"] for evals in value_by_index.values()])
-    forget_tr_avg = aggregator(truth_ratio_stats)
+    forget_tr_avg = aggregator_fn(truth_ratio_stats)
     return {"agg_value": forget_tr_avg, "value_by_index": value_by_index}
 
 
-@unlearning_metric(name="exact_memorization")
-def exact_memorization(model, **kwargs):
-    data = kwargs["data"]
-    collator = kwargs["collators"]
-    batch_size = kwargs["batch_size"]
-    dataloader = DataLoader(data, batch_size=batch_size, collate_fn=collator)
+@MetricFunc
+def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
 
     def _exact_memorization(model, batch):
         log_probs_batch, labels_batch = tokenwise_vocab_logprobs(
@@ -220,12 +212,8 @@ def exact_memorization(model, **kwargs):
     return {"agg_value": np.mean(em_values), "value_by_index": scores_by_index}
 
 
-@unlearning_metric(name="extraction_strength")
-def extraction_strength(model, **kwargs):
-    data = kwargs["data"]
-    collator = kwargs["collators"]
-    batch_size = kwargs["batch_size"]
-    dataloader = DataLoader(data, batch_size=batch_size, collate_fn=collator)
+@MetricFunc
+def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
 
     def _extraction_strength(model, batch):
         log_probs_batch, labels_batch = tokenwise_vocab_logprobs(

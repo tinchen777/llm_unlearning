@@ -3,7 +3,9 @@ Gradient-norm attack. Proposed for MIA in multiple settings, and particularly
 experimented for pre-training data and LLMs in https://arxiv.org/abs/2402.17012
 """
 
+from __future__ import annotations
 import torch
+from typing import Any, Dict, Union, TYPE_CHECKING
 
 from .base import Attack
 from ..utils import tokenwise_logprobs
@@ -12,12 +14,13 @@ from ..utils import tokenwise_logprobs
 # DO NOT use gradnorm in a way so that it runs when your accumulated gradients during training aren't used yet
 # gradnorm zeros out the gradients of the model during its computation
 class GradNormAttack(Attack):
-    def setup(self, p, **kwargs):
+    def setup(self, p: Union[int, float], **kwargs):
         if p not in [1, 2, float("inf")]:
             raise ValueError(f"Invalid p-norm value: {p}")
         self.p = p
 
     def compute_batch_values(self, batch):
+        # FIXME
         """Compute gradients of examples w.r.t model parameters. More grad norm => more loss."""
         self.model.train()
         batch_log_probs = tokenwise_logprobs(self.model, batch, grad=True)

@@ -9,7 +9,7 @@ from ..utils import tokenwise_logprobs
 
 
 class MinKProbAttack(Attack):
-    def setup(self, k=0.2, **kwargs):
+    def setup(self, k: float = 0.2, **kwargs):
         self.k = k
 
     def compute_batch_values(self, batch):

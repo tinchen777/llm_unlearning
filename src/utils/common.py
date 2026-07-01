@@ -35,10 +35,9 @@ def load_logs_from_file(file_path: str) -> Dict[str, Dict[str, Any]]:
 
 def save_logs(logs: Dict[str, Any], file_path: str):
     """Save the logs in a json file"""
-    logs = dict(sorted(logs.items()))
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     try:
         with open(file_path, "w") as f:
-            json.dump(logs, f, indent=4)
+            json.dump(logs, f, indent=4, sort_keys=True)
     except Exception as e:
         raise RuntimeError(f"Failed to save {file_path}") from e

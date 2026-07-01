@@ -9,5 +9,5 @@ if TYPE_CHECKING:
 
 
 class MUSEEvaluator(Evaluator):
-    def __init__(self, eval_cfg: TrackingConfig, template_args: TrackingConfig):
-        super().__init__("MUSE", eval_cfg, template_args)
+    def __init__(self, eval_cfg: TrackingConfig, **kwargs):
+        super().__init__("MUSE", eval_cfg, **kwargs)

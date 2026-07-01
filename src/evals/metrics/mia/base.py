@@ -1,37 +1,38 @@
-"""
-Enum class for attacks. Also contains the base attack class.
-"""
 
-from torch.utils.data import DataLoader
+from __future__ import annotations
 import numpy as np
 from tqdm import tqdm
+from abc import ABC, abstractmethod
+from typing import Any, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from torch.utils.data import DataLoader
 
 
-class Attack:
-    def __init__(self, model, data, collator, batch_size, **kwargs):
+class Attack(ABC):
+    def __init__(self, model: Any, **kwargs):
         """Initialize attack with model and create dataloader."""
         self.model = model
-        self.dataloader = DataLoader(data, batch_size=batch_size, collate_fn=collator)
         self.setup(**kwargs)
 
-    def setup(self, **kwargs):
-        """Setup attack-specific parameters."""
-        pass
+    def setup(self, *args, **kwargs): ...
 
-    def compute_batch_values(self, batch):
+    @abstractmethod
+    def compute_batch_values(self, batch) -> List[Any]:
         """Process a batch through model to get needed statistics."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def compute_score(self, sample_stats):
         """Compute MIA score for a single sample."""
-        raise NotImplementedError
+        ...
 
-    def attack(self):
+    def attack(self, dataloader: DataLoader):
         """Run full MIA attack."""
         all_scores = []
         all_indices = []
 
-        for batch in tqdm(self.dataloader, total=len(self.dataloader)):
+        for batch in tqdm(dataloader, total=len(dataloader)):
             indices = batch.pop("index").cpu().numpy().tolist()
             batch_values = self.compute_batch_values(batch)
             scores = [self.compute_score(values) for values in batch_values]

@@ -14,13 +14,13 @@ class CompletionDataset(Dataset):
     def __init__(
         self,
         hf_args: TrackingConfig,
-        template_args: TrackingConfig,
         tokenizer: Any,
         prefix_key: str = "prompt",
         text_key: str = "text",
         max_length: int = 2048,
         predict_with_generate: bool = False,
         insert_space: bool = False,
+        **kwargs
     ):
         super().__init__()
         self.tokenizer = tokenizer
@@ -62,10 +62,10 @@ class PretrainingDataset(Dataset):
     def __init__(
         self,
         hf_args: TrackingConfig,
-        template_args: TrackingConfig,
         tokenizer: Any,
         text_key: str = "text",
-        max_length: int = 2048
+        max_length: int = 2048,
+        **kwargs
     ):
         super().__init__()
         self.tokenizer = tokenizer

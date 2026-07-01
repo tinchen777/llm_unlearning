@@ -1,17 +1,16 @@
 
 import torch
-import transformers
-from typing import Dict, Sequence, Optional
+from typing import Dict, Sequence, Optional, Any
 
 from .utils import IGNORE_INDEX
 
 
-class DataCollatorForSupervisedDataset(object):
+class DataCollatorForSupervisedDataset:
     """Collate examples for supervised fine-tuning."""
 
     def __init__(
         self,
-        tokenizer: transformers.PreTrainedTokenizer,
+        tokenizer: Any,
         padding_side: str = "right",
         index: Optional[str] = None,
     ):
@@ -36,7 +35,7 @@ class DataCollatorForSupervisedDataset(object):
             ).flip(dims=[1])
         return input_ids
 
-    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+    def __call__(self, instances: Sequence[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
         assert isinstance(instances[0], dict)
         return_dct = {}
         if "input_ids" not in instances[0]:

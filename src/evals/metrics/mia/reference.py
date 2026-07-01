@@ -2,12 +2,14 @@
 Reference-based attacks.
 """
 
+from typing import Any
+
 from .base import Attack
 from ..utils import evaluate_probability
 
 
 class ReferenceAttack(Attack):
-    def setup(self, reference_model, **kwargs):
+    def setup(self, reference_model: Any, **kwargs):
         """Setup reference model."""
         self.reference_model = reference_model
 

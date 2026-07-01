@@ -3,6 +3,7 @@ zlib-normalization Attack: https://www.usenix.org/system/files/sec21-carlini-ext
 """
 
 import zlib
+from typing import Any, Optional
 
 from .base import Attack
 from ..utils import (
@@ -12,7 +13,7 @@ from ..utils import (
 
 
 class ZLIBAttack(Attack):
-    def setup(self, tokenizer=None, **kwargs):
+    def setup(self, tokenizer: Optional[Any] = None, **kwargs):
         """Setup tokenizer."""
         self.tokenizer = tokenizer or self.model.tokenizer
 

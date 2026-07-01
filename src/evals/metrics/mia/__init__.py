@@ -6,7 +6,7 @@ from sklearn.metrics import roc_auc_score
 from transformers import AutoModelForCausalLM
 from typing import Any, TYPE_CHECKING
 
-from ..base import unlearning_metric
+from ..base import MetricFunc
 from .loss import LOSSAttack
 from .min_k import MinKProbAttack
 from .min_k_plus_plus import MinKPlusPlusAttack
@@ -15,35 +15,38 @@ from .zlib import ZLIBAttack
 from .reference import ReferenceAttack
 
 if TYPE_CHECKING:
+    from torch.utils.data import DataLoader
     from .base import Attack
 
 logger = logging.getLogger("metrics")
 
 
-@unlearning_metric(name="mia_loss")
-def mia_loss(model: Any, **kwargs):
+@MetricFunc
+def mia_loss(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, **kwargs):
+    
+    
+    
+    
     return mia_auc(
         LOSSAttack,
         model,
-        data=kwargs["data"],
-        collator=kwargs["collators"],
-        batch_size=kwargs["batch_size"],
+        forget_dl=forget_dl,
+        holdout_dl=holdout_dl,
     )
 
-
-@unlearning_metric(name="mia_min_k")
-def mia_min_k(model: Any, **kwargs):
+# TODO
+@MetricFunc
+def mia_min_k(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, k: float, **kwargs):
     return mia_auc(
         MinKProbAttack,
         model,
-        data=kwargs["data"],
-        collator=kwargs["collators"],
-        batch_size=kwargs["batch_size"],
-        k=kwargs["k"],
+        forget_dl=forget_dl,
+        holdout_dl=holdout_dl,
+        k=k,
     )
 
 
-@unlearning_metric(name="mia_min_k_plus_plus")
+@MetricFunc
 def mia_min_k_plus_plus(model: Any, **kwargs):
     return mia_auc(
         MinKPlusPlusAttack,
@@ -55,7 +58,7 @@ def mia_min_k_plus_plus(model: Any, **kwargs):
     )
 
 
-@unlearning_metric(name="mia_gradnorm")
+@MetricFunc
 def mia_gradnorm(model: Any, **kwargs):
     return mia_auc(
         GradNormAttack,
@@ -67,7 +70,7 @@ def mia_gradnorm(model: Any, **kwargs):
     )
 
 
-@unlearning_metric(name="mia_zlib")
+@MetricFunc
 def mia_zlib(model: Any, **kwargs):
     return mia_auc(
         ZLIBAttack,
@@ -79,7 +82,7 @@ def mia_zlib(model: Any, **kwargs):
     )
 
 
-@unlearning_metric(name="mia_reference")
+@MetricFunc
 def mia_reference(model: Any, **kwargs):
     if "reference_model_path" not in kwargs:
         raise ValueError("Reference model must be provided in kwargs")
@@ -99,7 +102,13 @@ def mia_reference(model: Any, **kwargs):
     )
 
 
-def mia_auc(attack_cls: type[Attack], model: Any, data, collator, batch_size, **kwargs):
+def mia_auc(
+    attack_cls: type[Attack],
+    model: Any,
+    forget_dl: DataLoader,
+    holdout_dl: DataLoader,
+    **kwargs
+):
     """
     Compute the MIA AUC and accuracy.
 
@@ -115,15 +124,8 @@ def mia_auc(attack_cls: type[Attack], model: Any, data, collator, batch_size, **
 
     Note on convention: auc is 1 when the forget data is much more likely than the holdout data
     """
-    # Build attack arguments from common parameters and any extras.
-    attack_args = {
-        "model": model,
-        "collator": collator,
-        "batch_size": batch_size,
-        **kwargs
-    }
-    forget = attack_cls(data=data["forget"], **attack_args).attack()
-    holdout = attack_cls(data=data["holdout"], **attack_args).attack()
+    forget = attack_cls(model=model, dataloader=forget_dl, **kwargs).attack()
+    holdout = attack_cls(model=model, dataloader=holdout_dl, **kwargs).attack()
     forget_scores = [elem["score"] for elem in forget["value_by_index"].values()]
     holdout_scores = [elem["score"] for elem in holdout["value_by_index"].values()]
 

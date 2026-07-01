@@ -2,8 +2,12 @@
 from __future__ import annotations
 from collections.abc import Mapping, Iterator, ItemsView
 from omegaconf import DictConfig, open_dict
+import reprlib
 from functools import wraps
 from typing import Any, Dict
+
+reprlib.aRepr.maxlist = 5
+reprlib.aRepr.maxstring = 15
 
 _MISSING = object()
 HYDRA_CHOICES: Dict[str, str] = {}
@@ -57,6 +61,9 @@ class TrackingConfig(Mapping):
         with open_dict(self._cfg):
             return self._cfg.pop(key)
 
+    def copy(self):
+        return TrackingConfig(self._cfg.copy(), self._loc, self._loc_choices)
+
     def items(self) -> ItemsView[str, Any]:
         return super().items()
 
@@ -73,6 +80,9 @@ class TrackingConfig(Mapping):
     def __setitem__(self, key: str, value: Any):
         with open_dict(self._cfg):
             self._cfg[key] = value
+
+    def __str__(self):
+        return reprlib.repr({**self._cfg})
 
     @property
     def cfg(self):

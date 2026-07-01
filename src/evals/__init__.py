@@ -23,7 +23,7 @@ def get_evaluators(eval_cfgs: TrackingConfig, **kwargs) -> Dict[str, Evaluator]:
         try:
             evaluators[eval_name] = _get_evaluator(eval_cfg, **kwargs)
         except Exception as e:
-            raise RuntimeError(f"Error loading evaluator `{eval_name}` in `@{eval_cfg.loc_choices}` with {eval_cfg}") from e
+            raise RuntimeError(f"Error loading evaluator `{eval_name}` in `@{eval_cfg.loc_choices}`") from e
     return evaluators
 
 

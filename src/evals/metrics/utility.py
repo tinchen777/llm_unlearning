@@ -1,40 +1,48 @@
 
-import torch
+from __future__ import annotations
+
 import numpy as np
 import scipy as sc
 from tqdm import tqdm
+import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from typing import Any, Dict, TYPE_CHECKING
 
 from .utils import aggregate_to_1D
-from .base import unlearning_metric
+from .base import MetricFunc
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 
-@unlearning_metric(name="hm_aggregate")
-def hm_aggregate(model, **kwargs):
-    values = [result["agg_value"] for _, result in kwargs["pre_compute"].items()]
+@MetricFunc
+def hm_aggregate(pre_compute: Dict[str, Any], **kwargs):
+    values = [result["agg_value"] for _, result in pre_compute.items()]
     return {"agg_value": sc.stats.hmean(values)}
 
 
-@unlearning_metric(name="classifier_prob")
-def classifier_prob(model, **kwargs):
-    batch_size = kwargs.get("batch_size", 32)
-    max_length = kwargs.get("max_length", 512)
-    class_id = kwargs.get("class_id", 0)
-    text_key = kwargs.get("text_key", "generation")
-    classifier_model_args = kwargs["classifier_model_args"]
-    classifier_tokenization_args = kwargs["classifier_tokenization_args"]
-    device = kwargs.get("device", "cuda")
-
+@MetricFunc
+def classifier_prob(
+    pre_compute: Dict[str, Any],
+    classifier_model_args: TrackingConfig,
+    classifier_tokenization_args: TrackingConfig,
+    batch_size: int = 32,
+    max_length: int = 512,
+    class_id: int = 0,
+    text_key: str = "generation",
+    device: str = "cuda",
+    **kwargs
+):
     tokenizer = AutoTokenizer.from_pretrained(**classifier_tokenization_args)
     classifier = AutoModelForSequenceClassification.from_pretrained(
         **classifier_model_args
     ).to(device)
 
-    data = kwargs["pre_compute"]["text"]["value_by_index"]
     data_list = [
-        {"text": entry[text_key], "index": int(key)} for key, entry in data.items()
+        {"text": entry[text_key], "index": int(key)}
+        for key, entry in pre_compute["text"]["value_by_index"].items()
     ]
 
     # Create DataLoader
@@ -66,12 +74,10 @@ def classifier_prob(model, **kwargs):
         for idx, prob, text in zip(batch_indices, scores, batch_texts):
             # Add the prediction to the original data
             scores_by_index[idx] = {"score": prob, text_key: text}
-    class_scores = np.array(
-        [
-            evals["score"]
-            for evals in scores_by_index.values()
-            if evals["score"] is not None
-        ]
-    )
+    class_scores = np.array([
+        evals["score"]
+        for evals in scores_by_index.values()
+        if evals["score"] is not None
+    ])
     class_scores = aggregate_to_1D(class_scores)
     return {"agg_value": np.mean(class_scores), "value_by_index": scores_by_index}

@@ -1,17 +1,19 @@
 
-from typing import List
+from __future__ import annotations
 from tqdm import tqdm
 from rouge_score import rouge_scorer
 from collections import defaultdict
 from omegaconf import OmegaConf
 import numpy as np
-import scipy as sc
 from torch import nn
 import torch
 from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
 import warnings
+from typing import List, Any
 
 from data.utils import IGNORE_INDEX
+
+DATA_SPLIT_SUFFIX = "_dl"
 
 
 def dict_transpose(evals):
@@ -37,13 +39,19 @@ def dict_transpose(evals):
 def aggregate_to_1D(x):
     return np.mean(x, axis=tuple(range(1, x.ndim)))
 
-# FIXME
-def get_forget_quality(model_tr, reference_tr):
-    test_res = sc.stats.ks_2samp(1 / (model_tr + 1e-10), 1 / (reference_tr + 1e-10))
-    return {"agg_value": test_res.pvalue}
+
+# def get_forget_quality(model_tr, reference_tr):
+#     test_res = sc.stats.ks_2samp(1 / (model_tr + 1e-10), 1 / (reference_tr + 1e-10))
+#     return {"agg_value": test_res.pvalue}
 
 
-def run_batchwise_evals(model, dataloader, batch_eval_fn, batch_eval_fn_args, eval_msg):
+def run_batchwise_evals(
+    model: Any,
+    dataloader: Any,
+    batch_eval_fn: Any,
+    batch_eval_fn_args: Any,
+    eval_msg: str
+):
     """Run batch-wise evaluations on a dataset using a specified evaluation function. Handles
     multi-answer datasets by organizing evaluations by answer indices and aggregating results."""
     evals = defaultdict(dict)
@@ -86,6 +94,7 @@ def evaluate_probability(model, batch):
     batch = {k: v.to(model.device) for k, v in batch.items()}
     with torch.no_grad():
         output = model(**batch)
+
     logits = output.logits
     labels = batch["labels"]
     shifted_labels = labels[..., 1:].contiguous()

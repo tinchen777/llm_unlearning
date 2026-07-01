@@ -43,18 +43,18 @@ def get_data(data_cfg: TrackingConfig, mode: str, **kwargs):
 
 
 def get_datasets(dataset_cfgs: TrackingConfig, **kwargs):
-    dataset: Dict[str, Dataset] = {}
+    datasets: Dict[str, Dataset] = {}
     for dataset_name, dataset_cfg in dataset_cfgs.items():
-        access_name = dataset_cfg.get("access_key", dataset_name)
         try:
-            dataset[str(access_name)] = _load_single_dataset(dataset_cfg, **kwargs)
+            dataset = _load_single_dataset(dataset_cfg, **kwargs)
         except Exception as e:
             raise RuntimeError(f"Error loading dataset `{dataset_name}` in `@{dataset_cfg.loc_choices}` with {dataset_cfg}") from e
-    if len(dataset) == 1:
-        # return a single dataset
-        return next(iter(dataset.values()))
-    # return mapping to multiple datasets
-    return dataset
+        if len(dataset_cfgs) == 1:
+            # if only one dataset, return it directly
+            return dataset
+        access_name = dataset_cfg.get("access_key", dataset_name)
+        datasets[str(access_name)] = dataset
+    return datasets
 
 
 def _load_single_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
@@ -63,16 +63,16 @@ def _load_single_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
 
 
 def get_collators(collator_cfgs: TrackingConfig, **kwargs):
-    collators = {}
+    collators: Dict[str, Any] = {}
     for collator_name, collator_cfg in collator_cfgs.items():
         try:
-            collators[collator_name] = _get_single_collator(collator_cfg, **kwargs)
+            collator = _get_single_collator(collator_cfg, **kwargs)
         except Exception as e:
             raise RuntimeError(f"Error loading collator `{collator_name}` in `@{collator_cfg.loc_choices}` with {collator_cfg}") from e
-    if len(collators) == 1:
-        # return a single collator
-        return next(iter(collators.values()))
-    # return collators in a dict
+        if len(collator_cfgs) == 1:
+            # if only one collator, return it directly
+            return collator
+        collators[collator_name] = collator
     return collators
 
 
@@ -90,7 +90,7 @@ _register_data(QAwithAlternateDataset)
 
 # Register composite datasets used in unlearning
 # groups: unlearn
-_register_data(ForgetRetainDataset)
+# _register_data(ForgetRetainDataset)
 
 # Register collators
 _register_collator(DataCollatorForSupervisedDataset)
