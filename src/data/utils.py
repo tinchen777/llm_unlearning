@@ -154,133 +154,133 @@ def tok_chat_batch(
 
 
 
-# FIXME change to batch map
-def preprocess_chat_instance(
-    tokenizer: Any,
-    template_args: TrackingConfig,
-    prompt_msgs: List[str],
-    response_msgs: List[str],
-    max_length: int,
-    predict_with_generate: bool = False,
-):
-    """Preprocesses a chat instance for training or generation.
-    When in training, both the returned `input_ids` and `labels` cover the entire conversation.
-    `input_ids` has no padding, and `labels` assign `IGNORE_INDEX` to tokens where loss is not computed (i.e. all tokens except the final response message).
-    When in generation, `input_ids` are returned only up to the last user prompt, excluding the assistant's response. The `labels` returned are the same as during training.
-    `attention_mask` is always 1 over the full `input_ids` token sequence.
+# # FIXME change to batch map
+# def preprocess_chat_instance(
+#     tokenizer: Any,
+#     template_args: TrackingConfig,
+#     prompt_msgs: List[str],
+#     response_msgs: List[str],
+#     max_length: int,
+#     predict_with_generate: bool = False,
+# ):
+#     """Preprocesses a chat instance for training or generation.
+#     When in training, both the returned `input_ids` and `labels` cover the entire conversation.
+#     `input_ids` has no padding, and `labels` assign `IGNORE_INDEX` to tokens where loss is not computed (i.e. all tokens except the final response message).
+#     When in generation, `input_ids` are returned only up to the last user prompt, excluding the assistant's response. The `labels` returned are the same as during training.
+#     `attention_mask` is always 1 over the full `input_ids` token sequence.
 
-    `prompt_msgs` and `response_msgs` are lists where, except for the last pair, all
-    corresponding pairs are in-context examples. When they are a string and not
-    a list, there are no in-context examples.
+#     `prompt_msgs` and `response_msgs` are lists where, except for the last pair, all
+#     corresponding pairs are in-context examples. When they are a string and not
+#     a list, there are no in-context examples.
 
-    Args:
-        tokenizer: Tokenizer to apply on text
-        template_args (TrackingConfig): Configuration for the chat template (comes from model-specific config).
-        prompt_msgs (Union[List[str], str]): List of prompt messages or a single prompt message string.
-        response_msgs (Union[List[str], str]): List of response messages or a single response message string.
-        max_length (int): Maximum sequence length after tokenization.
-        predict_with_generate (bool, optional): Whether to prepare inputs for generation.
+#     Args:
+#         tokenizer: Tokenizer to apply on text
+#         template_args (TrackingConfig): Configuration for the chat template (comes from model-specific config).
+#         prompt_msgs (Union[List[str], str]): List of prompt messages or a single prompt message string.
+#         response_msgs (Union[List[str], str]): List of response messages or a single response message string.
+#         max_length (int): Maximum sequence length after tokenization.
+#         predict_with_generate (bool, optional): Whether to prepare inputs for generation.
 
-    Returns:
-        Dict[str, torch.Tensor]: A dictionary containing 'input_ids', 'labels', and 'attention_mask' tensors for model input.
-    """
-    if len(prompt_msgs) != len(response_msgs):
-        raise ValueError(
-            f"The number of prompt messages ({len(prompt_msgs)}) must match the number of response messages ({len(response_msgs)})."
-        )
+#     Returns:
+#         Dict[str, torch.Tensor]: A dictionary containing 'input_ids', 'labels', and 'attention_mask' tensors for model input.
+#     """
+#     if len(prompt_msgs) != len(response_msgs):
+#         raise ValueError(
+#             f"The number of prompt messages ({len(prompt_msgs)}) must match the number of response messages ({len(response_msgs)})."
+#         )
 
-    if template_args.get("apply_chat_template", False):
-        chat = []
-        system_prompt = template_args.get("system_prompt", None, allow_none=True)
-        if system_prompt:
-            chat.append({"role": "system", "content": system_prompt})
-        for prompt, response in zip(prompt_msgs, response_msgs):
-            chat.append({"role": "user", "content": prompt})
-            chat.append({"role": "assistant", "content": response})
-        date_str = template_args.get("date_string", None, allow_none=True)
-        date_info = {"date_string": date_str} if date_str is not None else {}
-        chat_ids = tokenizer.apply_chat_template(
-            chat,
-            tokenize=True,
-            add_generation_prompt=False,
-            return_dict=False,
-            max_length=max_length,
-            truncation=True,
-            **date_info
-        )
-        prompt_ids = tokenizer.apply_chat_template(
-            chat[:-1],
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=False,
-            max_length=max_length,
-            truncation=True,
-            **date_info
-        )
-    else:
-        wrapped_prompt = ""
-        system_prompt_with_special_tokens = template_args.get(
-            "system_prompt_with_special_tokens", None, allow_none=True
-        )
-        if system_prompt_with_special_tokens:
-            wrapped_prompt += system_prompt_with_special_tokens
+#     if template_args.get("apply_chat_template", False):
+#         chat = []
+#         system_prompt = template_args.get("system_prompt", None, allow_none=True)
+#         if system_prompt:
+#             chat.append({"role": "system", "content": system_prompt})
+#         for prompt, response in zip(prompt_msgs, response_msgs):
+#             chat.append({"role": "user", "content": prompt})
+#             chat.append({"role": "assistant", "content": response})
+#         date_str = template_args.get("date_string", None, allow_none=True)
+#         date_info = {"date_string": date_str} if date_str is not None else {}
+#         chat_ids = tokenizer.apply_chat_template(
+#             chat,
+#             tokenize=True,
+#             add_generation_prompt=False,
+#             return_dict=False,
+#             max_length=max_length,
+#             truncation=True,
+#             **date_info
+#         )
+#         prompt_ids = tokenizer.apply_chat_template(
+#             chat[:-1],
+#             tokenize=True,
+#             add_generation_prompt=True,
+#             return_dict=False,
+#             max_length=max_length,
+#             truncation=True,
+#             **date_info
+#         )
+#     else:
+#         wrapped_prompt = ""
+#         system_prompt_with_special_tokens = template_args.get(
+#             "system_prompt_with_special_tokens", None, allow_none=True
+#         )
+#         if system_prompt_with_special_tokens:
+#             wrapped_prompt += system_prompt_with_special_tokens
 
-        final_response = ""
-        for idx, (prompt, response) in enumerate(zip(prompt_msgs, response_msgs)):
-            wrapped_prompt += (
-                template_args["user_start_tag"]
-                + prompt
-                + template_args["user_end_tag"]
-                + template_args["asst_start_tag"]
-            )
-            if idx < len(prompt_msgs) - 1:
-                # few-shot examples, add the response and end tag
-                wrapped_prompt += (response + template_args["asst_end_tag"])
-            else:
-                # final example, add the response but no end tag, as we want to predict it
-                final_response = response
+#         final_response = ""
+#         for idx, (prompt, response) in enumerate(zip(prompt_msgs, response_msgs)):
+#             wrapped_prompt += (
+#                 template_args["user_start_tag"]
+#                 + prompt
+#                 + template_args["user_end_tag"]
+#                 + template_args["asst_start_tag"]
+#             )
+#             if idx < len(prompt_msgs) - 1:
+#                 # few-shot examples, add the response and end tag
+#                 wrapped_prompt += (response + template_args["asst_end_tag"])
+#             else:
+#                 # final example, add the response but no end tag, as we want to predict it
+#                 final_response = response
 
-        chat_ids = tokenizer(
-            wrapped_prompt + final_response,
-            add_special_tokens=True,
-            max_length=max_length,
-            truncation=True
-        )["input_ids"]
+#         chat_ids = tokenizer(
+#             wrapped_prompt + final_response,
+#             add_special_tokens=True,
+#             max_length=max_length,
+#             truncation=True
+#         )["input_ids"]
 
-        prompt_ids = tokenizer(
-            wrapped_prompt,
-            add_special_tokens=True,
-            max_length=max_length,
-            truncation=True
-        )["input_ids"]
+#         prompt_ids = tokenizer(
+#             wrapped_prompt,
+#             add_special_tokens=True,
+#             max_length=max_length,
+#             truncation=True
+#         )["input_ids"]
 
-    if chat_ids[-1] != tokenizer.eos_token_id:
-        chat_ids += [tokenizer.eos_token_id]
+#     if chat_ids[-1] != tokenizer.eos_token_id:
+#         chat_ids += [tokenizer.eos_token_id]
 
-    chat_ids_tensor = torch.tensor(chat_ids)
-    prompt_ids_tensor = torch.tensor(prompt_ids)
+#     chat_ids_tensor = torch.tensor(chat_ids)
+#     prompt_ids_tensor = torch.tensor(prompt_ids)
 
-    item = {}
-    if predict_with_generate:
-        item["input_ids"] = prompt_ids_tensor
-        item["labels"] = chat_ids_tensor  # contains the entire conversation
-    else:
-        item["input_ids"] = chat_ids_tensor
-        labels_tensor = chat_ids_tensor.clone()
-        labels_tensor[: len(prompt_ids_tensor)] = IGNORE_INDEX
-        item["labels"] = labels_tensor
-        if len(prompt_ids_tensor) == len(chat_ids_tensor):
-            # Rarely, tokenization can result in this condition being entered.
-            # Say a input prompt is ABC and target output is D, tokenizer(ABCD)
-            # can be [AB, CD] and tokenizer(ABC) can be [AB, C]. In this case,
-            # we ignore loss on all indices in the labels. So, there is no way
-            # to use this for next token prediction. Be careful while
-            # interpreting results of such instances.
-            logger.warning(
-                "Tokenization mismatch: no valid target tokens for loss computation"
-            )
-    item["attention_mask"] = torch.ones_like(item["input_ids"], dtype=torch.long)
-    return item
+#     item = {}
+#     if predict_with_generate:
+#         item["input_ids"] = prompt_ids_tensor
+#         item["labels"] = chat_ids_tensor  # contains the entire conversation
+#     else:
+#         item["input_ids"] = chat_ids_tensor
+#         labels_tensor = chat_ids_tensor.clone()
+#         labels_tensor[: len(prompt_ids_tensor)] = IGNORE_INDEX
+#         item["labels"] = labels_tensor
+#         if len(prompt_ids_tensor) == len(chat_ids_tensor):
+#             # Rarely, tokenization can result in this condition being entered.
+#             # Say a input prompt is ABC and target output is D, tokenizer(ABCD)
+#             # can be [AB, CD] and tokenizer(ABC) can be [AB, C]. In this case,
+#             # we ignore loss on all indices in the labels. So, there is no way
+#             # to use this for next token prediction. Be careful while
+#             # interpreting results of such instances.
+#             logger.warning(
+#                 "Tokenization mismatch: no valid target tokens for loss computation"
+#             )
+#     item["attention_mask"] = torch.ones_like(item["input_ids"], dtype=torch.long)
+#     return item
 
 
 def preprocess_pretraining_instance(
