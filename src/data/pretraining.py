@@ -72,6 +72,8 @@ class PretrainingDataset(Dataset):
         self.max_length = max_length
         self.chunks = self._chunk_raw_text(load_hf_dataset(**hf_args)[text_key])
 
+    # BUG
+    
     def _chunk_raw_text(self, raw_text):
         raw_text = "\n\n".join(raw_text)
         full_token_sequence = self.tokenizer(

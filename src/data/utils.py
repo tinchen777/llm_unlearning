@@ -68,10 +68,90 @@ def prepare_sample_context(
         return wrapped_prompt
 
 
-def tok_chat_batch(
-    question_batch: List[str],
-    answer_batch: List[str],
-    indices: List[int],
+# def tok_chat_batch(
+#     question_batch: List[str],
+#     answer_batch: List[Union[str, List[str]]],
+#     indices: List[int],
+#     tokenizer: Any,
+#     sample_context: Union[str, List[Dict[str, str]]],
+#     template_args: TrackingConfig,
+#     max_length: int,
+#     predict_with_generate: bool = False,
+# ):
+#     try:
+#         if template_args.get("apply_chat_template", False):
+#             # use chat template
+#             assert isinstance(sample_context, list)
+#             prompt_batch = [sample_context + [{"role": "user", "content": q}] for q in question_batch]
+#             chat_batch = [prompt + [{"role": "assistant", "content": a}] for prompt, a in zip(prompt_batch, answer_batch)]
+
+#             date_str = template_args.get("date_string", None, allow_none=True)
+#             date_info = {"date_string": date_str} if date_str is not None else {}
+#             prompt_ids_batch = tokenizer.apply_chat_template(
+#                 prompt_batch,
+#                 tokenize=True,
+#                 add_generation_prompt=True,
+#                 return_dict=False,
+#                 max_length=max_length,
+#                 truncation=True,
+#                 **date_info
+#             )
+#             chat_ids_batch = tokenizer.apply_chat_template(
+#                 chat_batch,
+#                 tokenize=True,
+#                 add_generation_prompt=False,
+#                 return_dict=False,
+#                 max_length=max_length,
+#                 truncation=True,
+#                 **date_info
+#             )
+#         else:
+#             # use user/assistant tags
+#             assert isinstance(sample_context, str)
+#             prompt_batch = [(
+#                 sample_context
+#                 + template_args["user_start_tag"]
+#                 + q
+#                 + template_args["user_end_tag"]
+#                 + template_args["asst_start_tag"]
+#             ) for q in question_batch]
+#             chat_batch = [prompt + a for prompt, a in zip(prompt_batch, answer_batch)]
+
+#             prompt_ids_batch = tokenizer(
+#                 prompt_batch,
+#                 add_special_tokens=True,
+#                 max_length=max_length,
+#                 truncation=True
+#             )["input_ids"]
+#             chat_ids_batch = tokenizer(
+#                 chat_batch,
+#                 add_special_tokens=True,
+#                 max_length=max_length,
+#                 truncation=True
+#             )["input_ids"]
+
+#         input_ids_batch, labels_batch = [], []
+#         for prompt_ids, chat_ids in zip(prompt_ids_batch, chat_ids_batch):
+#             if chat_ids[-1] != tokenizer.eos_token_id:
+#                 chat_ids = chat_ids + [tokenizer.eos_token_id]     # 先补 eos
+
+#             if predict_with_generate:
+#                 input_ids_batch.append(prompt_ids); labels_batch.append(chat_ids)
+#             else:
+#                 labels = [IGNORE_INDEX]*len(prompt_ids) + chat_ids[len(prompt_ids):]
+#                 input_ids_batch.append(chat_ids);   labels_batch.append(labels)
+#         return {"input_ids": input_ids_batch, "labels": labels_batch, "index": indices}
+
+#     except Exception as e:
+#         raise RuntimeError(
+#             f"Error processing batch with indices {indices} and sample_context {sample_context}"
+#         ) from e
+
+
+def tok_chat_sample(
+    q: str,
+    a: Union[str, List[str]],
+    idx: int,
     tokenizer: Any,
     sample_context: Union[str, List[Dict[str, str]]],
     template_args: TrackingConfig,
@@ -79,16 +159,26 @@ def tok_chat_batch(
     predict_with_generate: bool = False,
 ):
     try:
+        # multi-answer support
+        if isinstance(a, list):
+            if predict_with_generate:
+                raise TypeError("`predict_with_generate=True` does not support multiple answers per question, please provide a single answer string.")
+            multi_a = a
+        elif isinstance(a, str):
+            multi_a = [a]
+        else:
+            raise TypeError(f"Expected `str` or `list of str` for answer, but got {type(a)}.")
+
         if template_args.get("apply_chat_template", False):
             # use chat template
             assert isinstance(sample_context, list)
-            prompt_batch = [sample_context + [{"role": "user", "content": q}] for q in question_batch]
-            chat_batch = [prompt + [{"role": "assistant", "content": a}] for prompt, a in zip(prompt_batch, answer_batch)]
+            prompt = sample_context + [{"role": "user", "content": q}]
+            multi_chat = [prompt + [{"role": "assistant", "content": ans}] for ans in multi_a]
 
             date_str = template_args.get("date_string", None, allow_none=True)
             date_info = {"date_string": date_str} if date_str is not None else {}
-            prompt_ids_batch = tokenizer.apply_chat_template(
-                prompt_batch,
+            prompt_ids = tokenizer.apply_chat_template(
+                prompt,
                 tokenize=True,
                 add_generation_prompt=True,
                 return_dict=False,
@@ -96,8 +186,8 @@ def tok_chat_batch(
                 truncation=True,
                 **date_info
             )
-            chat_ids_batch = tokenizer.apply_chat_template(
-                chat_batch,
+            multi_chat_ids = tokenizer.apply_chat_template(
+                multi_chat,
                 tokenize=True,
                 add_generation_prompt=False,
                 return_dict=False,
@@ -108,47 +198,49 @@ def tok_chat_batch(
         else:
             # use user/assistant tags
             assert isinstance(sample_context, str)
-            prompt_batch = [(
+            prompt = (
                 sample_context
                 + template_args["user_start_tag"]
                 + q
                 + template_args["user_end_tag"]
                 + template_args["asst_start_tag"]
-            ) for q in question_batch]
-            chat_batch = [prompt + a for prompt, a in zip(prompt_batch, answer_batch)]
+            )
+            multi_chat = [prompt + ans for ans in multi_a]
 
-            prompt_ids_batch = tokenizer(
-                prompt_batch,
+            prompt_ids = tokenizer(
+                prompt,
                 add_special_tokens=True,
                 max_length=max_length,
                 truncation=True
             )["input_ids"]
-            chat_ids_batch = tokenizer(
-                chat_batch,
+            multi_chat_ids = tokenizer(
+                multi_chat,
                 add_special_tokens=True,
                 max_length=max_length,
                 truncation=True
             )["input_ids"]
 
-        input_ids_batch, labels_batch = [], []
-        for prompt_ids, chat_ids in zip(prompt_ids_batch, chat_ids_batch):
+        if predict_with_generate:
+            # In generation mode, we only want the input_ids to be the prompt, and the labels to be the full chat (prompt + answer).
+            chat_ids = multi_chat_ids[0]  # Only one answer is allowed in generation mode
             if chat_ids[-1] != tokenizer.eos_token_id:
-                chat_ids = chat_ids + [tokenizer.eos_token_id]     # 先补 eos
-
-            if predict_with_generate:
-                input_ids_batch.append(prompt_ids); labels_batch.append(chat_ids)
-            else:
-                labels = [IGNORE_INDEX]*len(prompt_ids) + chat_ids[len(prompt_ids):]
-                input_ids_batch.append(chat_ids);   labels_batch.append(labels)
-        return {"input_ids": input_ids_batch, "labels": labels_batch, "index": indices}
+                chat_ids.append(tokenizer.eos_token_id)
+            return {"input_ids": [prompt_ids], "labels": [chat_ids], "index": idx}
+        else:
+            # In training mode, we want the input_ids to be the full chat (prompt + answer), and the labels to ignore the prompt portion.
+            multi_input_ids, multi_labels = [], []
+            for chat_ids in multi_chat_ids:
+                if chat_ids[-1] != tokenizer.eos_token_id:
+                    chat_ids.append(tokenizer.eos_token_id)
+                multi_input_ids.append(chat_ids)
+                labels = [IGNORE_INDEX] * len(prompt_ids) + chat_ids[len(prompt_ids):]
+                multi_labels.append(labels)
+            return {"input_ids": multi_input_ids, "labels": multi_labels, "index": idx}
 
     except Exception as e:
         raise RuntimeError(
-            f"Error processing batch with indices {indices} and sample_context {sample_context}"
+            f"Error processing sample with index {idx} and sample_context {sample_context}"
         ) from e
-
-
-
 
 
 
@@ -327,3 +419,8 @@ def preprocess_pretraining_instance(
     for attr in item:
         item[attr] = torch.tensor(item[attr])
     return item
+
+
+def randidx(high: int) -> int:
+    """Returns a random integer in the range [0, high)."""
+    return int(torch.randint(high, ()).item())
