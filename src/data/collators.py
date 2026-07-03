@@ -2,7 +2,7 @@
 import torch
 from typing import Dict, Sequence, Optional, Any
 
-from .utils import IGNORE_INDEX
+from utils.common import IGNORE_INDEX
 
 
 class DataCollatorForSupervisedDataset:

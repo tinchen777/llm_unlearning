@@ -1,7 +1,7 @@
 
 from torch.utils.data import Dataset
 
-from .utils import randidx
+from utils.common import randidx
 
 
 class ForgetRetainDataset(Dataset):

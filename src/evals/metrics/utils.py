@@ -11,7 +11,7 @@ from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedToken
 import warnings
 from typing import List, Any
 
-from data.utils import IGNORE_INDEX
+from utils.common import IGNORE_INDEX
 
 DATA_SPLIT_SUFFIX = "_dl"
 

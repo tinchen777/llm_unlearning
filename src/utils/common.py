@@ -6,6 +6,13 @@ import random
 import numpy as np
 from typing import Any, Dict
 
+IGNORE_INDEX = -100
+
+
+def randidx(high: int) -> int:
+    """Returns a random integer in the range [0, high)."""
+    return int(torch.randint(high, ()).item())
+
 
 def set_seed(seed=42):
     random.seed(seed)

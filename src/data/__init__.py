@@ -2,10 +2,10 @@
 from __future__ import annotations
 from typing import Dict, Any, Union, TYPE_CHECKING
 
-from .qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
+from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
+from .datasets.pretraining import PretrainingDataset, CompletionDataset
 from .collators import DataCollatorForSupervisedDataset
 from .unlearn import ForgetRetainDataset
-from .pretraining import PretrainingDataset, CompletionDataset
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
@@ -87,10 +87,6 @@ _register_data(QAwithIdkDataset)
 _register_data(PretrainingDataset)
 _register_data(CompletionDataset)
 _register_data(QAwithAlternateDataset)
-
-# Register composite datasets used in unlearning
-# groups: unlearn
-# _register_data(ForgetRetainDataset)
 
 # Register collators
 _register_collator(DataCollatorForSupervisedDataset)

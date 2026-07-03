@@ -1,21 +1,19 @@
 
 from __future__ import annotations
-from torch.utils.data import Dataset
-from typing import Any, Optional, Dict, Union, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
-from .utils import (
-    load_hf_dataset,
-    prepare_sample_context,
-    tok_chat_sample,
-    randidx
+from .base import (
+    BaseDataset,
+    prepare_chat_sample_context,
+    tok_chat_sample
 )
+from utils.common import randidx
 
 if TYPE_CHECKING:
-    import torch
     from utils.config import TrackingConfig
 
 
-class QADataset(Dataset):
+class QADataset(BaseDataset):
     def __init__(
         self,
         hf_args: TrackingConfig,
@@ -28,66 +26,44 @@ class QADataset(Dataset):
         predict_with_generate: bool = False,
         **kwargs
     ):
-        super().__init__()
-        # data
-        self.data = load_hf_dataset(**hf_args)
+        super().__init__(hf_args)
+        self.question_key = question_key
         # prepare context for each sample, e.g., few-shot examples, etc.
-        sample_context = prepare_sample_context(
+        sample_context = prepare_chat_sample_context(
             template_args,
             question_key=question_key,
             answer_key=answer_key, few_shot_dataset_hf_args=few_shot_dataset_hf_args
         )
         # pre-tokenize the dataset for efficiency
-        self.map_kwargs = dict(
+        self.tok_fn = tok_chat_sample
+        self.tok_kwargs = dict(
             tokenizer=tokenizer,
             template_args=template_args,
             sample_context=sample_context,
             max_length=max_length,
             predict_with_generate=predict_with_generate
         )
-        self.data = self.data.map(
-            tok_chat_sample,
+        self.data = self.prepare_data(
             input_columns=[question_key, answer_key],
-            with_indices=True,
-            fn_kwargs=self.map_kwargs,
-            num_proc=4,
-            remove_columns=self.data.column_names,
+            num_proc=None,
             load_from_cache_file=True,
             desc=f"Pre-tokenizing {self.__class__.__name__}"
         )
 
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx: int):
-        data = self.data[idx]
-        input_ids, labels, index = data["input_ids"], data["labels"], data["index"]
-        if len(input_ids) == 1:
-            return {"input_ids": torch.tensor(input_ids[0]), "labels": torch.tensor(labels[0]), "index": index}
-        else:
-            item: Dict[int, Dict[str, Union[int, torch.Tensor]]] = {}
-            for i in range(len(input_ids)):
-                item[i] = {"input_ids": torch.tensor(input_ids[i]), "labels": torch.tensor(labels[i]), "index": index}
-            return item
-
 
 class QAwithIdkDataset(QADataset):
     def __init__(self, idk_path: str, return_original: bool = True, **kwargs):
+        super().__init__(**kwargs)
         self.return_original = return_original
         self.idk_responses = open(idk_path, "r").readlines()
-        super().__init__(**kwargs)
-
-    def item_with_idk(self, question: str):
-        idk_response = self.idk_responses[randidx(len(self.idk_responses))].strip()
-        idk_item = self._process_sample(question=question, answer=idk_response)
-        return idk_item
 
     def __getitem__(self, idx: int):
-        
-        
-        
-        question = self.data[idx][self.question_key]
-        idk_item = self.item_with_idk(question)
+        alternate_sample = self.tok_fn(
+            q=self.raw_data[idx][self.question_key],
+            a=self.idk_responses[randidx(len(self.idk_responses))].strip(),
+            **self.tok_kwargs
+        )
+        idk_item = self.process_sample(alternate_sample)
         if self.return_original:
             return {"original": super().__getitem__(idx), "alternate": idk_item}
         else:
@@ -96,15 +72,18 @@ class QAwithIdkDataset(QADataset):
 
 class QAwithAlternateDataset(QADataset):
     def __init__(self, alternate_key: str, return_original: bool = True, **kwargs):
-        self.alternate_key = alternate_key
         self.return_original = return_original
         super().__init__(**kwargs)
+        # pre-tokenize the alternate dataset for efficiency
+        self.alternate_data = self.prepare_data(
+            input_columns=[self.question_key, alternate_key],
+            num_proc=None,
+            load_from_cache_file=True,
+            desc=f"Pre-tokenizing {self.__class__.__name__}"
+        )
 
     def __getitem__(self, idx: int):
-        alt_item = self._process_sample(
-            question=self.data[idx][self.question_key],
-            answer=self.data[idx][self.alternate_key]
-        )
+        alt_item = self.process_sample(self.alternate_data[idx])
         if self.return_original:
             return {"original": super().__getitem__(idx), "alternate": alt_item}
         else:
