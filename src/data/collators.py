@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from transformers import BatchEncoding
 
 
-class DataCollatorForSupervisedDataset(DataCollatorForSeq2Seq):
+class DataCollatorForSupervisedDataset:
     """Collate examples for supervised fine-tuning."""
 
     def __init__(
@@ -19,7 +19,7 @@ class DataCollatorForSupervisedDataset(DataCollatorForSeq2Seq):
         index: Optional[str] = None,
     ):
         tokenizer.padding_side = padding_side
-        super().__init__(
+        self.collator = DataCollatorForSeq2Seq(
             tokenizer,
             padding=True,
             label_pad_token_id=IGNORE_INDEX,
@@ -27,7 +27,7 @@ class DataCollatorForSupervisedDataset(DataCollatorForSeq2Seq):
         )
         self.index = index
 
-    def __call__(self, samples: Sequence[Dict[str, Any]], _: Any = None) -> Union[BatchEncoding, Dict[str, Any]]:
+    def __call__(self, samples: Sequence[Dict[Any, Any]]) -> Union[BatchEncoding, Dict[Any, Any]]:
         demo_sample = samples[0]
         if not isinstance(demo_sample, dict):
             raise ValueError(
@@ -38,7 +38,7 @@ class DataCollatorForSupervisedDataset(DataCollatorForSeq2Seq):
             return {k: self([x[k] for x in samples]) for k in keys}
         else:
             idxs = [x.pop(self.index) for x in samples] if self.index in keys else None
-            batch = super().__call__(samples)
+            batch = self.collator(samples)
             if idxs is not None:
                 batch[self.index] = idxs
             return batch

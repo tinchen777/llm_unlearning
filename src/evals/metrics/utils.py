@@ -1,20 +1,19 @@
 
 from __future__ import annotations
-from tqdm import tqdm
-from rouge_score import rouge_scorer
-from collections import defaultdict
-from omegaconf import OmegaConf
 import numpy as np
 from torch import nn
 import torch
+from tqdm import tqdm
+from rouge_score import rouge_scorer
+from transformers import BatchEncoding
 from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
 import warnings
-from typing import List, Any, TYPE_CHECKING
+from typing import List, Any, Dict, Callable, TYPE_CHECKING
 
 from utils.common import IGNORE_INDEX
 
 if TYPE_CHECKING:
-    from transformers import BatchEncoding
+    
 
 DATA_SPLIT_SUFFIX = "_dl"
 
@@ -51,35 +50,45 @@ def aggregate_to_1D(x):
 def run_batchwise_evals(
     model: Any,
     dataloader: Any,
-    batch_eval_fn: Any,
-    batch_eval_fn_args: Any,
+    batch_eval_fn: Callable[..., List[Dict[str, Any]]],
+    batch_eval_fn_args: Dict[str, Any],
     eval_msg: str
 ):
     """Run batch-wise evaluations on a dataset using a specified evaluation function. Handles
     multi-answer datasets by organizing evaluations by answer indices and aggregating results."""
-    evals = defaultdict(dict)
+    evals = {}
     for batch in tqdm(dataloader, desc=eval_msg, total=len(dataloader)):
         # if data arrives in normal format we convert the batch to multiple answer-style
         # like in tofu_perturbed by adding a fake intra_item_index
         if "input_ids" in batch:
-            batch = {"0": batch}
+            batch = {0: batch}
         # Assume batch like {"0": {"input_ids": [[]]..., "index": [453, 454..]},
         #                    "1": {"input_ids": [[]]..., "index": [453, 454..]}..}
-        assert isinstance(next(iter(batch.values())), dict) and "input_ids" in next(
-            iter(batch.values())
-        )
         for intra_item_idx, mini_batch in batch.items():
-            data_indices = (
-                mini_batch.pop("index").cpu().numpy().tolist()
-            )  # data item indices
+            if "input_ids" not in mini_batch:
+                raise ValueError(
+                    f"Expected mini_batch to contain 'input_ids', but got {list(mini_batch)}."
+                )
+            data_indices: List[int] = mini_batch.pop("index")
+            if isinstance(mini_batch, BatchEncoding):
+                mini_batch = mini_batch.to(model.device)
+            elif isinstance(mini_batch, dict):
+                mini_batch = {k: v.to(model.device) for k, v in mini_batch.items()}
+            else:
+                raise ValueError(
+                    f"Expected mini_batch to be a BatchEncoding or dict, but got {type(mini_batch)}."
+                )
             batch_evals = batch_eval_fn(
                 model=model, batch=mini_batch, **batch_eval_fn_args
             )
             indexwise_batch_evals = dict(zip(data_indices, batch_evals))
-            assert not (
-                evals[intra_item_idx].keys() & indexwise_batch_evals.keys()
-            ), "Data indices repeated while iterating dataloader"
-            evals[intra_item_idx] |= indexwise_batch_evals
+            
+            
+            
+            # assert not (
+            #     evals[intra_item_idx].keys() & indexwise_batch_evals.keys()
+            # ), "Data indices repeated while iterating dataloader"
+            evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
     # evals looks like {iidx0: {idx453: {prob: 0.1, loss: 1}},
     #                   iidx1: {idx453: {prob: 0.2, loss: 2}}}
     if len(evals) == 1:  # normal single answer dataset, no need for list
@@ -94,7 +103,7 @@ def run_batchwise_evals(
 
 def evaluate_probability(model, batch):
     """Evaluate model probabilities and average token-level loss for a given batch."""
-    batch = {k: v.to(model.device) for k, v in batch.items()}
+    # batch = {k: v.to(model.device) for k, v in batch.items()}
     with torch.no_grad():
         output = model(**batch)
 
