@@ -9,9 +9,12 @@ from torch import nn
 import torch
 from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
 import warnings
-from typing import List, Any
+from typing import List, Any, TYPE_CHECKING
 
 from utils.common import IGNORE_INDEX
+
+if TYPE_CHECKING:
+    from transformers import BatchEncoding
 
 DATA_SPLIT_SUFFIX = "_dl"
 

@@ -38,16 +38,17 @@ class BaseDataset(Dataset):
             **kwargs
         )
 
-    def process_sample(self, sample: Dict[str, Any]):
+    @staticmethod
+    def process_sample(sample: Dict[str, Any]):
         input_ids, labels, index = sample["input_ids"], sample["labels"], sample["index"]
         if len(input_ids) != len(labels):
             raise ValueError(f"Length mismatch: input_ids has length {len(input_ids)}, labels has length {len(labels)}")
 
         if len(input_ids) == 1:
-            return {"input_ids": torch.tensor(input_ids[0]), "labels": torch.tensor(labels[0]), "index": index}
+            return {"input_ids": input_ids[0], "labels": labels[0], "index": index}
         else:
             return {
-                i: {"input_ids": torch.tensor(input_ids[i]), "labels": torch.tensor(labels[i]), "index": index}
+                i: {"input_ids": input_ids[i], "labels": labels[i], "index": index}
                 for i in range(len(input_ids))
             }
 

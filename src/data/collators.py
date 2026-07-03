@@ -1,11 +1,15 @@
 
-import torch
-from typing import Dict, Sequence, Optional, Any
+from __future__ import annotations
+from transformers import DataCollatorForSeq2Seq
+from typing import Dict, Sequence, Optional, Any, Union, TYPE_CHECKING
 
 from utils.common import IGNORE_INDEX
 
+if TYPE_CHECKING:
+    from transformers import BatchEncoding
 
-class DataCollatorForSupervisedDataset:
+
+class DataCollatorForSupervisedDataset(DataCollatorForSeq2Seq):
     """Collate examples for supervised fine-tuning."""
 
     def __init__(
@@ -14,55 +18,27 @@ class DataCollatorForSupervisedDataset:
         padding_side: str = "right",
         index: Optional[str] = None,
     ):
-        self.tokenizer = tokenizer
-        self.padding_side = padding_side
+        tokenizer.padding_side = padding_side
+        super().__init__(
+            tokenizer,
+            padding=True,
+            label_pad_token_id=IGNORE_INDEX,
+            return_tensors="pt"
+        )
         self.index = index
 
-    def get_instances_from_key(self, instances: Sequence[Dict], key: str):
-        ret_instances = [instance[key] for instance in instances]
-        return ret_instances
-
-    def _pad_tokens(self, input_ids, padding_value):
-        if self.padding_side == "right":
-            input_ids = torch.nn.utils.rnn.pad_sequence(
-                input_ids, batch_first=True, padding_value=padding_value
+    def __call__(self, samples: Sequence[Dict[str, Any]], _: Any = None) -> Union[BatchEncoding, Dict[str, Any]]:
+        demo_sample = samples[0]
+        if not isinstance(demo_sample, dict):
+            raise ValueError(
+                f"Expected samples to be a sequence of dicts, but got Sequence({type(demo_sample)})."
             )
+        keys = list(demo_sample)
+        if "input_ids" not in keys:
+            return {k: self([x[k] for x in samples]) for k in keys}
         else:
-            input_ids = torch.nn.utils.rnn.pad_sequence(
-                [torch.flip(i, dims=[0]) for i in input_ids],
-                batch_first=True,
-                padding_value=padding_value,
-            ).flip(dims=[1])
-        return input_ids
-
-    def __call__(self, instances: Sequence[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-        assert isinstance(instances[0], dict)
-        return_dct = {}
-        if "input_ids" not in instances[0]:
-            for key in instances[0].keys():
-                key_instances = self.get_instances_from_key(
-                    instances=instances, key=key
-                )
-                return_dct[key] = self(key_instances)
-        else:
-            input_ids = [instance["input_ids"] for instance in instances]
-            input_ids = self._pad_tokens(input_ids, self.tokenizer.pad_token_id)
-            attention_mask = input_ids.ne(self.tokenizer.pad_token_id)
-            return_dct.update({"input_ids": input_ids})
-            return_dct.update({"attention_mask": attention_mask})
-            if "labels" in instances[0]:
-                labels = [instance["labels"] for instance in instances]
-                labels = self._pad_tokens(labels, IGNORE_INDEX)
-                return_dct.update({"labels": labels})
-            if self.index:
-                if self.index in instances[0]:
-                    return_dct.update(
-                        {
-                            self.index: torch.tensor(
-                                [example[self.index] for example in instances]
-                            )
-                        }
-                    )
-                else:
-                    raise Warning(f"{self.index} not found in dataset")
-        return return_dct
+            idxs = [x.pop(self.index) for x in samples] if self.index in keys else None
+            batch = super().__call__(samples)
+            if idxs is not None:
+                batch[self.index] = idxs
+            return batch
