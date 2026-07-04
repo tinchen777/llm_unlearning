@@ -33,7 +33,10 @@ class Attack(ABC):
         all_indices = []
 
         for batch in tqdm(dataloader, total=len(dataloader)):
-            indices = batch.pop("index").cpu().numpy().tolist()
+            
+            
+            
+            indices = batch.pop("index")
             batch_values = self.compute_batch_values(batch)
             scores = [self.compute_score(values) for values in batch_values]
 

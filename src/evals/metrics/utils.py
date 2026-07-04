@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 from torch import nn
 import torch
+from omegaconf import OmegaConf
 from tqdm import tqdm
 from rouge_score import rouge_scorer
 from transformers import BatchEncoding
@@ -13,9 +14,21 @@ from typing import List, Any, Dict, Callable, TYPE_CHECKING
 from utils.common import IGNORE_INDEX
 
 if TYPE_CHECKING:
-    
+    from utils.config import TrackingConfig
 
 DATA_SPLIT_SUFFIX = "_dl"
+
+
+def to_device(batch: Any, device: torch.device):
+    """Move a batch of data to the specified device."""
+    if isinstance(batch, dict):
+        return {k: v.to(device) for k, v in batch.items()}
+    elif isinstance(batch, BatchEncoding):
+        return batch.to(device)
+    else:
+        raise ValueError(
+            f"Expected batch to be a `dict` or `BatchEncoding`, but got {type(batch)}."
+        )
 
 
 def dict_transpose(evals):
@@ -56,49 +69,42 @@ def run_batchwise_evals(
 ):
     """Run batch-wise evaluations on a dataset using a specified evaluation function. Handles
     multi-answer datasets by organizing evaluations by answer indices and aggregating results."""
-    evals = {}
-    for batch in tqdm(dataloader, desc=eval_msg, total=len(dataloader)):
-        # if data arrives in normal format we convert the batch to multiple answer-style
-        # like in tofu_perturbed by adding a fake intra_item_index
-        if "input_ids" in batch:
-            batch = {0: batch}
-        # Assume batch like {"0": {"input_ids": [[]]..., "index": [453, 454..]},
-        #                    "1": {"input_ids": [[]]..., "index": [453, 454..]}..}
-        for intra_item_idx, mini_batch in batch.items():
-            if "input_ids" not in mini_batch:
-                raise ValueError(
-                    f"Expected mini_batch to contain 'input_ids', but got {list(mini_batch)}."
-                )
-            data_indices: List[int] = mini_batch.pop("index")
-            if isinstance(mini_batch, BatchEncoding):
-                mini_batch = mini_batch.to(model.device)
-            elif isinstance(mini_batch, dict):
-                mini_batch = {k: v.to(model.device) for k, v in mini_batch.items()}
-            else:
-                raise ValueError(
-                    f"Expected mini_batch to be a BatchEncoding or dict, but got {type(mini_batch)}."
-                )
-            batch_evals = batch_eval_fn(
-                model=model, batch=mini_batch, **batch_eval_fn_args
-            )
-            indexwise_batch_evals = dict(zip(data_indices, batch_evals))
-            
-            
-            
-            # assert not (
-            #     evals[intra_item_idx].keys() & indexwise_batch_evals.keys()
-            # ), "Data indices repeated while iterating dataloader"
-            evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
+    evals: Dict[int, Dict[int, Dict[str, Any]]] = {}
     # evals looks like {iidx0: {idx453: {prob: 0.1, loss: 1}},
     #                   iidx1: {idx453: {prob: 0.2, loss: 2}}}
-    if len(evals) == 1:  # normal single answer dataset, no need for list
-        evals = next(iter(evals.values()))
-    else:
-        # for each index return a dict with all intra_item_idx values in list
-        # after dict transpose looks like {idx453: {prob: [0.1, 0.2], loss: [1, 2]}}
-        evals = dict_transpose(evals)
-    print("Evaluated", len(evals), "examples")
-    return evals
+    try:
+        for batch in tqdm(dataloader, desc=eval_msg, total=len(dataloader)):
+            if "input_ids" in batch:
+                batch = {0: batch}
+            # Assume batch like {0: {"input_ids": [[]]..., index: [453, 454..]},
+            #                    1: {"input_ids": [[]]..., index: [453, 454..]}..}
+            for intra_item_idx, mini_batch in batch.items():
+                if "input_ids" not in mini_batch:
+                    raise ValueError(
+                        f"Expected mini_batch to contain 'input_ids', but got {list(mini_batch)}."
+                    )
+                data_indices: List[int] = mini_batch.pop("index")
+                # mini_batch = to_device(mini_batch, model.device)
+                batch_evals = batch_eval_fn(
+                    model=model,
+                    batch=to_device(mini_batch, model.device),
+                    **batch_eval_fn_args
+                )
+                indexwise_batch_evals = dict(zip(data_indices, batch_evals))
+
+                evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
+
+        if len(evals) == 1:  # normal single answer dataset, no need for list
+            return next(iter(evals.values()))
+        else:
+            # for each index return a dict with all intra_item_idx values in list
+            # after dict transpose looks like {idx453: {prob: [0.1, 0.2], loss: [1, 2]}}
+            return dict_transpose(evals)
+
+    except Exception as e:
+        raise RuntimeError(f"Error during batch-wise evaluation with {eval_msg}") from e
+    finally:
+        print("Evaluated", len(evals), "examples")
 
 
 def evaluate_probability(model, batch):
@@ -274,7 +280,7 @@ def stop_sequences_criteria(
     )
 
 
-def eval_text_similarity(model, tokenizer, batch, generation_args):
+def eval_text_similarity(model, tokenizer, batch, generation_args: TrackingConfig):
     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
 
     def eval_rouge_recall_batch(gen_outputs, ground_truths):
@@ -309,7 +315,8 @@ def eval_text_similarity(model, tokenizer, batch, generation_args):
     attention_mask = batch["attention_mask"]
 
     # convert to a simple dict from DictConfig
-    generation_args = OmegaConf.to_container(generation_args, resolve=True)
+    # generation_args = generation_args.cfg
+    generation_args = OmegaConf.to_container(generation_args.cfg, resolve=True)
     stopwords = generation_args.pop("stopwords", None)
     if stopwords is not None:
         assert isinstance(stopwords, list)

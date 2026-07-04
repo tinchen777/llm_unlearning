@@ -18,7 +18,8 @@ class DataCollatorForSupervisedDataset:
         padding_side: str = "right",
         index: Optional[str] = None,
     ):
-        tokenizer.padding_side = padding_side
+        self.padding_side = padding_side
+        # tokenizer.padding_side = padding_side
         self.collator = DataCollatorForSeq2Seq(
             tokenizer,
             padding=True,
@@ -37,6 +38,11 @@ class DataCollatorForSupervisedDataset:
         if "input_ids" not in keys:
             return {k: self([x[k] for x in samples]) for k in keys}
         else:
+            # Collate the samples into a batch
+
+            # Set padding side for tokenizer, for work==0 only
+            self.collator.tokenizer.padding_side = self.padding_side
+
             idxs = [x.pop(self.index) for x in samples] if self.index in keys else None
             batch = self.collator(samples)
             if idxs is not None:
