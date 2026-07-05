@@ -3,7 +3,7 @@ Straight-forward LOSS attack, as described in https://ieeexplore.ieee.org/abstra
 """
 
 from .base import Attack
-from ..utils import evaluate_probability
+from ..metric_utils import evaluate_probability
 
 
 class LOSSAttack(Attack):

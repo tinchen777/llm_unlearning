@@ -14,28 +14,34 @@ if TYPE_CHECKING:
 class BaseDataset(Dataset):
     tok_fn: Callable[..., Dict[str, Any]]
     tok_kwargs: Dict[str, Any]
-    data: datasets.Dataset
+    _data: Optional[datasets.Dataset] = None
 
-    def __init__(self, hf_args: TrackingConfig):
+    def __init__(self, hf_args: TrackingConfig, map_args: Optional[TrackingConfig]):
         super().__init__()
         # raw data
         self.raw_data = load_hf_dataset(**hf_args)
+        # map arguments
+        self._map_kwargs = map_args.to_dict() if map_args is not None else {}
 
-    def prepare_data(
+    def map_raw_data(
         self,
         input_columns: List[str],
-        desc: Optional[str] = None,
-        **kwargs
+        desc: Optional[str] = None
     ) -> datasets.Dataset:
         return self.raw_data.map(
             self.tok_fn,
             input_columns=input_columns,
             with_indices=True,
+            with_rank=False,
+            batched=False,
             fn_kwargs=self.tok_kwargs,
             remove_columns=self.raw_data.column_names,
             desc=desc or f"Pre-tokenizing {self.__class__.__name__}",
-            **kwargs
+            **self._map_kwargs
         )
+
+    def prepare_data(self) -> datasets.Dataset:
+        raise NotImplementedError(f"Subclasses of BaseDataset must implement the `prepare_data` method.")
 
     @staticmethod
     def process_sample(sample: Dict[str, Any]):
@@ -56,6 +62,12 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, idx: int):
         return self.process_sample(self.data[idx])
+
+    @property
+    def data(self):
+        if self._data is None:
+            self._data = self.prepare_data()
+        return self._data
 
 
 def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> datasets.Dataset:

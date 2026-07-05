@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from collections.abc import Mapping, Iterator, ItemsView
-from omegaconf import DictConfig, open_dict
+from omegaconf import DictConfig, open_dict, OmegaConf
 import reprlib
 from functools import wraps
 from typing import Any, Dict
@@ -29,9 +29,10 @@ def check_and_return(func):
             if default is not _MISSING:
                 return default
             raise KeyError(f"`{key}` not found in `@{self._loc_choices}`.")
-        val = func(self, key, default, allow_none)
+        val = func(self, key)
         if val is None and not allow_none:
             raise ValueError(f"`{key}` is None in `@{self._loc_choices}`.")
+
         if isinstance(val, DictConfig):
             # new_loc
             new_loc = f"{self._loc}.{key}" if self._loc else key
@@ -63,6 +64,9 @@ class TrackingConfig(Mapping):
 
     def copy(self):
         return TrackingConfig(self._cfg.copy(), self._loc, self._loc_choices)
+
+    def to_dict(self) -> Dict[Any, Any]:
+        return OmegaConf.to_container(self._cfg, resolve=True)  # type: ignore
 
     def items(self) -> ItemsView[str, Any]:
         return super().items()

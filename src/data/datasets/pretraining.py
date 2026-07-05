@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from datasets import Dataset
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import Any, Sequence, Optional, TYPE_CHECKING
 
 from .base import BaseDataset, tok_text_sample, collect_text_sample
 
@@ -19,9 +19,12 @@ class CompletionDataset(BaseDataset):
         max_length: int = 2048,
         predict_with_generate: bool = False,
         insert_space: bool = False,
+        map_args: Optional[TrackingConfig] = None,
         **kwargs
     ):
-        super().__init__(hf_args)
+        super().__init__(hf_args, map_args)
+        self.prefix_key = prefix_key
+        self.text_key = text_key
         # pre-tokenize the dataset for efficiency
         self.tok_fn = tok_text_sample
         self.tok_kwargs = dict(
@@ -30,11 +33,11 @@ class CompletionDataset(BaseDataset):
             predict_with_generate=predict_with_generate,
             insert_space=insert_space
         )
-        self.data = self.prepare_data(
-            input_columns=[prefix_key, text_key],
-            num_proc=None,
-            load_from_cache_file=True,
-            desc=f"Pre-tokenizing {self.__class__.__name__}"
+
+    def prepare_data(self):
+        return self.map_raw_data(
+            input_columns=[self.prefix_key, self.text_key],
+            desc=f"Pre-tokenizing {self.__class__.__name__} data"
         )
 
 
@@ -45,9 +48,11 @@ class PretrainingDataset(BaseDataset):
         tokenizer: Any,
         text_key: str = "text",
         max_length: int = 2048,
+        map_args: Optional[TrackingConfig] = None,
         **kwargs
     ):
-        super().__init__(hf_args)
+        super().__init__(hf_args, map_args)
+        self.text_key = text_key
         # rebuild raw data
         text_tok_seq = self._chunk_and_tok_text(
             self.raw_data[text_key],
@@ -60,11 +65,11 @@ class PretrainingDataset(BaseDataset):
         self.tok_kwargs = dict(
             max_length=max_length
         )
-        self.data = self.prepare_data(
-            input_columns=[text_key],
-            num_proc=None,
-            load_from_cache_file=True,
-            desc=f"Pre-tokenizing {self.__class__.__name__}"
+
+    def prepare_data(self):
+        return self.map_raw_data(
+            input_columns=[self.text_key],
+            desc=f"Pre-tokenizing {self.__class__.__name__} data"
         )
 
     @staticmethod

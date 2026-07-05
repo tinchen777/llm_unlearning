@@ -10,6 +10,7 @@ from .base import (
 from utils.common import randidx
 
 if TYPE_CHECKING:
+    import datasets
     from utils.config import TrackingConfig
 
 
@@ -24,17 +25,18 @@ class QADataset(BaseDataset):
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
         predict_with_generate: bool = False,
+        map_args: Optional[TrackingConfig] = None,
         **kwargs
     ):
-        super().__init__(hf_args)
+        super().__init__(hf_args, map_args)
         self.question_key = question_key
+        self.answer_key = answer_key
         # prepare context for each sample, e.g., few-shot examples, etc.
         sample_context = prepare_chat_sample_context(
             template_args,
             question_key=question_key,
             answer_key=answer_key, few_shot_dataset_hf_args=few_shot_dataset_hf_args
         )
-        # pre-tokenize the dataset for efficiency
         self.tok_fn = tok_chat_sample
         self.tok_kwargs = dict(
             tokenizer=tokenizer,
@@ -43,11 +45,11 @@ class QADataset(BaseDataset):
             max_length=max_length,
             predict_with_generate=predict_with_generate
         )
-        self.data = self.prepare_data(
-            input_columns=[question_key, answer_key],
-            num_proc=None,
-            load_from_cache_file=True,
-            desc=f"Pre-tokenizing {self.__class__.__name__}"
+
+    def prepare_data(self):
+        return self.map_raw_data(
+            input_columns=[self.question_key, self.answer_key],
+            desc=f"Pre-tokenizing {self.__class__.__name__} data"
         )
 
 
@@ -72,15 +74,17 @@ class QAwithIdkDataset(QADataset):
 
 
 class QAwithAlternateDataset(QADataset):
+    _alt_data: Optional[datasets.Dataset] = None
+
     def __init__(self, alternate_key: str, return_original: bool = True, **kwargs):
-        self.return_original = return_original
         super().__init__(**kwargs)
-        # pre-tokenize the alternate dataset for efficiency
-        self.alternate_data = self.prepare_data(
-            input_columns=[self.question_key, alternate_key],
-            num_proc=None,
-            load_from_cache_file=True,
-            desc=f"Pre-tokenizing {self.__class__.__name__}"
+        self.return_original = return_original
+        self.alternate_key = alternate_key
+
+    def prepare_alt_data(self):
+        return self.map_raw_data(
+            input_columns=[self.question_key, self.alternate_key],
+            desc=f"Pre-tokenizing {self.__class__.__name__} alternate data"
         )
 
     def __getitem__(self, idx: int):
@@ -89,3 +93,9 @@ class QAwithAlternateDataset(QADataset):
             return {"original": super().__getitem__(idx), "alternate": alt_item}
         else:
             return alt_item
+
+    @property
+    def alternate_data(self):
+        if self._alt_data is None:
+            self._alt_data = self.prepare_alt_data()
+        return self._alt_data

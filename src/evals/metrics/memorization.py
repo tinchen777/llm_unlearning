@@ -3,15 +3,13 @@ from __future__ import annotations
 import logging
 import torch
 import numpy as np
-from functools import partial
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, Dict, List, Mapping, TYPE_CHECKING
 
-from .utils import (
-    aggregate_to_1D,
+from .utils import aggregate_to_1D, run_batchwise_evals
+from .metric_utils import (
     evaluate_probability,
-    eval_text_similarity,
-    run_batchwise_evals,
-    tokenwise_vocab_logprobs,
+    tokenwise_logprobs,
+    eval_text_similarity
 )
 from .base import MetricFunc
 
@@ -27,13 +25,10 @@ logger = logging.getLogger("eval.metric")
 @MetricFunc
 def probability(model: Any, dataloader: DataLoader, **kwargs):
     """Compute the probabilities by data points and report aggregated average"""
-    
-    
-    
-    
-    fun_args = {}
     scores_by_index = run_batchwise_evals(
-        model, dataloader, evaluate_probability, fun_args, "Calculating loss"
+        model, dataloader,
+        batch_eval_fn=evaluate_probability,
+        eval_msg="Calculating loss"
     )
     prob_values = np.array(
         [
@@ -88,11 +83,10 @@ def rouge(
 ):
     """Calculate ROUGE metrics and return the aggregated value along with per-index scores."""
     scores_by_index = run_batchwise_evals(
-        model,
-        dataloader,
-        eval_text_similarity,
-        {"tokenizer": tokenizer, "generation_args": generation_args},
-        "Calculating text similarity",
+        model, dataloader,
+        batch_eval_fn=eval_text_similarity,
+        batch_eval_fn_args=dict(tokenizer=tokenizer, generation_args=generation_args),
+        eval_msg="Calculating text similarity",
     )
     rouge_values = np.array(
         [
@@ -174,12 +168,10 @@ def truth_ratio(aggregator: str, pre_compute: Dict[str, Any], **kwargs):
 @MetricFunc
 def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
 
-    def _exact_memorization(model, batch):
-        log_probs_batch, labels_batch = tokenwise_vocab_logprobs(
-            model, batch, grad=False, return_labels=True
-        )
-        em_batch = []
-        for log_probs, labels in zip(log_probs_batch, labels_batch):
+    def _exact_memorization(model: Any, batch: Mapping[str, torch.Tensor]):
+        vocab_logprobs_batch, _, labels_batch = tokenwise_logprobs(model, batch)
+        em_batch: List[Dict[str, Any]] = []
+        for vocab_logprobs, labels in zip(vocab_logprobs_batch, labels_batch):
             valid_len = len(labels)
             if valid_len == 0:
                 # Rarely, tokenization can result in a mismatch with no valid target
@@ -192,22 +184,21 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
                 )
                 em_batch.append({"score": None})
             else:
-                preds = torch.argmax(log_probs, dim=-1)
+                preds = vocab_logprobs.argmax(dim=-1)
                 em_score = (preds == labels).sum() / valid_len
                 em_batch.append({"score": em_score.item()})
         return em_batch
 
-    fun_args = {}
     scores_by_index = run_batchwise_evals(
-        model, dataloader, _exact_memorization, fun_args, "Calculating EM"
+        model, dataloader,
+        batch_eval_fn=_exact_memorization,
+        eval_msg="Calculating EM"
     )
-    em_values = np.array(
-        [
-            evals["score"]
-            for evals in scores_by_index.values()
-            if evals["score"] is not None
-        ]
-    )
+    em_values = np.array([
+        evals["score"]
+        for evals in scores_by_index.values()
+        if evals["score"] is not None
+    ])
     em_values = aggregate_to_1D(em_values)
     return {"agg_value": np.mean(em_values), "value_by_index": scores_by_index}
 
@@ -215,14 +206,12 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
 @MetricFunc
 def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
 
-    def _extraction_strength(model, batch):
-        log_probs_batch, labels_batch = tokenwise_vocab_logprobs(
-            model, batch, grad=False, return_labels=True
-        )
-        es_batch = []
-        for log_probs, labels in zip(log_probs_batch, labels_batch):
+    def _extraction_strength(model: Any, batch: Mapping[str, torch.Tensor]):
+        vocab_logprobs_batch, _, labels_batch = tokenwise_logprobs(model, batch)
+        es_batch: List[Dict[str, Any]] = []
+        for vocab_logprobs, labels in zip(vocab_logprobs_batch, labels_batch):
             valid_len = len(labels)
-            preds = torch.argmax(log_probs, dim=-1)
+            preds = vocab_logprobs.argmax(dim=-1)
             k = 0
             for k in range(valid_len):
                 suff_preds = preds[k:]
@@ -244,16 +233,15 @@ def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
                 es_batch.append({"score": es_score})
         return es_batch
 
-    fun_args = {}
     scores_by_index = run_batchwise_evals(
-        model, dataloader, _extraction_strength, fun_args, "Calculating ES"
+        model, dataloader,
+        batch_eval_fn=_extraction_strength,
+        eval_msg="Calculating ES"
     )
-    es_values = np.array(
-        [
-            evals["score"]
-            for evals in scores_by_index.values()
-            if evals["score"] is not None
-        ]
-    )
+    es_values = np.array([
+        evals["score"]
+        for evals in scores_by_index.values()
+        if evals["score"] is not None
+    ])
     es_values = aggregate_to_1D(es_values)
     return {"agg_value": np.mean(es_values), "value_by_index": scores_by_index}
