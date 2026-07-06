@@ -8,7 +8,7 @@ import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
 from utils.common import IGNORE_INDEX
-from .utils import batch_to_model_device, forward_batch
+from .utils import batch_to_model_device, forward_batch, to_np
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -33,14 +33,11 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
     avg_losses = losses / num_token_gt
     normalized_probs = torch.exp(-avg_losses)
 
-    # .float() is required: numpy has no bfloat16, so converting a bf16 tensor
-    # (when the model runs in bfloat16) directly via .numpy() raises
-    # "TypeError: Got unsupported ScalarType BFloat16".
-    avg_losses = avg_losses.float().cpu().numpy().tolist()
-    normalized_probs = normalized_probs.float().cpu().numpy().tolist()
     return [
         {"prob": prob, "avg_loss": avg_loss}
-        for prob, avg_loss in zip(normalized_probs, avg_losses)
+        for prob, avg_loss in zip(
+            to_np(normalized_probs).tolist(), to_np(avg_losses).tolist()
+        )
     ]
 
 
@@ -49,9 +46,9 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
     """Compute token-wise next token prediction logprobs for all labeled tokens for each sample in a batch.
     `grad` decides whether gradients are turned on
     Returns
-    - `vocab_logprobs_batch` (List[Tensor]): Tensors of size seq_len where seq_len is length of labeled tokens
-    - `target_logprobs_batch` (List[Tensor]): Tensors of size seq_len where seq_len is length of labeled tokens
-    - `labels_batch` (List[Tensor]): List of tensors of length N. Returned only if return_labels is True
+    - `vocab_logprobs_batch` (List[Tensor]): Tensors of shape [seq_len, vocab_size]
+    - `target_logprobs_batch` (List[Tensor]): Tensors of shape [seq_len]
+    - `labels_batch` (List[Tensor]): Tensors of shape [seq_len]
     """
     # forward
     logits = forward_batch(model, batch, grad=grad)
@@ -81,12 +78,15 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
                 f"labels[0] is not {IGNORE_INDEX}. "
                 "The first token should not contribute to the next-token prediction loss."
             )
-        # Return full distribution for each position: shape (N, V)
+        # Return full distribution for each position: shape [seq_len, vocab_size]
         vocab_logprobs_batch.append(vocab_logprobs[i, start_idx - 1: end_idx])
         target_logprobs_batch.append(target_logprobs[i, start_idx - 1: end_idx])
         labels_batch.append(labels[actual_indices])
 
     return vocab_logprobs_batch, target_logprobs_batch, labels_batch
+
+
+_ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
 
 
 class MultiTokenEOSCriteria(StoppingCriteria):
@@ -147,24 +147,21 @@ def stop_sequences_criteria(
     )
 
 
+@batch_to_model_device
 def eval_text_similarity(model: Any, batch: Mapping[str, torch.Tensor], tokenizer: Any, generation_args: TrackingConfig):
     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
 
-    def eval_rouge_recall_batch(gen_outputs, ground_truths):
-        scorer = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
+    def _eval_rouge_recall_batch(gen_outputs, ground_truths):
         evals = []
         for gen, gt in zip(gen_outputs, ground_truths):
-            rouge_scores = scorer.score(gt, gen)
-            evals.append(
-                {
-                    "rouge1_recall": rouge_scores["rouge1"].recall,
-                    "rougeL_f1": rouge_scores["rougeL"].fmeasure,
-                    "rougeL_recall": rouge_scores["rougeL"].recall,
-                }
-            )
+            rouge_scores = _ROUGE_SCORER.score(gt, gen)
+            evals.append({
+                "rouge1_recall": rouge_scores["rouge1"].recall,
+                "rougeL_f1": rouge_scores["rougeL"].fmeasure,
+                "rougeL_recall": rouge_scores["rougeL"].recall,
+            })
         return evals
 
-    # batch = {k: v.to(model.device) for k, v in batch.items()}
     input_ids = batch["input_ids"]
     labels = batch["labels"]
     input_texts = tokenizer.batch_decode(
@@ -214,7 +211,7 @@ def eval_text_similarity(model: Any, batch: Mapping[str, torch.Tensor], tokenize
         raw_text = raw_text.strip()
         gen_texts[i] = raw_text
 
-    scores = eval_rouge_recall_batch(gen_texts, ground_truths)
+    scores = _eval_rouge_recall_batch(gen_texts, ground_truths)
     scores = [
         {
             **rouge_evals,

@@ -9,6 +9,7 @@ from typing import Union, Mapping, List
 
 from .base import Attack
 from ..metric_utils import tokenwise_logprobs
+from ..utils import to_np
 
 
 # DO NOT use gradnorm in a way so that it runs when your accumulated gradients during training aren't used yet
@@ -37,6 +38,4 @@ class GradNormAttack(Attack):
         return batch_grad_norms
 
     def compute_score(self, sample_stats: torch.Tensor):
-        """Return negative gradient norm as the attack score."""
-        # TODO
-        return float(sample_stats.cpu().to(torch.float32).numpy())
+        return float(to_np(sample_stats))

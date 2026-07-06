@@ -10,7 +10,7 @@ from .base import (
 from utils.common import randidx
 
 if TYPE_CHECKING:
-    import datasets
+    from datasets import Dataset as HFDataset
     from utils.config import TrackingConfig
 
 
@@ -49,7 +49,7 @@ class QADataset(BaseDataset):
     def prepare_data(self):
         return self.map_raw_data(
             input_columns=[self.question_key, self.answer_key],
-            desc=f"Pre-tokenizing {self.__class__.__name__} data"
+            name="QA data"
         )
 
 
@@ -74,7 +74,7 @@ class QAwithIdkDataset(QADataset):
 
 
 class QAwithAlternateDataset(QADataset):
-    _alt_data: Optional[datasets.Dataset] = None
+    _alt_data: Optional[HFDataset] = None
 
     def __init__(self, alternate_key: str, return_original: bool = True, **kwargs):
         super().__init__(**kwargs)
@@ -84,7 +84,7 @@ class QAwithAlternateDataset(QADataset):
     def prepare_alt_data(self):
         return self.map_raw_data(
             input_columns=[self.question_key, self.alternate_key],
-            desc=f"Pre-tokenizing {self.__class__.__name__} alternate data"
+            name=f"Q-{self.alternate_key} data"
         )
 
     def __getitem__(self, idx: int):

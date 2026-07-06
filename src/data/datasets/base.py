@@ -3,31 +3,36 @@ from __future__ import annotations
 from torch.utils.data import Dataset
 import datasets
 import numpy as np
+import os
 from typing import List, Dict, Any, Optional, Union, Callable, TYPE_CHECKING
 
 from utils.common import IGNORE_INDEX
 
 if TYPE_CHECKING:
+    from datasets import Dataset as HFDataset
     from utils.config import TrackingConfig
 
 
 class BaseDataset(Dataset):
     tok_fn: Callable[..., Dict[str, Any]]
     tok_kwargs: Dict[str, Any]
-    _data: Optional[datasets.Dataset] = None
+    _data: Optional[HFDataset] = None
 
     def __init__(self, hf_args: TrackingConfig, map_args: Optional[TrackingConfig]):
         super().__init__()
         # raw data
         self.raw_data = load_hf_dataset(**hf_args)
-        # map arguments
-        self._map_kwargs = map_args.to_dict() if map_args is not None else {}
+        # map arguments & dataset_mb_str
+        self._map_kwargs, raw_data_mb = get_map_kwargs(self.raw_data)
+        if map_args is not None:
+            self._map_kwargs.update(map_args.to_dict())
+        self._raw_data_mb_str = f"{raw_data_mb:.2f} MB" if raw_data_mb is not None else "- MB"
 
     def map_raw_data(
         self,
         input_columns: List[str],
-        desc: Optional[str] = None
-    ) -> datasets.Dataset:
+        name: str = ""
+    ) -> HFDataset:
         return self.raw_data.map(
             self.tok_fn,
             input_columns=input_columns,
@@ -36,11 +41,11 @@ class BaseDataset(Dataset):
             batched=False,
             fn_kwargs=self.tok_kwargs,
             remove_columns=self.raw_data.column_names,
-            desc=desc or f"Pre-tokenizing {self.__class__.__name__}",
+            desc=f"Pre-tokenizing [{self.__class__.__name__} : {self._raw_data_mb_str}][{name}]",
             **self._map_kwargs
         )
 
-    def prepare_data(self) -> datasets.Dataset:
+    def prepare_data(self) -> HFDataset:
         raise NotImplementedError(f"Subclasses of BaseDataset must implement the `prepare_data` method.")
 
     @staticmethod
@@ -70,11 +75,52 @@ class BaseDataset(Dataset):
         return self._data
 
 
-def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> datasets.Dataset:
+def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> HFDataset:
     dataset = datasets.load_dataset(path, **kwargs)
     if add_index:
         dataset = dataset.add_column("index", np.arange(len(dataset)))
     return dataset
+
+
+def get_map_kwargs(
+    dataset: HFDataset,
+    keep_in_memory_threshold_mb: int = 512,
+):
+    """
+    Automatically choose efficient arguments for `datasets.Dataset.map()`.
+
+    Args:
+        dataset: Hugging Face Dataset.
+        keep_in_memory_threshold_mb:
+            Dataset smaller than this threshold will be kept in memory.
+
+    Returns:
+        A dict that can be directly expanded into Dataset.map().
+    """
+    # ---------- keep_in_memory ----------
+    try:
+        dataset_size = int(dataset.data.nbytes)
+        keep_in_memory = dataset_size < keep_in_memory_threshold_mb * 1024**2
+        dataset_size = dataset_size / 1024**2  # convert to MB
+    except AttributeError:
+        dataset_size = None
+        keep_in_memory = False
+
+    # ---------- num_proc ----------
+    cpu_count = os.cpu_count() or 1
+    n = len(dataset)
+
+    if n < 5_000:
+        num_proc = None
+    elif n < 50_000:
+        num_proc = min(cpu_count, 4)
+    else:
+        num_proc = cpu_count
+
+    return {
+        "keep_in_memory": keep_in_memory,
+        "num_proc": num_proc,
+    }, dataset_size
 
 
 def prepare_chat_sample_context(

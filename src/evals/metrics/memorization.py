@@ -28,15 +28,13 @@ def probability(model: Any, dataloader: DataLoader, **kwargs):
     scores_by_index = run_batchwise_evals(
         model, dataloader,
         batch_eval_fn=evaluate_probability,
-        eval_msg="Calculating loss"
+        eval_name="loss"
     )
-    prob_values = np.array(
-        [
-            evals["prob"]
-            for evals in scores_by_index.values()
-            if evals["prob"] is not None
-        ]
-    )
+    prob_values = np.array([
+        evals["prob"]
+        for evals in scores_by_index.values()
+        if evals["prob"] is not None
+    ])
     prob_values = aggregate_to_1D(prob_values)
     return {"agg_value": np.mean(prob_values), "value_by_index": scores_by_index}
 
@@ -86,7 +84,7 @@ def rouge(
         model, dataloader,
         batch_eval_fn=eval_text_similarity,
         batch_eval_fn_args=dict(tokenizer=tokenizer, generation_args=generation_args),
-        eval_msg="Calculating text similarity",
+        eval_name="text similarity",
     )
     rouge_values = np.array(
         [
@@ -192,7 +190,7 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
     scores_by_index = run_batchwise_evals(
         model, dataloader,
         batch_eval_fn=_exact_memorization,
-        eval_msg="Calculating EM"
+        eval_name="EM"
     )
     em_values = np.array([
         evals["score"]
@@ -236,7 +234,7 @@ def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
     scores_by_index = run_batchwise_evals(
         model, dataloader,
         batch_eval_fn=_extraction_strength,
-        eval_msg="Calculating ES"
+        eval_name="ES"
     )
     es_values = np.array([
         evals["score"]

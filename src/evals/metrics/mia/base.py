@@ -31,18 +31,26 @@ class Attack(ABC):
         """Compute MIA score for a single sample."""
         ...
 
-    def attack(self, dataloader: DataLoader):
+    def attack(self, dataloader: DataLoader, name: str = "???"):
         """Run full MIA attack."""
         all_scores: List[float] = []
         all_indices: List[int] = []
 
-        for batch in tqdm(dataloader, total=len(dataloader)):
+        pbar = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"Executing [{self.__class__.__name__}][{name}]",
+            unit="batch(es)",
+            colour="blue"
+        )
+        for batch in pbar:
             indices = batch.pop("index")
             batch_values = self.compute_batch_values(batch)
             scores = [self.compute_score(values) for values in batch_values]
 
             all_scores.extend(scores)
             all_indices.extend(indices)
+        pbar.close()
 
         scores_by_index = {
             str(idx): {"score": score}
@@ -89,8 +97,8 @@ def mia_auc(
     """
     attacker = attack_cls(model=model, **kwargs)
 
-    forget, forget_scores = attacker.attack(forget_dl)
-    holdout, holdout_scores = attacker.attack(holdout_dl)
+    forget, forget_scores = attacker.attack(forget_dl, name="forget")
+    holdout, holdout_scores = attacker.attack(holdout_dl, name="holdout")
 
     scores = np.array(forget_scores + holdout_scores)
     labels = np.array([0] * len(forget_scores) + [1] * len(holdout_scores))

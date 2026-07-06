@@ -6,10 +6,7 @@ from functools import wraps
 from tqdm import tqdm
 from transformers import BatchEncoding
 import logging
-from typing import List, Any, Dict, Callable, Mapping, Optional, TYPE_CHECKING
-
-# if TYPE_CHECKING:
-#     from transformers.modeling_outputs import CausalLMOutputWithPast
+from typing import List, Any, Tuple, Dict, Callable, Mapping, Optional
 
 DATA_SPLIT_SUFFIX = "_dl"
 
@@ -21,7 +18,7 @@ def run_batchwise_evals(
     dataloader: Any,
     batch_eval_fn: Callable[..., List[Dict[str, Any]]],
     batch_eval_fn_args: Dict[str, Any] = {},
-    eval_msg: Optional[str] = None
+    eval_name: str = "???"
 ):
     """Run batch-wise evaluations on a dataset using a specified evaluation function. Handles
     multi-answer datasets by organizing evaluations by answer indices and aggregating results."""
@@ -29,7 +26,15 @@ def run_batchwise_evals(
     # evals looks like {iidx0: {idx453: {prob: 0.1, loss: 1}},
     #                   iidx1: {idx453: {prob: 0.2, loss: 2}}}
     try:
-        for batch in tqdm(dataloader, desc=eval_msg, total=len(dataloader)):
+        data_size = len(dataloader.dataset)
+        pbar = tqdm(
+            dataloader,
+            total=len(dataloader),
+            desc=f"Calculating [{eval_name}]",
+            unit="batch(es)",
+            colour="blue"
+        )
+        for batch in pbar:
             if "input_ids" in batch:
                 batch = {0: batch}
             # Assume batch like {0: {"input_ids": [[]]..., index: [453, 454..]},
@@ -48,21 +53,23 @@ def run_batchwise_evals(
                 indexwise_batch_evals = dict(zip(data_indices, batch_evals))
 
                 item_sample_evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
+            # progress bar update
+            pbar.set_postfix_str(f"[{len(item_sample_evals.get(0, {}))} / {data_size}] sample(s) evaluated")
+        pbar.close()
 
         if len(item_sample_evals) == 1:  # normal single answer dataset, no need for list
-            sample_evals = next(iter(item_sample_evals.values()))
+            sample_evals = item_sample_evals[0]
         else:
             # for each index return a dict with all intra_item_idx values in list
             # after dict transpose looks like {idx453: {prob: [0.1, 0.2], loss: [1, 2]}}
             sample_evals = dict_transpose(item_sample_evals)
-        logger.info(f"Evaluated {len(sample_evals)} examples.")
         return sample_evals
 
     except Exception as e:
-        raise RuntimeError(f"Error during batch-wise evaluation with {eval_msg}") from e
+        raise RuntimeError(f"Error during batch-wise evaluation with {eval_name}") from e
 
 
-def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_keys: Optional[List[str]] = ["labels"], grad: bool = False) -> torch.Tensor:
+def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_keys: Optional[Tuple[str]] = ("labels",), grad: bool = False) -> torch.Tensor:
     """Forward a batch through the model and return the outputs.
     Return the logits tensor of shape (bsz, seq_len, vocab_size).
     """
@@ -74,7 +81,6 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_keys: Op
     if logits is None:
         raise ValueError("Model output logits is `None`. Ensure the model is in evaluation mode and returns logits.")
     return logits
-
 
 
 def batch_to_model_device(func):
@@ -118,3 +124,23 @@ def dict_transpose(evals: Dict[int, Dict[int, Dict[str, Any]]]) -> Dict[int, Dic
 
 def aggregate_to_1D(x):
     return np.mean(x, axis=tuple(range(1, x.ndim)))
+
+
+def topk_mean(tensor: torch.Tensor, ratio: float, largest: bool = True, dim: int = -1):
+    """Compute the mean of the top-k elements in the tensor along the specified dimension."""
+    if ratio <= 0 or ratio > 1:
+        raise ValueError(f"Ratio must be in the range (0, 1], but got {ratio}.")
+
+    if tensor.numel() == 0:
+        return 0.0
+    k = max(1, int(tensor.size(dim) * ratio))
+    topk_values = tensor.topk(k, largest=largest, dim=dim).values
+    return float(topk_values.mean().item())
+
+
+def to_np(tensor: torch.Tensor, is_float: bool = True):
+    """Convert a PyTorch tensor to a NumPy array."""
+    if is_float:
+        return tensor.detach().cpu().to(torch.float32).numpy()
+    else:
+        return tensor.detach().cpu().numpy()

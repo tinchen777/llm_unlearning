@@ -2,15 +2,21 @@
 Straight-forward LOSS attack, as described in https://ieeexplore.ieee.org/abstract/document/8429311
 """
 
+from __future__ import annotations
+from typing import Mapping, Dict, TYPE_CHECKING
+
 from .base import Attack
 from ..metric_utils import evaluate_probability
 
+if TYPE_CHECKING:
+    import torch
+
 
 class LOSSAttack(Attack):
-    def compute_batch_values(self, batch):
+    def compute_batch_values(self, batch: Mapping[str, torch.Tensor]):
         """Compute probabilities and losses for the batch."""
         return evaluate_probability(self.model, batch)
 
-    def compute_score(self, sample_stats):
+    def compute_score(self, sample_stats: Dict[str, float]):
         """Return the average loss for the sample."""
         return sample_stats["avg_loss"]

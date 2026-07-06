@@ -8,6 +8,7 @@ from typing import Mapping, Dict, TYPE_CHECKING
 
 from .base import Attack
 from ..metric_utils import tokenwise_logprobs
+from ..utils import topk_mean
 
 if TYPE_CHECKING:
     import torch
@@ -23,14 +24,11 @@ class MinKProbAttack(Attack):
         return target_logprobs_batch
 
     def compute_score(self, sample_stats: torch.Tensor):
-        """Score single sample using min-k negative log probs scores attack."""
-        lp = sample_stats.float().cpu().numpy()
-        if lp.size == 0:
-            return 0.0
-
-        num_k = max(1, int(len(lp) * self.k))
-        sorted_vals = np.sort(lp)
-        return float(-np.mean(sorted_vals[:num_k]))
+        """Score single sample using min-k negative log probs scores attack.
+        sample_stats shape as [seq_len]
+        """
+        # Take bottom k% as the attack score
+        return -topk_mean(sample_stats, self.k, largest=False)
 
 
 class MinKPlusPlusAttack(Attack):
@@ -47,22 +45,19 @@ class MinKPlusPlusAttack(Attack):
 
     def compute_score(self, sample_stats: Dict[str, torch.Tensor]):
         """Score using min-k negative log probs scores with vocab-wise normalization."""
-        vocab_logprobs = sample_stats["vocab_logprobs"]
-        target_logprobs = sample_stats["target_logprobs"]
+        vocab_logprobs = sample_stats["vocab_logprobs"]  # shape as [seq_len, vocab_size]
+        target_logprobs = sample_stats["target_logprobs"]  # shape as [seq_len]
 
         if len(target_logprobs) == 0:
             return 0.0
 
         # Compute normalized scores using vocab distribution
-        mu = (vocab_logprobs.exp() * vocab_logprobs).sum(-1)
-        sigma = (vocab_logprobs.exp() * vocab_logprobs.square()).sum(-1) - mu.square()
+        mu = (vocab_logprobs.exp() * vocab_logprobs).sum(-1)  # shape as [seq_len]
+        sigma = (vocab_logprobs.exp() * vocab_logprobs.square()).sum(-1) - mu.square()  # shape as [seq_len]
 
         # Handle numerical stability
         sigma = sigma.clamp(min=1e-6)
-        scores = (
-            target_logprobs.float().cpu().numpy() - mu.float().cpu().numpy()
-        ) / sigma.sqrt().cpu().numpy()
+        scores = (target_logprobs - mu) / sigma.sqrt()  # shape as [seq_len]
 
         # Take bottom k% as the attack score
-        num_k = max(1, int(len(scores) * self.k))
-        return float(-np.mean(sorted(scores)[:num_k]))
+        return -topk_mean(scores, self.k, largest=False)

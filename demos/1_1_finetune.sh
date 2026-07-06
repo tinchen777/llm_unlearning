@@ -29,7 +29,7 @@ python src/train.py --config-name=train.yaml \
   model=${MODEL} \
   trainer.args.eval_on_start=True \
   trainer.args.num_train_epochs=20 \
-  task_name=test/tofu_${MODEL}_x \
+  task_name=test/tofu_${MODEL}_x2 \
 
 # 产物: saves/finetune/tofu_${MODEL}_full
 echo end finetune ${MODEL}

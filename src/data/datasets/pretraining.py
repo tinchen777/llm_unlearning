@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-from datasets import Dataset
+from datasets import Dataset as HFDataset
 from typing import Any, Sequence, Optional, TYPE_CHECKING
 
 from .base import BaseDataset, tok_text_sample, collect_text_sample
@@ -37,7 +37,7 @@ class CompletionDataset(BaseDataset):
     def prepare_data(self):
         return self.map_raw_data(
             input_columns=[self.prefix_key, self.text_key],
-            desc=f"Pre-tokenizing {self.__class__.__name__} data"
+            name="prompt-text data"
         )
 
 
@@ -59,7 +59,7 @@ class PretrainingDataset(BaseDataset):
             tokenizer=tokenizer,
             max_length=max_length
         )
-        self.raw_data = Dataset.from_dict({text_key: text_tok_seq})
+        self.raw_data = HFDataset.from_dict({text_key: text_tok_seq})
         # pre-tokenize the dataset for efficiency
         self.tok_fn = collect_text_sample
         self.tok_kwargs = dict(
@@ -69,7 +69,7 @@ class PretrainingDataset(BaseDataset):
     def prepare_data(self):
         return self.map_raw_data(
             input_columns=[self.text_key],
-            desc=f"Pre-tokenizing {self.__class__.__name__} data"
+            name="text data"
         )
 
     @staticmethod

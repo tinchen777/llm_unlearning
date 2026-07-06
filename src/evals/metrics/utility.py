@@ -1,12 +1,12 @@
 
 from __future__ import annotations
-
 import numpy as np
 import scipy as sc
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from datasets import Dataset as HFDataset
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from typing import Any, Dict, TYPE_CHECKING
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 @MetricFunc
 def hm_aggregate(pre_compute: Dict[str, Any], **kwargs):
-    values = [result["agg_value"] for _, result in pre_compute.items()]
+    values = [result["agg_value"] for result in pre_compute.values()]
     return {"agg_value": sc.stats.hmean(values)}
 
 
@@ -44,12 +44,21 @@ def classifier_prob(
         {"text": entry[text_key], "index": int(key)}
         for key, entry in pre_compute["text"]["value_by_index"].items()
     ]
-
     # Create DataLoader
-    dataloader = DataLoader(data_list, batch_size=batch_size, shuffle=False)
-
+    dataloader = DataLoader(
+        HFDataset.from_list(data_list),  # type: ignore
+        batch_size=batch_size,
+        shuffle=False
+    )
+    pbar = tqdm(
+        dataloader,
+        total=len(dataloader),
+        desc=f"Calculating [classifier prob]",
+        unit="batch(es)",
+        colour="blue"
+    )
     scores_by_index = {}
-    for batch in tqdm(dataloader):
+    for batch in pbar:
         batch_texts = batch["text"]
         batch_indices = batch["index"].tolist()
 
@@ -74,6 +83,8 @@ def classifier_prob(
         for idx, prob, text in zip(batch_indices, scores, batch_texts):
             # Add the prediction to the original data
             scores_by_index[idx] = {"score": prob, text_key: text}
+    pbar.close()
+
     class_scores = np.array([
         evals["score"]
         for evals in scores_by_index.values()
