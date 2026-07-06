@@ -1,0 +1,17 @@
+defaults:
+  - GradDiff
+
+handler: NCU
+method_args:
+  # loss = gamma * forget_pull + beta * neighborhood_anchor + alpha * retain_lm
+  gamma: 1.0                # forget-pull InfoNCE weight
+  beta: 1.0                 # neighborhood-anchor weight
+  alpha: 1.0                # retain LM loss weight
+  retain_loss_type: NLL     # NLL | KL (retain LM loss)
+  tau: 0.1                  # InfoNCE temperature
+  layer_id: 7               # decoder layer used as concept representation (-1 = last)
+  num_neighbors: 5          # k nearest retain samples forming the legal-concept prototype
+  anchor_loss_type: InfoNCE # InfoNCE | MSE
+  in_batch_negatives: true  # other in-batch forget refs as extra negatives
+  # precompute_batch_size: 16  # uncomment to override; defaults to trainer.args.per_device_eval_batch_size
+  # NOTE: do not set values to `null` here -- TrackingConfig rejects None during `**method_args` unpacking

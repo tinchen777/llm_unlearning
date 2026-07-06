@@ -17,6 +17,7 @@ from .unlearn.ceu import CEU
 from .unlearn.satimp import SatImp
 from .unlearn.wga import WGA
 from .unlearn.pdu import PDU
+from .unlearn.ncu import NCU
 from .unlearn.bounded_grad_diff import BoundedGradDiff
 
 if TYPE_CHECKING:
@@ -90,6 +91,7 @@ _register_trainer(CEU)
 _register_trainer(SatImp)
 _register_trainer(WGA)
 _register_trainer(PDU)
+_register_trainer(NCU)
 
 # Register custom example unlearning trainer (see demos/)
 _register_trainer(BoundedGradDiff)
