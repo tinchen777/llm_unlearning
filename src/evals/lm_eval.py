@@ -1,11 +1,10 @@
 
 from __future__ import annotations
 import logging
-from omegaconf import OmegaConf
 from lm_eval.models.hf_vlms import HFLM
 from lm_eval.tasks import TaskManager
 from lm_eval import simple_evaluate
-from typing import TYPE_CHECKING
+from typing import Dict, Any, TYPE_CHECKING
 
 from .base import Evaluator
 from utils.common import load_logs_from_file, save_logs
@@ -18,15 +17,18 @@ logger = logging.getLogger("evaluator")
 
 
 class LMEvalEvaluator(Evaluator):
-    def __init__(self, eval_cfg: TrackingConfig):
-        self.name = "LMEval"
-        self.eval_cfg = eval_cfg
-        self.tasks = OmegaConf.to_container(
-            self.eval_cfg.tasks, resolve=True, throw_on_missing=True
-        )
-        self.task_manager = TaskManager()
-        self.simple_evaluate_args = dict(kwargs.get("simple_evaluate_args", {}))
+    def __init__(self, eval_cfg: TrackingConfig, **kwargs):
+        super().__init__("LMEval", eval_cfg, **kwargs)
 
+        raise NotImplementedError
+
+    def init_base(self, eval_cfg: TrackingConfig, simple_evaluate_args: Dict[str, Any] = {}, **kwargs):
+        self.tasks = eval_cfg["tasks"].to_dict()
+        self.task_manager = TaskManager()
+        self.simple_evaluate_args = simple_evaluate_args
+    
+    
+    
     def prepare_model(self, model, **kwargs):
         """Prepare model for evaluation"""
         model.eval()

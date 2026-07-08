@@ -3,7 +3,6 @@ from __future__ import annotations
 from torch import nn
 import torch
 from rouge_score import rouge_scorer
-from transformers import StoppingCriteria, StoppingCriteriaList, PreTrainedTokenizer
 import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
@@ -89,141 +88,76 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
 _ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
 
 
-class MultiTokenEOSCriteria(StoppingCriteria):
-    """Criteria to stop on the specified multi-token sequence. Stopping Criteria forked
-    and modified from [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness/blob/27924d77953491f66a038a09892807065e469358/lm_eval/models/utils.py#L208)"""
-
-    def __init__(
-        self,
-        sequence: str,
-        tokenizer: PreTrainedTokenizer,
-        initial_decoder_input_length: int,
-        batch_size: int,
-    ) -> None:
-        self.initial_decoder_input_length = initial_decoder_input_length
-        self.done_tracker = [False] * batch_size
-        self.sequence = sequence
-        self.sequence_ids = tokenizer.encode(sequence, add_special_tokens=False)
-        # we look back for 2 more tokens than it takes to encode our stop sequence
-        # because tokenizers suck, and a model might generate `['\n', '\n']` but our `sequence` is `['\n\n']`
-        # and we don't want to mistakenly not stop a generation because our
-        # (string) stop sequence was output in a different tokenization
-
-        # NOTE: there is a minor danger that this will end up looking back 2 tokens into the past, into the inputs to the model,
-        # and stopping generation immediately as a result. With only 2 extra tokens of lookback, this risk is minimized
-        # Additionally, in lookback_ids_batch we should prevent ever looking back into the inputs as described.
-        self.sequence_id_len = len(self.sequence_ids) + 2
-        self.tokenizer = tokenizer
-
-    def __call__(self, input_ids, scores, **kwargs) -> bool:
-        # For efficiency, we compare the last n tokens where n is the number of tokens in the stop_sequence
-        lookback_ids_batch = input_ids[:, self.initial_decoder_input_length :]
-
-        lookback_ids_batch = lookback_ids_batch[:, -self.sequence_id_len :]
-
-        lookback_tokens_batch = self.tokenizer.batch_decode(lookback_ids_batch)
-
-        for i, done in enumerate(self.done_tracker):
-            if not done:
-                self.done_tracker[i] = self.sequence in lookback_tokens_batch[i]
-        return False not in self.done_tracker
-
-
-def stop_sequences_criteria(
-    tokenizer: PreTrainedTokenizer,
-    stop_sequences: List[str],
-    initial_decoder_input_length: int,
-    batch_size: int,
-) -> StoppingCriteriaList:
-    return StoppingCriteriaList(
-        [
-            *[
-                MultiTokenEOSCriteria(
-                    sequence, tokenizer, initial_decoder_input_length, batch_size
-                )
-                for sequence in stop_sequences
-            ],
-        ]
-    )
-
-
 @batch_to_model_device
 def eval_text_similarity(model: Any, batch: Mapping[str, torch.Tensor], tokenizer: Any, generation_args: TrackingConfig):
     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
 
-    def _eval_rouge_recall_batch(gen_outputs, ground_truths):
-        evals = []
-        for gen, gt in zip(gen_outputs, ground_truths):
-            rouge_scores = _ROUGE_SCORER.score(gt, gen)
-            evals.append({
-                "rouge1_recall": rouge_scores["rouge1"].recall,
-                "rougeL_f1": rouge_scores["rougeL"].fmeasure,
-                "rougeL_recall": rouge_scores["rougeL"].recall,
-            })
-        return evals
+    def _cut_off_at_stopwords(s: str, seps: List[str]) -> str:
+        """Cut off the string `s` at the earliest occurrence of any of the stopwords in `seps`."""
+        end = len(s)
+        for sep in seps:
+            idx = s.find(sep)
+            if idx != -1:
+                end = min(end, idx)
+        return s[:end].strip()
+
+
+    def _eval_rouge_recall(gen_text: str, ground_truth: str):
+        rouge_scores = _ROUGE_SCORER.score(ground_truth, gen_text)
+        return {
+            "rouge1_recall": rouge_scores["rouge1"].recall,
+            "rougeL_f1": rouge_scores["rougeL"].fmeasure,
+            "rougeL_recall": rouge_scores["rougeL"].recall
+        }
+
 
     input_ids = batch["input_ids"]
     labels = batch["labels"]
+    # batch_size = input_ids.shape[0]
+    initial_input_length = input_ids.shape[1]
     input_texts = tokenizer.batch_decode(
-        input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        input_ids,
+        skip_special_tokens=True
     )
-    tokens = [label[label != IGNORE_INDEX] for label in labels]
-    full_texts = tokenizer.batch_decode(
-        tokens, skip_special_tokens=True, clean_up_tokenization_spaces=True
+    ground_truths = tokenizer.batch_decode(
+        [label[label != IGNORE_INDEX] for label in labels],
+        skip_special_tokens=True
     )
-    ground_truths = [
-        full_text.replace(input_text, "").strip()
-        for input_text, full_text in zip(input_texts, full_texts)
-    ]
-
     attention_mask = batch["attention_mask"]
 
-    # convert to a simple dict from DictConfig
     generation_kwargs = generation_args.to_dict()
-    stopwords = generation_kwargs.pop("stopwords", None)
-    if stopwords is not None:
-        assert isinstance(stopwords, list)
-        sc = stop_sequences_criteria(
-            tokenizer, stopwords, input_ids.shape[1], input_ids.shape[0]
-        )
-        generation_kwargs["stopping_criteria"] = sc
-    output = model.generate(
+    assert not generation_kwargs.get("return_dict_in_generate")
+    stopwords = list(generation_kwargs.pop("stopwords", []))
+    if stopwords:
+        generation_kwargs["stop_strings"] = stopwords
+        generation_kwargs["tokenizer"] = tokenizer
+
+    # generate outputs
+    outputs = model.generate(
         input_ids,
         attention_mask=attention_mask,
         **generation_kwargs,
         pad_token_id=tokenizer.eos_token_id,
     )
     gen_texts = tokenizer.batch_decode(
-        output[:, input_ids.shape[-1] :],
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=True,
+        outputs[:, initial_input_length:],
+        skip_special_tokens=True
     )
 
-    # cut off at stopwords
-    if stopwords is None:
-        stopwords = []
-    stopwords = [tokenizer.decode([tokenizer.eos_token_id])] + stopwords
-    for i in range(len(gen_texts)):
-        raw_text = gen_texts[i]
-        for word in stopwords:
-            if word and word in raw_text:
-                raw_text = raw_text.split(word)[0]
-        raw_text = raw_text.strip()
-        gen_texts[i] = raw_text
+    # cut off at stopwords and strip
+    gen_texts = [_cut_off_at_stopwords(text, stopwords) for text in gen_texts]
 
-    scores = _eval_rouge_recall_batch(gen_texts, ground_truths)
-    scores = [
+    return [
         {
-            **rouge_evals,
             "input": input_text,
             "ground_truth": ground_truth,
             "generation": gen_text,
+            **_eval_rouge_recall(gen_text, ground_truth)
         }
-        for rouge_evals, input_text, ground_truth, gen_text in zip(
-            scores, input_texts, ground_truths, gen_texts
+        for input_text, ground_truth, gen_text in zip(
+            input_texts, ground_truths, gen_texts
         )
     ]
-    return scores
 
 
 def get_decoded_target_texts(tokenizer: Any, batch: Mapping[str, torch.Tensor]) -> List[str]:

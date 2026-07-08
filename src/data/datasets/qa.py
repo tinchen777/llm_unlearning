@@ -61,9 +61,9 @@ class QAwithIdkDataset(QADataset):
 
     def __getitem__(self, idx: int):
         alternate_sample = self.tok_fn(
-            q=self.raw_data[idx][self.question_key],
-            a=self.idk_responses[randidx(len(self.idk_responses))].strip(),
-            idx=idx,
+            self.raw_data[idx][self.question_key],
+            self.idk_responses[randidx(len(self.idk_responses))].strip(),
+            idx,
             **self.tok_kwargs
         )
         idk_item = self.process_sample(alternate_sample)

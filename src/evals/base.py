@@ -88,14 +88,15 @@ class Evaluator:
             idx_str = f"[{idx}/{len(self.metrics_dict)}]"
             logger.info(f"{cstr(idx_str, fg='y')} Evaluating metric `{metric_name}` ...")
             _results = metric_fn.evaluate(model, logs, overwrite_cache=_overwrite)
-            if "agg_value" in _results:
-                logger.info(f"Result for `{metric_name}`:\t{_results['agg_value']}")
             # Update logs
             if logs_file_path:
                 save_logs(logs, logs_file_path)
             if summary_file_path:
                 save_logs(self.summarize(logs), summary_file_path)
-            logger.info(f"{cstr(idx_str, fg='g')} Finished evaluating metric `{metric_name}`.")
+            logger.info(
+                f"{cstr(idx_str, fg='g')} Finished evaluating metric `{metric_name}`, "
+                f"agg_value: {_results.get('agg_value', 'N/A')}."
+            )
             print("-" * 80)
 
         return self.summarize(logs)
