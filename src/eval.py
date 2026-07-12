@@ -29,7 +29,7 @@ def main(config: DictConfig):
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
     set_seed(cfg["trainer"]["args"]["seed"])
-    mode = cfg.get("mode", "eval")
+    # mode = cfg.get("mode", "eval")
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -40,18 +40,15 @@ def main(config: DictConfig):
     # 2. Get Evaluators
     eval_cfgs = cfg["eval"]
     with step_logging(logger, "[2/2]", "evaluators", eval_cfgs):
-        evaluators = get_evaluators(eval_cfgs)
+        evaluators = get_evaluators(
+            eval_cfgs,
+            tokenizer=tokenizer,
+            template_args=template_args
+        )
 
     # START EVALUATION
-    
-    
-    for evaluator_name, evaluator in evaluators.items():
-        eval_args = {
-            "template_args": template_args,
-            "model": model,
-            "tokenizer": tokenizer,
-        }
-        _ = evaluator.evaluate(**eval_args)
+    for evaluator in evaluators.values():
+        evaluator.evaluate(model)
 
 
 if __name__ == "__main__":

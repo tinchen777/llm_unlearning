@@ -196,3 +196,9 @@ class MetricFunc:
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
+
+# TODO: add a decorator to register metric func special params with handler, e.g.: @metric_func(dataloader=dataloader_handler)
+# def metric_func(**prepare_kwargs):
+#     def wrapper(func):
+#         return MetricFunc(func, **prepare_kwargs)
+#     return wrapper

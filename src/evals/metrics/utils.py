@@ -4,9 +4,10 @@ import numpy as np
 import torch
 from functools import wraps
 from tqdm import tqdm
-from transformers import BatchEncoding
 import logging
-from typing import List, Any, Tuple, Dict, Callable, Mapping, Optional
+from typing import List, Any, Dict, Callable, Mapping
+
+from utils.common import to_device
 
 DATA_SPLIT_SUFFIX = "_dl"
 
@@ -69,38 +70,12 @@ def run_batchwise_evals(
         raise RuntimeError(f"Error during batch-wise evaluation with {eval_name}") from e
 
 
-def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_keys: Optional[Tuple[str]] = ("labels",), grad: bool = False) -> torch.Tensor:
-    """Forward a batch through the model and return the outputs.
-    Return the logits tensor of shape (bsz, seq_len, vocab_size).
-    """
-    if ignore_keys:
-        batch = {k: v for k, v in batch.items() if k not in ignore_keys}
-    with torch.set_grad_enabled(grad):
-        outputs = model(**batch)
-    logits = outputs.logits  # bsz x seq_len x vocab_size
-    if logits is None:
-        raise ValueError("Model output logits is `None`. Ensure the model is in evaluation mode and returns logits.")
-    return logits
-
-
 def batch_to_model_device(func):
     @wraps(func)
     def wrapper(model: Any, batch: Mapping[str, torch.Tensor], **kwargs):
         batch = to_device(batch, model.device)
         return func(model=model, batch=batch, **kwargs)
     return wrapper
-
-
-def to_device(batch: Any, device: torch.device):
-    """Move a batch of data to the specified device."""
-    if isinstance(batch, dict):
-        return {k: v.to(device) for k, v in batch.items()}
-    elif isinstance(batch, BatchEncoding):
-        return batch.to(device)
-    else:
-        raise ValueError(
-            f"Expected batch to be a `dict` or `BatchEncoding`, but got {type(batch)}."
-        )
 
 
 def dict_transpose(evals: Dict[int, Dict[int, Dict[str, Any]]]) -> Dict[int, Dict[str, List[Any]]]:
