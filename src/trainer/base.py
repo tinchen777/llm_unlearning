@@ -34,8 +34,9 @@ class FinetuneTrainer(Trainer):
         # Run a custom evaluator and save results
         if self.evaluators and self.accelerator.is_local_main_process:
             if self.accelerator.num_processes != 1:
-                logger.warning(
-                    "Custom evaluator can be run with this Trainer only when a single accelerator process is running."
+                logger.error(
+                    "Custom evaluator can be run with this Trainer only when a single accelerator process is running. "
+                    "Evaluate will be skipped!"
                 )
                 return {}
             # output_dir
@@ -45,7 +46,7 @@ class FinetuneTrainer(Trainer):
             os.makedirs(output_dir, exist_ok=True)
 
             eval_metrics = {}
-            for _, evaluator in self.evaluators.items():
+            for evaluator in self.evaluators.values():
                 eval_metrics.update(evaluator.evaluate(self.model, output_dir=output_dir))
             self.log(eval_metrics)
             return eval_metrics

@@ -6,8 +6,8 @@ from rouge_score import rouge_scorer
 import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
-from utils.common import IGNORE_INDEX
-from .utils import batch_to_model_device, forward_batch, to_np
+from utils.common import IGNORE_INDEX, forward_batch
+from .utils import batch_to_model_device, to_np
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -19,7 +19,7 @@ logger = logging.getLogger("eval.metric")
 def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[Dict[str, float]]:
     """Evaluate model probabilities and average token-level loss for a given batch."""
     # forward
-    logits = forward_batch(model, batch)
+    logits, _ = forward_batch(model, batch, ignore_labels=True, grad=False)
 
     labels = batch["labels"]
     shifted_labels = labels[..., 1:].contiguous()
@@ -50,7 +50,7 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
     - `labels_batch` (List[Tensor]): Tensors of shape [seq_len]
     """
     # forward
-    logits = forward_batch(model, batch, grad=grad)
+    logits, _ = forward_batch(model, batch, ignore_labels=True, grad=grad)
 
     vocab_logprobs = logits.log_softmax(dim=-1)[:, :-1, :]  # shape as [bsz, seq_len-1, vocab_size]
     vocab_size = vocab_logprobs.shape[-1]

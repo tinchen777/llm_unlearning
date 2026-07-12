@@ -1,65 +1,51 @@
 
-import copy
+from __future__ import annotations
+from typing import Any, Mapping, Optional, TYPE_CHECKING
 
+from utils.common import forward_batch
 from ..utils import compute_kl_divergence
 from .base import UnlearnTrainer
 
+if TYPE_CHECKING:
+    import torch
+
 
 class GradDiff(UnlearnTrainer):
-    def __init__(self, gamma=1.0, alpha=1.0, retain_loss_type="NLL", *args, **kwargs):
+    def __init__(self, gamma: float = 1.0, alpha: float = 1.0, retain_loss_type: str = "NLL", *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self.gamma = gamma
         self.alpha = alpha
         self.retain_loss_type = retain_loss_type
+
         self.ref_model = None
         if retain_loss_type == "KL":
             self.ref_model = self._prepare_ref_model(self.model)
 
-    def _prepare_ref_model(self, model):
-        ref_model = copy.deepcopy(model).to(self.accelerator.device)
-        ref_model.eval()
-        if self.is_deepspeed_enabled:
-            ref_model = self._prepare_deepspeed(ref_model)
-        else:
-            ref_model = self.accelerator.prepare_model(ref_model, evaluation_mode=True)
-        return ref_model
-
-    def compute_retain_loss(self, model, retain_inputs):
-        retain_outputs = model(**retain_inputs)
-        retain_loss = 0.0
+    def compute_retain_loss(self, model: Any, retain_inputs: Mapping[str, torch.Tensor]):
         if self.retain_loss_type == "NLL":
-            retain_loss += retain_outputs.loss
+            retain_loss, _, _ = forward_batch(model, retain_inputs)
         elif self.retain_loss_type == "KL":
-            kl_loss, retain_outputs = compute_kl_divergence(
+            retain_loss, _ = compute_kl_divergence(
                 self.model, self.ref_model, retain_inputs
             )
-            retain_loss += kl_loss
         else:
-            raise NotImplementedError(
-                f"{self.retain_loss_type} not implemented for retain set"
-            )
+            raise NotImplementedError(f"{self.retain_loss_type} not implemented for retain set.")
         return retain_loss
 
     def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
+        self,
+        model: Any,
+        inputs: Mapping[str, Mapping[str, torch.Tensor]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[int] = None,
+        **kwargs
     ):
-        forget_inputs = inputs["forget"]
-        forget_inputs = {
-            "input_ids": forget_inputs["input_ids"],
-            "attention_mask": forget_inputs["attention_mask"],
-            "labels": forget_inputs["labels"],
-        }
-
-        forget_outputs = model(**forget_inputs)
-        forget_loss = -forget_outputs.loss
-
-        retain_inputs = inputs["retain"]
-        retain_inputs = {
-            "input_ids": retain_inputs["input_ids"],
-            "attention_mask": retain_inputs["attention_mask"],
-            "labels": retain_inputs["labels"],
-        }
-        retain_loss = self.compute_retain_loss(model=model, retain_inputs=retain_inputs)
+        # forget loss
+        forget_loss, _, forget_outputs = forward_batch(model, inputs["forget"])
+        forget_loss = -forget_loss  # maximize the loss for forget set
+        # retain loss
+        retain_loss = self.compute_retain_loss(model=model, retain_inputs=inputs["retain"])
 
         loss = self.gamma * forget_loss + self.alpha * retain_loss
 
