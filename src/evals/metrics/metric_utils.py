@@ -6,7 +6,7 @@ from rouge_score import rouge_scorer
 import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
-from utils.common import IGNORE_INDEX, forward_batch
+from utils.common import IGNORE_INDEX, forward_batch, per_token_CE
 from .utils import batch_to_model_device, to_np
 
 if TYPE_CHECKING:
@@ -21,16 +21,10 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
     # forward
     logits, _ = forward_batch(model, batch, ignore_labels=True, grad=False)
 
-    labels = batch["labels"]
-    shifted_labels = labels[..., 1:].contiguous()
-    shifted_logits = logits[..., :-1, :].contiguous()
+    losses, shift_labels_mask = per_token_CE(logits, batch["labels"])
 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX, reduction="none")
-    # agg loss across tokens
-    losses = loss_fn(shifted_logits.transpose(-1, -2), shifted_labels).sum(dim=-1)
-    num_token_gt = (shifted_labels != IGNORE_INDEX).sum(-1)
-    avg_losses = losses / num_token_gt
-    normalized_probs = torch.exp(-avg_losses)
+    avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1).clamp(min=1)
+    normalized_probs = (-avg_losses).exp()  # Convert average loss to probability
 
     return [
         {"prob": prob, "avg_loss": avg_loss}

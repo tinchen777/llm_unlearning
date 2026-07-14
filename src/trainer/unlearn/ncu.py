@@ -38,17 +38,18 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from typing import Any, Dict, Mapping, Optional, Tuple
 
-from .grad_diff import GradDiff
+from .forget_retain.base import ForgetRetainTrainer
 from utils.common import IGNORE_INDEX
 
 logger = logging.getLogger(__name__)
 
 
-class NCU(GradDiff):
+class NCU(ForgetRetainTrainer):
+    # Frozen reference model provides the fixed representation targets
+    requires_ref_model = True
+
     def __init__(
         self,
-        gamma: float = 1.0,          # weight of the forget-pull contrastive loss
-        alpha: float = 1.0,          # weight of the retain LM loss (NLL/KL), from GradDiff
         beta: float = 1.0,           # weight of the neighborhood-anchor loss
         tau: float = 0.1,            # InfoNCE temperature
         layer_id: int = 7,           # decoder layer whose output is used as representation (-1 = last)
@@ -59,7 +60,9 @@ class NCU(GradDiff):
         *args,
         **kwargs,
     ):
-        super().__init__(gamma=gamma, alpha=alpha, *args, **kwargs)
+        # gamma (forget-pull weight), alpha (retain LM loss weight) and
+        # retain_loss_type come from ForgetRetainTrainer
+        super().__init__(*args, **kwargs)
         self.beta = beta
         self.tau = tau
         self.layer_id = layer_id
@@ -71,10 +74,6 @@ class NCU(GradDiff):
         self.anchor_loss_type = anchor_loss_type
         self.in_batch_negatives = in_batch_negatives
         self.precompute_batch_size = precompute_batch_size
-
-        # Frozen reference model provides fixed representation targets
-        if self.ref_model is None:
-            self.ref_model = self._prepare_ref_model(self.model)
 
         # Representation banks are built lazily on the first training step,
         # after the accelerator has fully prepared everything.

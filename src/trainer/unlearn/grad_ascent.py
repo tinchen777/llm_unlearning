@@ -1,17 +1,24 @@
 
+from __future__ import annotations
+from typing import Any, Mapping, Optional, TYPE_CHECKING
+
+from utils.common import forward_batch
 from .base import UnlearnTrainer
+
+if TYPE_CHECKING:
+    import torch
 
 
 class GradAscent(UnlearnTrainer):
     def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
+        self,
+        model: Any,
+        inputs: Mapping[str, Mapping[str, torch.Tensor]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[int] = None,
+        **kwargs
     ):
-        forget_inputs = inputs["forget"]
-        forget_inputs = {
-            "input_ids": forget_inputs["input_ids"],
-            "attention_mask": forget_inputs["attention_mask"],
-            "labels": forget_inputs["labels"],
-        }
-        outputs = model(**forget_inputs)
-        loss = -outputs.loss
+        loss, _, outputs = forward_batch(model, inputs["forget"])
+        loss = -loss  # maximize the loss for forget set
+
         return (loss, outputs) if return_outputs else loss

@@ -7,18 +7,15 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from .base import FinetuneTrainer
 from .unlearn.grad_ascent import GradAscent
-from .unlearn.grad_diff import GradDiff
-from .unlearn.npo import NPO
-from .unlearn.dpo import DPO
-from .unlearn.simnpo import SimNPO
-from .unlearn.rmu import RMU
-from .unlearn.undial import UNDIAL
 from .unlearn.ceu import CEU
-from .unlearn.satimp import SatImp
-from .unlearn.wga import WGA
-from .unlearn.pdu import PDU
+from .unlearn.forget_retain.grad_diff import GradDiff, BoundedGradDiff
+from .unlearn.forget_retain.preference import NPO, DPO, SimNPO
+from .unlearn.forget_retain.rmu import RMU
+from .unlearn.forget_retain.undial import UNDIAL
+from .unlearn.forget_retain.satimp import SatImp
+from .unlearn.forget_retain.wga import WGA
+from .unlearn.forget_retain.pdu import PDU
 from .unlearn.ncu import NCU
-from .unlearn.bounded_grad_diff import BoundedGradDiff
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig

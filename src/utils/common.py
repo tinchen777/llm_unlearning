@@ -91,9 +91,8 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
         `outputs` : CausalLMOutputWithPast
             The output of the model, which includes `logits`, `loss`, etc.
     """
-    if ignore_labels and "labels" in batch:
-        batch = dict(batch)
-        batch.pop("labels")
+    ignore_keys = ("index", "labels") if ignore_labels else ("index",)
+    batch = {k: v for k, v in batch.items() if k not in ignore_keys}
 
     with torch.set_grad_enabled(grad):
         outputs = model(**batch)
@@ -137,17 +136,18 @@ def per_token_CE(logits: torch.Tensor, labels: torch.Tensor) -> Tuple[torch.Tens
 
     Returns
     -------
-    loss : torch.Tensor
+    losses : torch.Tensor
         The per-token cross-entropy loss of shape `[batch_size, seq_len-1]`.
     shift_labels_mask : torch.BoolTensor
-        A mask indicating valid positions (not equal to `IGNORE_INDEX`) of shape `[batch_size * (seq_len-1)]`.
+        A mask indicating valid positions (not equal to `IGNORE_INDEX`) of shape `[batch_size, seq_len-1]`.
     """
     shift_logits = logits[..., :-1, :]  # shape as [batch_size, seq_len-1, vocab_size]
-    shift_labels = labels[..., 1:].contiguous().to(logits.device)  # shape as [batch_size, seq_len-1]
-    loss = F.cross_entropy(
+    shift_labels = labels[..., 1:].to(logits.device)  # shape as [batch_size, seq_len-1]
+    losses = F.cross_entropy(
         shift_logits.transpose(-1, -2),
         shift_labels,
         ignore_index=IGNORE_INDEX,
         reduction="none",
-    )
-    return loss, shift_labels.view(-1) != IGNORE_INDEX
+    )  # shape as [batch_size, seq_len-1]
+
+    return losses, shift_labels != IGNORE_INDEX
