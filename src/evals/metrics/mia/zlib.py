@@ -4,7 +4,7 @@ zlib-normalization Attack: https://www.usenix.org/system/files/sec21-carlini-ext
 
 from __future__ import annotations
 import zlib
-from typing import Any, Optional, Mapping, Dict, TYPE_CHECKING
+from typing import Any, Optional, Dict
 
 from .base import Attack
 from ..metric_utils import (
@@ -12,16 +12,13 @@ from ..metric_utils import (
     get_decoded_target_texts
 )
 
-if TYPE_CHECKING:
-    import torch
-
 
 class ZLIBAttack(Attack):
     def setup(self, tokenizer: Optional[Any] = None, **kwargs):
         """Setup tokenizer."""
         self.tokenizer = tokenizer or self.model.tokenizer
 
-    def compute_batch_values(self, batch: Mapping[str, torch.Tensor]):
+    def compute_batch_values(self, batch):
         """Get loss and text for batch."""
         texts = get_decoded_target_texts(self.tokenizer, batch)
         eval_results = evaluate_probability(self.model, batch)

@@ -5,7 +5,7 @@ experimented for pre-training data and LLMs in https://arxiv.org/abs/2402.17012
 
 from __future__ import annotations
 import torch
-from typing import Union, Mapping, List
+from typing import Union, List
 
 from .base import Attack
 from ..metric_utils import tokenwise_logprobs
@@ -20,7 +20,7 @@ class GradNormAttack(Attack):
             raise ValueError(f"Invalid p-norm value: {p}")
         self.p = p
 
-    def compute_batch_values(self, batch: Mapping[str, torch.Tensor]):
+    def compute_batch_values(self, batch):
         """Compute gradients of examples w.r.t model parameters. More grad norm => more loss."""
         self.model.train()
         _, target_logprobs_batch, _ = tokenwise_logprobs(self.model, batch, grad=True)

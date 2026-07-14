@@ -3,8 +3,7 @@ Min-k % Prob Attack: https://arxiv.org/pdf/2310.16789.pdf
 """
 
 from __future__ import annotations
-import numpy as np
-from typing import Mapping, Dict, TYPE_CHECKING
+from typing import Dict, TYPE_CHECKING
 
 from .base import Attack
 from ..metric_utils import tokenwise_logprobs
@@ -18,7 +17,7 @@ class MinKProbAttack(Attack):
     def setup(self, k: float = 0.2, **kwargs):
         self.k = k
 
-    def compute_batch_values(self, batch: Mapping[str, torch.Tensor]):
+    def compute_batch_values(self, batch):
         """Get token-wise log probabilities for the batch."""
         _, target_logprobs_batch, _ = tokenwise_logprobs(self.model, batch)
         return target_logprobs_batch
@@ -35,7 +34,7 @@ class MinKPlusPlusAttack(Attack):
     def setup(self, k: float = 0.2, **kwargs):
         self.k = k
 
-    def compute_batch_values(self, batch: Mapping[str, torch.Tensor]):
+    def compute_batch_values(self, batch):
         """Get both token-wise and vocab-wise log probabilities for the batch."""
         vocab_logprobs_batch, target_logprobs_batch, _ = tokenwise_logprobs(self.model, batch)
         return [
