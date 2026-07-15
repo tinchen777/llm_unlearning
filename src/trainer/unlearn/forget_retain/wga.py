@@ -6,8 +6,6 @@ from .base import ForgetRetainTrainer
 
 
 class WGA(ForgetRetainTrainer):
-    requires_ref_model = True
-
     def __init__(
         self,
         beta: float = 1.0,

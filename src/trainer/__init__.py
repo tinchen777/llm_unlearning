@@ -15,7 +15,7 @@ from .unlearn.forget_retain.undial import UNDIAL
 from .unlearn.forget_retain.satimp import SatImp
 from .unlearn.forget_retain.wga import WGA
 from .unlearn.forget_retain.pdu import PDU
-from .unlearn.ncu import NCU
+from .unlearn.forget_retain.ncu import NCU
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
