@@ -15,6 +15,7 @@ from .unlearn.forget_retain.undial import UNDIAL
 from .unlearn.forget_retain.satimp import SatImp
 from .unlearn.forget_retain.wga import WGA
 from .unlearn.forget_retain.pdu import PDU
+from .unlearn.ncu import NCU
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -87,6 +88,7 @@ _register_trainer(CEU)
 _register_trainer(SatImp)
 _register_trainer(WGA)
 _register_trainer(PDU)
+_register_trainer(NCU)
 
 # Register custom example unlearning trainer (see demos/)
 _register_trainer(BoundedGradDiff)
