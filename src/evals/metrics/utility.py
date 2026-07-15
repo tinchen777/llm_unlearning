@@ -2,7 +2,7 @@
 from __future__ import annotations
 import numpy as np
 import scipy as sc
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import torch
 from torch.utils.data import DataLoader
 from datasets import Dataset as HFDataset
@@ -48,40 +48,39 @@ def classifier_prob(
         batch_size=batch_size,
         shuffle=False
     )
-    pbar = tqdm(
+    with tqdm(
         dataloader,
         total=len(dataloader),
         desc="Calculating [classifier prob]",
         unit="batch(es)",
         colour="blue"
-    )
-    scores_by_index = {}
-    for batch in pbar:
-        batch_texts = batch["text"]
-        batch_indices = batch["index"].tolist()
+    ) as pbar:
+        scores_by_index = {}
+        for batch in pbar:
+            batch_texts = batch["text"]
+            batch_indices = batch["index"].tolist()
 
-        # Tokenize the batch of texts
-        inputs = tokenizer(
-            batch_texts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=max_length,
-            return_attention_mask=True,
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+            # Tokenize the batch of texts
+            inputs = tokenizer(
+                batch_texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max_length,
+                return_attention_mask=True,
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
 
-        # Run the classifier
-        with torch.no_grad():
-            outputs = classifier(**inputs)
-        # Convert logits to probabilities
-        scores = outputs.logits.softmax(dim=-1)[:, class_id].cpu().numpy().tolist()
+            # Run the classifier
+            with torch.no_grad():
+                outputs = classifier(**inputs)
+            # Convert logits to probabilities
+            scores = outputs.logits.softmax(dim=-1)[:, class_id].cpu().numpy().tolist()
 
-        # Map predictions to labels
-        for idx, prob, text in zip(batch_indices, scores, batch_texts):
-            # Add the prediction to the original data
-            scores_by_index[idx] = {"score": prob, text_key: text}
-    pbar.close()
+            # Map predictions to labels
+            for idx, prob, text in zip(batch_indices, scores, batch_texts):
+                # Add the prediction to the original data
+                scores_by_index[idx] = {"score": prob, text_key: text}
     del classifier
     torch.cuda.empty_cache()
 

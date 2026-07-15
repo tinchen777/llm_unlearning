@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from sklearn.metrics import roc_auc_score
 from abc import ABC, abstractmethod
 from typing import Any, List, Mapping, TYPE_CHECKING
@@ -36,21 +36,20 @@ class Attack(ABC):
         all_scores: List[float] = []
         all_indices: List[int] = []
 
-        pbar = tqdm(
+        with tqdm(
             dataloader,
             total=len(dataloader),
             desc=f"Executing [{self.__class__.__name__}][{name}]",
             unit="batch(es)",
             colour="blue"
-        )
-        for batch in pbar:
-            indices = batch.pop("index")
-            batch_values = self.compute_batch_values(batch)
-            scores = [self.compute_score(values) for values in batch_values]
+        ) as pbar:
+            for batch in pbar:
+                indices = batch.pop("index")
+                batch_values = self.compute_batch_values(batch)
+                scores = [self.compute_score(values) for values in batch_values]
 
-            all_scores.extend(scores)
-            all_indices.extend(indices)
-        pbar.close()
+                all_scores.extend(scores)
+                all_indices.extend(indices)
 
         scores_by_index = {
             str(idx): {"score": score}

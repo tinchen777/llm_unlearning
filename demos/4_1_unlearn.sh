@@ -75,8 +75,6 @@ python src/train.py --config-name=unlearn.yaml \
   task_name=test/DPO
 echo end DPO
 
-
-
 # python src/train.py --config-name=unlearn.yaml \
 #   experiment=unlearn/tofu/default \
 #   model=${MODEL} \

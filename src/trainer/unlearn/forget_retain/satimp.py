@@ -10,8 +10,8 @@ class SatImp(ForgetRetainTrainer):
         self,
         beta1: float = 5.0,
         beta2: float = 1.0,
-        gamma: float = 1.0,
-        alpha: float = 0.1,
+        gamma: float = 0.1,
+        alpha: float = 1.0,
         *args,
         **kwargs
     ):

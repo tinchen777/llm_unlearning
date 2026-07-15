@@ -133,15 +133,14 @@ class UnlearningMetric:
         self.cfg_dict["reference_logs"] = ref_logs
 
     def _prepare_pre_compute(self, model: Any, cache: Dict[str, Dict[str, Any]]):
-        pre_metric_results = {}
-        for pre_metric_name, pre_metric in self.pre_compute_metrics.items():
-            access_name = pre_metric.cfg_dict.get("access_key", pre_metric_name)
-            pre_metric_results[access_name] = pre_metric.evaluate(
+        self.cfg_dict["pre_compute"] = {
+            access_name: pre_metric.evaluate(
                 model=model,
                 cache=cache,
                 overwrite_cache=False
             )
-        self.cfg_dict["pre_compute"] = pre_metric_results
+            for access_name, pre_metric in self.pre_compute_metrics.items()
+        }
 
     def evaluate(
         self,

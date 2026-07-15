@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 from functools import wraps
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import logging
 from typing import List, Any, Dict, Callable, Mapping
 
@@ -28,35 +28,34 @@ def run_batchwise_evals(
     #                   iidx1: {idx453: {prob: 0.2, loss: 2}}}
     try:
         data_size = len(dataloader.dataset)
-        pbar = tqdm(
+        with tqdm(
             dataloader,
             total=len(dataloader),
             desc=f"Calculating [{eval_name}]",
             unit="batch(es)",
             colour="blue"
-        )
-        for batch in pbar:
-            if "input_ids" in batch:
-                batch = {0: batch}
-            # Assume batch like {0: {"input_ids": [[]]..., index: [453, 454..]},
-            #                    1: {"input_ids": [[]]..., index: [453, 454..]}..}
-            for intra_item_idx, mini_batch in batch.items():
-                if "input_ids" not in mini_batch:
-                    raise ValueError(
-                        f"Expected mini_batch to contain 'input_ids', but got {list(mini_batch)}."
+        ) as pbar:
+            for batch in pbar:
+                if "input_ids" in batch:
+                    batch = {0: batch}
+                # Assume batch like {0: {"input_ids": [[]]..., index: [453, 454..]},
+                #                    1: {"input_ids": [[]]..., index: [453, 454..]}..}
+                for intra_item_idx, mini_batch in batch.items():
+                    if "input_ids" not in mini_batch:
+                        raise ValueError(
+                            f"Expected mini_batch to contain 'input_ids', but got {list(mini_batch)}."
+                        )
+                    data_indices: List[int] = mini_batch.pop("index")
+                    batch_evals = batch_eval_fn(
+                        model=model,
+                        batch=mini_batch,
+                        **batch_eval_fn_args
                     )
-                data_indices: List[int] = mini_batch.pop("index")
-                batch_evals = batch_eval_fn(
-                    model=model,
-                    batch=mini_batch,
-                    **batch_eval_fn_args
-                )
-                indexwise_batch_evals = dict(zip(data_indices, batch_evals))
+                    indexwise_batch_evals = dict(zip(data_indices, batch_evals))
 
-                item_sample_evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
-            # progress bar update
-            pbar.set_postfix_str(f"[{len(item_sample_evals.get(0, {}))} / {data_size}] sample(s) evaluated")
-        pbar.close()
+                    item_sample_evals.setdefault(intra_item_idx, {}).update(indexwise_batch_evals)
+                # progress bar update
+                pbar.set_postfix_str(f"[{len(item_sample_evals.get(0, {}))} / {data_size}] sample(s) evaluated")
 
         if len(item_sample_evals) == 1:  # normal single answer dataset, no need for list
             sample_evals = item_sample_evals[0]

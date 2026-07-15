@@ -19,9 +19,9 @@ cd "$(dirname "$0")/.."
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
-MODEL=Llama-3.2-3B-Instruct
+MODEL=Qwen2.5-3B-Instruct
 
 python src/train.py --config-name=train.yaml \
   experiment=finetune/tofu/default \

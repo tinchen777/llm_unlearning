@@ -23,7 +23,7 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
 
     losses, shift_labels_mask = per_token_CE(logits, batch["labels"])
 
-    avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1).clamp(min=1)
+    avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1)#.clamp(min=1)
     normalized_probs = (-avg_losses).exp()  # Convert average loss to probability
 
     return [

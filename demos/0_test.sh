@@ -19,7 +19,7 @@ cd "$(dirname "$0")/.."
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=1,,1
+export CUDA_VISIBLE_DEVICES=0,1
 
 
 MODEL=Qwen2.5-1.5B-Instruct

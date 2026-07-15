@@ -35,7 +35,7 @@ import logging
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 from .base import ForgetRetainTrainer

@@ -22,9 +22,9 @@ cd "$(dirname "$0")/.."
 
 # 一键报告: 对比两个 run
 python src/plot.py report \
-  saves/unlearn/demo_unlearn_NCU \
-  saves/unlearn/demo_unlearn_graddiff \
-  -o saves/plots/ncu_vs_graddiff
+  saves/unlearn/test_1/BoundedGradDiff \
+  saves/unlearn/test/BoundedGradDiff \
+  -o saves/plots/test/BoundedGradDiff
 
 # 单独画某张图的例子:
 # python src/plot.py train saves/unlearn/demo_unlearn_NCU \
