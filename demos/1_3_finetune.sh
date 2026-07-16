@@ -32,3 +32,6 @@ python src/train.py --config-name=train.yaml \
   # trainer.args.gradient_checkpointing=true \
 
 echo end finetune ${MODEL}
+
+
+# transformers] Both `max_new_tokens` (=200) and `max_length`(=131072) seem to have been set. `max_new_tokens` will take precedence. Please refer to the documentation for more information. (https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)0:09<00:13,  1.49s/batch(es), [48 / 117] sample(s) evaluated]

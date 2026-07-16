@@ -19,17 +19,24 @@ cd "$(dirname "$0")/.."
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0
 
 
 MODEL=Qwen2.5-1.5B-Instruct
+# MODEL2=phi-1_5
 
-python src/test_config.py --config-name=train.yaml \
+# MODEL4=Qwen2.5-3B-Instruct
+
+
+retain_split=retain90
+forget_split=forget10
+holdout_split=${forget_split}
+
+
+python src/train.py --config-name=train.yaml \
   experiment=finetune/tofu/default \
   model=${MODEL} \
-  trainer.args.eval_on_start=False \
-  trainer.args.num_train_epochs=20 \
-  task_name=test/tofu_${MODEL}_xxxxx \
+  trainer.args.eval_on_start=True \
+  trainer.args.num_train_epochs=5  \
+  forget_split=${forget_split} \
 
-# 产物: saves/finetune/tofu_${MODEL}_full
-echo end finetune ${MODEL}
