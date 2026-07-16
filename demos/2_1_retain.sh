@@ -1,42 +1,65 @@
 #!/bin/bash
 # =============================================================================
-# Demo 1: 直接（全参数）微调一个模型
+# Demo 2-1: 微调 retain 参照模型 (GPU 0: Qwen2.5-1.5B-Instruct + phi-1_5)
 # -----------------------------------------------------------------------------
-# 入口: src/train.py  (mode=train)
-# 通过 Hydra 把以下配置组合在一起:
-#   experiment=finetune/tofu/default
-#     -> configs/experiment/finetune/tofu/default.yaml
-#        - model:   Llama-3.2-1B-Instruct
-#        - trainer: finetune  (handler=FinetuneTrainer, configs/trainer/finetune.yaml)
-#        - data:    TOFU_QA_full (locuslab/TOFU 的 "full" split)
-#        - eval:    tofu  (训练过程中按 epoch 评测)
+# retain 模型 = 只在 retain 数据上微调的"金标准"模型, 即"从未见过 forget 数据"
+# 的理想遗忘结果。它的评测结果 (TOFU_EVAL.json) 之后作为 unlearn 实验的
+# retain_logs_path 参照, 用于计算 forget_quality (ks_test) 和 privleak。
 #
-# 训练完的权重会保存到 paths.output_dir，默认 = saves/<mode>/<task_name>
-# 即: saves/finetune/demo_finetune_full
+# TOFU 的 split 三元组对应关系 (与上游 OpenUnlearning 一致):
+#   forget01 <-> holdout01 <-> retain99   (遗忘 1%)
+#   forget05 <-> holdout05 <-> retain95   (遗忘 5%)
+#   forget10 <-> holdout10 <-> retain90   (遗忘 10%)
+#
+# 关键覆盖项 (相对 experiment=finetune/tofu/default, 其默认训练 full split):
+#   data/datasets@data.train=TOFU_QA_retain          换训练集为 retain
+#   data.train.TOFU_QA_retain.args.hf_args.name=...  指定 retain90/95/99
+#   forget_split / holdout_split                     让评测对准对应的 forget 组
+#   retain_logs_path 保持 null: 本模型自身就是参照, forget_quality 打印
+#   warning 并记 None 属预期。
+#
+# 输出: saves/finetune/test/tofu_<MODEL>_<retain_split>/
+#   - 最终权重在目录根部; 每个 epoch 的评测在 checkpoint-*/evals/TOFU_EVAL.json
+#   - 之后跑 unlearn 时:
+#     retain_logs_path=saves/finetune/test/tofu_<MODEL>_<retain_split>/checkpoint-<最后一步>/evals/TOFU_EVAL.json
 # =============================================================================
 set -e
 cd "$(dirname "$0")/.."
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 
+MODELS=(
+  Qwen2.5-1.5B-Instruct
+  phi-1_5
+)
 
-MODEL=Qwen2.5-1.5B-Instruct
-# MODEL2=phi-1_5
+# "forget_split holdout_split retain_split"
+SPLITS=(
+  "forget10 holdout10 retain90"
+  "forget05 holdout05 retain95"
+  "forget01 holdout01 retain99"
+)
 
-# MODEL4=Qwen2.5-3B-Instruct
+for MODEL in "${MODELS[@]}"; do
+  for split in "${SPLITS[@]}"; do
+    read -r forget_split holdout_split retain_split <<< "${split}"
+    echo "========== [retain] model=${MODEL} train=${retain_split} eval=${forget_split}/${holdout_split} =========="
 
+    python src/train.py --config-name=train.yaml \
+      experiment=finetune/tofu/default \
+      model=${MODEL} \
+      data/datasets@data.train=TOFU_QA_retain \
+      data.train.TOFU_QA_retain.args.hf_args.name=${retain_split} \
+      forget_split=${forget_split} \
+      holdout_split=${holdout_split} \
+      trainer.args.eval_on_start=False \
+      trainer.args.num_train_epochs=5 \
+      task_name=test/tofu_${MODEL}_${retain_split}
 
-retain_split=retain90
-forget_split=forget10
-holdout_split=${forget_split}
+    echo "========== [retain] done: ${MODEL} ${retain_split} =========="
+  done
+done
 
-
-python src/train.py --config-name=train.yaml \
-  experiment=finetune/tofu/default \
-  model=${MODEL} \
-  trainer.args.eval_on_start=True \
-  trainer.args.num_train_epochs=5  \
-  forget_split=${forget_split} \
-
+echo "all retain finetunes finished: ${MODELS[*]}"
