@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Demo 2-2: 微调 retain 参照模型 (GPU 1: Qwen2.5-3B-Instruct)
+# Demo 2-2: 微调 retain 参照模型 (GPU 1: phi-1_5)
 # -----------------------------------------------------------------------------
 # 与 demos/2_1_retain.sh 相同逻辑, 拆到第二张卡上并行跑 3B 模型。
 # 说明见 2_1_retain.sh 头部注释。
@@ -10,15 +10,15 @@ cd "$(dirname "$0")/.."
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 MODELS=(
-  Qwen2.5-3B-Instruct
+  phi-1_5
 )
 
 # "forget_split holdout_split retain_split"
 SPLITS=(
-#   "forget10 holdout10 retain90"
+  "forget10 holdout10 retain90"
   "forget05 holdout05 retain95"
   "forget01 holdout01 retain99"
 )
