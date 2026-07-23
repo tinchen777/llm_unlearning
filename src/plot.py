@@ -38,35 +38,37 @@ def _out_dir(args) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = parser.add_subparsers(dest="cmd", required=True)
-
+    # train
     p = sub.add_parser("train", help="training loss curves from trainer_state.json")
     _add_common(p)
     p.add_argument("--keys", nargs="*", default=None,
                    help="log_history keys to plot (default: auto-discover)")
-
+    # evals
     p = sub.add_parser("evals", help="eval metric trajectories over checkpoints")
     _add_common(p)
     p.add_argument("--metrics", nargs="*", default=None)
-
+    # compare
     p = sub.add_parser("compare", help="final metrics compared across runs (bars)")
     _add_common(p)
     p.add_argument("--metrics", nargs="*", default=None)
-
+    # tradeoff
     p = sub.add_parser("tradeoff", help="scatter of two final metrics across runs")
     _add_common(p)
     p.add_argument("--x", default="model_utility")
     p.add_argument("--y", default="forget_quality")
-
+    # dist
     p = sub.add_parser("dist", help="per-sample value distribution from *_EVAL.json")
     _add_common(p)
     p.add_argument("--metric", required=True, help="metric name, e.g. forget_Q_A_Prob")
     p.add_argument("--stat", default=None, help="stat key, e.g. prob/score (default: auto)")
     p.add_argument("--step", type=int, default=None, help="checkpoint step (default: last)")
     p.add_argument("--bins", type=int, default=30)
-
+    # report
     p = sub.add_parser("report", help="generate all applicable charts at once")
     _add_common(p)
 

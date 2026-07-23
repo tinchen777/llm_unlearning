@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Demo 2: 评测一个模型 (TOFU benchmark)
+# 评测一个模型 (TOFU benchmark)
 # -----------------------------------------------------------------------------
 # 入口: src/eval.py  (mode=eval)
 #   1) get_model()      根据 model 配置加载模型+tokenizer
@@ -16,11 +16,15 @@
 #   需要先 `python setup_data.py --eval` 下载官方参照日志，或自己评一个 retain 模型。
 # =============================================================================
 set -e
-cd "$(dirname "$0")/.."
+cd $(dirname "$0")/../.. || exit 1
 
-# 共享集群必看: 只暴露一张【空闲】GPU 评测。先 `nvidia-smi` 选空闲卡,
-# 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/2_eval.sh` 覆盖。
-export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+export HF_HUB_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+
+GPU_ID=${1:-0}
+echo "Using GPU: [${GPU_ID}]"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
+
 
 MODEL=Llama-3.2-1B-Instruct
 

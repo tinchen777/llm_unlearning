@@ -8,7 +8,7 @@ and returns the matplotlib Figure so callers can save or further tweak it.
 from __future__ import annotations
 import math
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 import matplotlib
 matplotlib.use("Agg")

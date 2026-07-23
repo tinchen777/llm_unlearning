@@ -24,11 +24,15 @@
 #     retain_logs_path=saves/finetune/test/tofu_<MODEL>_<retain_split>/checkpoint-<最后一步>/evals/TOFU_EVAL.json
 # =============================================================================
 set -e
-cd "$(dirname "$0")/.."
+cd $(dirname "$0")/../.. || exit 1
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+
+GPU_ID=${1:-0}
+echo "Using GPU: [${GPU_ID}]"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
+
 
 MODELS=(
   Qwen2.5-1.5B-Instruct

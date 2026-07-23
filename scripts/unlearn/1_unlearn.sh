@@ -18,23 +18,23 @@
 # 输出: saves/unlearn/test/graddiff
 # =============================================================================
 set -e
-cd "$(dirname "$0")/.."
+cd $(dirname "$0")/../.. || exit 1
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=1
-# 共享集群必看: 只暴露一张【空闲】GPU, 否则 HF Trainer 会在所有可见卡上启用
-# DataParallel, 往被别人占满的卡复制模型而 CUDA OOM。先 `nvidia-smi` 选一张空闲卡,
-# 改下面的默认 0, 或运行时 `CUDA_VISIBLE_DEVICES=3 bash demos/4_unlearn.sh` 覆盖。
-# export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+GPU_ID=${1:-0}
+echo "Using GPU: [${GPU_ID}]"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
+
 
 MODEL=Llama-3.2-1B-Instruct
 
-echo start SimNPO
+echo start BoundedGradDiff
 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
-  trainer=SimNPO \
+  trainer=BoundedGradDiff \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
   trainer.method_args.retain_loss_type=NLL \
@@ -42,20 +42,59 @@ python src/train.py --config-name=unlearn.yaml \
   retain_split=retain90 \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/SimNPO \
+  task_name=test/BoundedGradDiff \
   # --cfg job --resolve
-
-echo end SimNPO
+echo end BoundedGradDiff
 
 # 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
 # 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:
 #   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
 
-echo start WGA
+echo start CEU
 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
-  trainer=WGA \
+  trainer=CEU \
+  forget_split=forget10 \
+  retain_split=retain90 \
+  holdout_split=holdout10 \
+  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+  task_name=test/CEU \
+  # --cfg job --resolve
+echo end CEU
+
+echo start DPO
+python src/train.py --config-name=unlearn.yaml \
+  experiment=unlearn/tofu/idk \
+  model=${MODEL} \
+  trainer=DPO \
+  trainer.args.eval_on_start=False \
+  forget_split=forget10 \
+  retain_split=retain90 \
+  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+  task_name=test/DPO
+echo end DPO
+
+
+echo start GradAscent
+python src/train.py --config-name=unlearn.yaml \
+  experiment=unlearn/tofu/default \
+  model=${MODEL} \
+  trainer=GradAscent \
+  forget_split=forget10 \
+  retain_split=retain90 \
+  holdout_split=holdout10 \
+  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+  task_name=test/GradAscent \
+  # --cfg job --resolve
+echo end GradAscent
+
+
+echo start NPO
+python src/train.py --config-name=unlearn.yaml \
+  experiment=unlearn/tofu/default \
+  model=${MODEL} \
+  trainer=NPO \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
   trainer.method_args.retain_loss_type=NLL \
@@ -63,15 +102,15 @@ python src/train.py --config-name=unlearn.yaml \
   retain_split=retain90 \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/WGA \
+  task_name=test/NPO \
   # --cfg job --resolve
-echo end WGA
+echo end NPO
 
-echo start UNDIAL
+echo start GradDiff
 python src/train.py --config-name=unlearn.yaml \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
-  trainer=UNDIAL \
+  trainer=GradDiff \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
   trainer.method_args.retain_loss_type=NLL \
@@ -79,55 +118,7 @@ python src/train.py --config-name=unlearn.yaml \
   retain_split=retain90 \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/UNDIAL \
+  task_name=test/GradDiff \
   # --cfg job --resolve
-echo end UNDIAL
+echo end GradDiff
 
-
-echo start SatImp
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
-  model=${MODEL} \
-  trainer=SatImp \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/SatImp \
-  # --cfg job --resolve
-echo end SatImp
-
-echo start RMU
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
-  model=${MODEL} \
-  trainer=RMU \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/RMU \
-  # --cfg job --resolve
-echo end RMU
-
-echo start PDU
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
-  model=${MODEL} \
-  trainer=PDU \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_eps=0.3 \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/PDU \
-
-echo end PDU

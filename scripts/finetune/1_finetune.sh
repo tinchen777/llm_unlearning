@@ -15,11 +15,15 @@
 # 即: saves/finetune/demo_finetune_full
 # =============================================================================
 set -e
-cd "$(dirname "$0")/.."
+cd $(dirname "$0")/../.. || exit 1
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+
+GPU_ID=${1:-0}
+echo "Using GPU: [${GPU_ID}]"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
+
 
 MODEL=Llama-3.2-3B-Instruct
 

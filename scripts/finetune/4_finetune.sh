@@ -15,14 +15,17 @@
 # 即: saves/finetune/demo_finetune_full
 # =============================================================================
 set -e
-cd "$(dirname "$0")/.."
+cd $(dirname "$0")/../.. || exit 1
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=1
+
+GPU_ID=${1:-0}
+echo "Using GPU: [${GPU_ID}]"
+export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=phi-1_5
+MODEL=Qwen2.5-3B-Instruct
 
 python src/train.py --config-name=train.yaml \
   experiment=finetune/tofu/default \
@@ -30,5 +33,6 @@ python src/train.py --config-name=train.yaml \
   trainer.args.eval_on_start=True \
   trainer.args.num_train_epochs=5 \
   task_name=test/tofu_${MODEL}_full \
+  # trainer.args.gradient_checkpointing=true \
 
 echo end finetune ${MODEL}

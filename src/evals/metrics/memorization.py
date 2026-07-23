@@ -24,7 +24,9 @@ logger = logging.getLogger("eval.metric")
 
 @MetricFunc
 def probability(model: Any, dataloader: DataLoader, **kwargs):
-    """Compute the probabilities by data points and report aggregated average"""
+    """
+    Compute the probabilities by data points and report aggregated average
+    """
     scores_by_index = run_batchwise_evals(
         model, dataloader,
         batch_eval_fn=evaluate_probability,
@@ -91,8 +93,10 @@ def rouge(
 
 @MetricFunc
 def truth_ratio(aggregator: str, pre_compute: Dict[str, Any], **kwargs):
-    """Compute the truth ratio, aggregating false/true scores, and
-    return the aggregated value."""
+    """
+    Compute a ratio that approximately compares how likely its correct answer is to an incorrect answer. Aggregating false/true scores, and
+    return the aggregated value.
+    """
     agg_fn_dict = {
         # Forget data: It is better if false and true are equally likely,
         # i.e., tr=false/true is closest to 1.
@@ -155,6 +159,12 @@ def truth_ratio(aggregator: str, pre_compute: Dict[str, Any], **kwargs):
 
 @MetricFunc
 def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
+    """
+    Compute the exact memorization (EM) score for each instance in the dataloader.
+
+    Use For:
+    - tofu.metrics.exact_memorization
+    """
 
     def _exact_memorization(model: Any, batch: Mapping[str, torch.Tensor]):
         vocab_logprobs_batch, _, labels_batch = tokenwise_logprobs(model, batch)
@@ -189,6 +199,12 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
 
 @MetricFunc
 def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
+    """
+    Compute the extraction strength (ES) score for each instance in the dataloader.
+
+    Use For:
+    - tofu.metrics.extraction_strength
+    """
 
     def _extraction_strength(model: Any, batch: Mapping[str, torch.Tensor]):
         vocab_logprobs_batch, _, labels_batch = tokenwise_logprobs(model, batch)
