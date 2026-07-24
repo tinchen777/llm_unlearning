@@ -26,18 +26,15 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=Llama-3.2-1B-Instruct
+MODEL=Llama-3.2-3B-Instruct
+MODEL_PATH=saves/finetune/test/tofu_Llama-3.2-3B-Instruct_full
 
 python src/eval.py --config-name=eval.yaml \
   experiment=eval/tofu/default \
   model=${MODEL} \
-  model.model_args.pretrained_model_name_or_path=open-unlearning/tofu_${MODEL}_full \
+  model.model_args.pretrained_model_name_or_path=${MODEL_PATH} \
   forget_split=forget10 \
   holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_eval
+  task_name=demo_eval_${MODEL} \
 
-# 想评测 Demo 1 自己微调出来的模型, 把上面这行换成本地路径:
-#   model.model_args.pretrained_model_name_or_path=saves/finetune/demo_finetune_full
-#
-# 没有 retain 参照日志时, 去掉 retain_logs_path 即可 (forget_quality 会是 None)。
+# retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \

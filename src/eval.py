@@ -28,7 +28,7 @@ def main(config: DictConfig):
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
-    set_seed(cfg["trainer"]["args"]["seed"])
+    # set_seed(cfg["trainer"]["args"]["seed"])
     # mode = cfg.get("mode", "eval")
 
     model_cfg = cfg["model"]
