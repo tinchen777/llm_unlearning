@@ -1,6 +1,7 @@
 
-import torch
 from torch.utils.data import Dataset
+
+from utils.common import randidx
 
 
 class ForgetRetainDataset(Dataset):
@@ -37,11 +38,9 @@ class ForgetRetainDataset(Dataset):
         if self.anchor == "forget":
             item["forget"] = self.forget[idx]
             if self.retain:
-                retain_idx = torch.randint(0, len(self.retain), (1,)).item()
-                item["retain"] = self.retain[retain_idx]
+                item["retain"] = self.retain[randidx(len(self.retain))]
         elif self.anchor == "retain":
             item["retain"] = self.retain[idx]
             if self.forget:
-                forget_idx = torch.randint(0, len(self.forget), (1,)).item()
-                item["forget"] = self.forget[forget_idx]
+                item["forget"] = self.forget[randidx(len(self.forget))]
         return item

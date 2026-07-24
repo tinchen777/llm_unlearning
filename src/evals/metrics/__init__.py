@@ -67,7 +67,7 @@ def _get_metric(
         # prepare pre-compute metrics
         pre_compute_cfgs = metric_cfg_dict.pop("pre_compute", {})
         pre_compute_metrics = {
-            pre_compute_name: _get_metric(
+            pre_compute_cfg.get("access_key", pre_compute_name): _get_metric(
                 pre_compute_name,
                 all_metrics,
                 pre_compute_cfg,

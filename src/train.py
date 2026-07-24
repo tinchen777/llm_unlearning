@@ -87,7 +87,7 @@ def main(config: DictConfig):
         trainer.save_state()
         trainer.save_model()
 
-    if trainer.args.do_eval:
+    if trainer.args.do_eval and trainer.args.eval_strategy != "epoch":
         trainer.evaluate(metric_key_prefix="eval")
 
 

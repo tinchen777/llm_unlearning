@@ -1,14 +1,19 @@
 
-import torch
+from __future__ import annotations
 import torch.nn.functional as F
+from typing import Any, Mapping, Optional, TYPE_CHECKING
 
+from utils.common import forward_batch, IGNORE_INDEX
 from .base import UnlearnTrainer
+
+if TYPE_CHECKING:
+    import torch
 
 
 def cross_entropy_unlearning_loss(
     logits: torch.Tensor,
     labels: torch.Tensor,
-    ignore_index: int = -100,
+    ignore_index: Optional[int] = IGNORE_INDEX,
 ) -> torch.Tensor:
     """
     Implementation of Cross Entropy Unlearning Loss (CE-U).
@@ -23,7 +28,6 @@ def cross_entropy_unlearning_loss(
     Returns:
       A scalar tensor representing the mean unlearning loss across valid positions
     """
-    batch_size, sequence_length, vocabulary_size = logits.shape
     # Extract valid logits and labels based on ignore_index.
     if ignore_index is not None:
         # Shape: [batch_size, sequence_length], boolean mask
@@ -34,9 +38,9 @@ def cross_entropy_unlearning_loss(
         valid_labels = labels[valid_mask]
     else:
         # Shape: [batch_size*sequence_length, vocabulary_size]
-        valid_logits = logits.view(-1, vocabulary_size)
+        valid_logits = logits.reshape(-1, logits.shape[-1])
         # Shape: [batch_size*sequence_length]
-        valid_labels = labels.view(-1)
+        valid_labels = labels.reshape(-1)
 
     # Create a copy of valid_logits to generate the target distribution
     # Shape: [num_valid_positions, vocabulary_size]
@@ -52,7 +56,7 @@ def cross_entropy_unlearning_loss(
 
     # Apply softmax to generate the target probability distribution
     # Shape: [num_valid_positions, vocabulary_size]
-    valid_target_probabilities = F.softmax(valid_target_logits, dim=-1)
+    valid_target_probabilities = valid_target_logits.softmax(dim=-1)
 
     # Compute the cross entropy loss between input logits and target probabilities
     # The loss is averaged over the valid positions and returns a scalar tensor
@@ -62,38 +66,40 @@ def cross_entropy_unlearning_loss(
     )
 
 
-def compute_batch_ceu(model, inputs, ignore_first_n_answer_tokens=1):
-    outputs = model(**inputs)
-    logits = outputs.logits
-    labels = inputs["labels"]
-
-    # Implement the trick to ignore the first n answer tokens mentioned in the footnote in the Training Settings section of arXiv:2503.01224
-    valid_mask = labels != -100
-    update_mask = (
-        valid_mask.cumsum(dim=-1) <= ignore_first_n_answer_tokens
-    ) & valid_mask
-    labels_without_first_n_answer_tokens = labels.masked_fill(update_mask, -100)
-
-    shifted_labels = labels_without_first_n_answer_tokens[..., 1:].contiguous()
-    shifted_logits = logits[..., :-1, :].contiguous()
-    loss = cross_entropy_unlearning_loss(
-        shifted_logits, shifted_labels, ignore_index=-100
-    )
-    return loss, outputs
-
-
 class CEU(UnlearnTrainer):
-    def __init__(self, ignore_first_n_answer_tokens=1, *args, **kwargs):
+    def __init__(self, ignore_first_n_answer_tokens: int = 1, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ignore_first_n_answer_tokens = ignore_first_n_answer_tokens
 
-    def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
+    def compute_batch_ceu(
+        self,
+        model: Any,
+        inputs: Mapping[str, torch.Tensor],
     ):
-        forget_inputs = inputs["forget"]
-        loss, outputs = compute_batch_ceu(
-            model,
-            forget_inputs,
-            ignore_first_n_answer_tokens=self.ignore_first_n_answer_tokens,
+        logits, outputs = forward_batch(model, inputs, ignore_labels=True)
+
+        labels = inputs["labels"]
+        # Implement the trick to ignore the first n answer tokens mentioned in the footnote in the Training Settings section of arXiv:2503.01224
+        valid_mask = labels != IGNORE_INDEX
+        update_mask = (
+            valid_mask.cumsum(dim=-1) <= self.ignore_first_n_answer_tokens
+        ) & valid_mask
+        labels_without_first_n_answer_tokens = labels.masked_fill(update_mask, IGNORE_INDEX)
+
+        shifted_labels = labels_without_first_n_answer_tokens[..., 1:]
+        shifted_logits = logits[..., :-1, :]
+        loss = cross_entropy_unlearning_loss(
+            shifted_logits, shifted_labels, ignore_index=IGNORE_INDEX
         )
+        return loss, outputs
+
+    def compute_loss(
+        self,
+        model: Any,
+        inputs: Mapping[str, Mapping[str, torch.Tensor]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[int] = None,
+        **kwargs
+    ):
+        loss, outputs = self.compute_batch_ceu(model, inputs["forget"])
         return (loss, outputs) if return_outputs else loss

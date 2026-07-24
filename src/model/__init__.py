@@ -66,7 +66,7 @@ def _get_dtype(model_args: TrackingConfig):
         # config.
         assert torch_dtype in ["float16", "bfloat16"], ValueError(
             f"Invalid torch_dtype '{torch_dtype}' for the requested attention "
-            f"implementation: 'flash_attention_2'. Supported types are 'float16' "
+            f"implementation: flash_attention_2. Supported types are 'float16' "
             f"and 'bfloat16'."
         )
     if torch_dtype == "float16":

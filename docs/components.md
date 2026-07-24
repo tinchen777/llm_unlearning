@@ -184,7 +184,7 @@ Example: LLaMA-3.1 model config in [`configs/model/Llama-3.1-8B-Instruct.yaml`](
 model_handler: AutoModelForCausalLM
 model_args:
   pretrained_model_name_or_path: "meta-llama/Llama-3.1-8B-Instruct"
-  attn_implementation: 'flash_attention_2'
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 tokenizer_args:
   pretrained_model_name_or_path: "meta-llama/Llama-3.1-8B-Instruct"

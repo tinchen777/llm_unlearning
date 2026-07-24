@@ -20,7 +20,7 @@ def ks_test(pre_compute: Dict[str, Any], reference_logs: Dict[str, Any], **kwarg
             for evals in reference_logs["retain_model_logs"]["retain"]["value_by_index"].values()
         ])
         fq = ks_2samp(forget_tr_stats, retain_tr_stats)
-        pvalue = fq.pvalue
+        pvalue = fq.pvalue  # type: ignore
     else:
         logger.warning(
             "`retain_model_logs` evals not provided for `ks_test`, setting forget_quality to `None`."
@@ -39,7 +39,7 @@ def privleak(pre_compute: Dict[str, Any], reference_logs: Dict[str, Any], ref_va
     score = pre_compute["forget"]["agg_value"]
     try:
         ref = reference_logs["retain_model_logs"]["retain"]["agg_value"]
-    except Exception as _:
+    except Exception:
         logger.warning(
             f"`retain_model_logs` evals not provided for `privleak`, using default retain auc of `{ref_value}`."
         )
@@ -55,7 +55,7 @@ def rel_diff(pre_compute: Dict[str, Any], reference_logs: Dict[str, Any], ref_va
     score = pre_compute["forget"]["agg_value"]
     try:
         ref = reference_logs["retain_model_logs"]["retain"]["agg_value"]
-    except Exception as _:
+    except Exception:
         logger.warning(
             f"`retain_model_logs` evals not provided for `rel_diff`, using default retain auc of `{ref_value}`."
         )

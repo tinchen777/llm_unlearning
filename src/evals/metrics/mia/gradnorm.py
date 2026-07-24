@@ -5,10 +5,11 @@ experimented for pre-training data and LLMs in https://arxiv.org/abs/2402.17012
 
 from __future__ import annotations
 import torch
-from typing import Any, Dict, Union, TYPE_CHECKING
+from typing import Union, List
 
 from .base import Attack
-from ..utils import tokenwise_logprobs
+from ..metric_utils import tokenwise_logprobs
+from ..utils import to_np
 
 
 # DO NOT use gradnorm in a way so that it runs when your accumulated gradients during training aren't used yet
@@ -20,12 +21,11 @@ class GradNormAttack(Attack):
         self.p = p
 
     def compute_batch_values(self, batch):
-        # FIXME
         """Compute gradients of examples w.r.t model parameters. More grad norm => more loss."""
         self.model.train()
-        batch_log_probs = tokenwise_logprobs(self.model, batch, grad=True)
-        batch_loss = [-torch.mean(lps) for lps in batch_log_probs]
-        batch_grad_norms = []
+        _, target_logprobs_batch, _ = tokenwise_logprobs(self.model, batch, grad=True)
+        batch_loss = [-lps.mean() for lps in target_logprobs_batch]
+        batch_grad_norms: List[torch.Tensor] = []
         for sample_loss in batch_loss:
             sample_grad_norms = []
             self.model.zero_grad()
@@ -37,6 +37,5 @@ class GradNormAttack(Attack):
         self.model.eval()
         return batch_grad_norms
 
-    def compute_score(self, sample_stats):
-        """Return negative gradient norm as the attack score."""
-        return sample_stats.cpu().to(torch.float32).numpy()
+    def compute_score(self, sample_stats: torch.Tensor):
+        return float(to_np(sample_stats))

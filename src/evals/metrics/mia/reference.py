@@ -2,10 +2,11 @@
 Reference-based attacks.
 """
 
-from typing import Any
+from __future__ import annotations
+from typing import Any, Dict
 
 from .base import Attack
-from ..utils import evaluate_probability
+from ..metric_utils import evaluate_probability
 
 
 class ReferenceAttack(Attack):
@@ -22,6 +23,6 @@ class ReferenceAttack(Attack):
             for t, r in zip(target_results, ref_results)
         ]
 
-    def compute_score(self, sample_stats):
+    def compute_score(self, sample_stats: Dict[str, float]):
         """Score using difference between target and reference model losses."""
         return sample_stats["target_loss"] - sample_stats["ref_loss"]
