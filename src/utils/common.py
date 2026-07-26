@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 import os
+from pathlib import Path
 import json
 import torch
 import random
@@ -11,6 +12,7 @@ from typing import Any, Dict, Mapping, Literal, overload, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from transformers.modeling_outputs import CausalLMOutputWithPast
+    from os import PathLike
 
 IGNORE_INDEX = -100
 
@@ -40,18 +42,20 @@ def get_cuda_visible_devices():
     return devices
 
 
-def load_logs_from_file(file_path: str) -> Dict[str, Dict[str, Any]]:
+def load_logs(file_path: PathLike) -> Dict[str, Any]:
     """Returns the cache of existing results"""
-    with open(file_path, "r") as f:
+    file_path = Path(file_path)
+    with file_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_logs(logs: Dict[str, Any], file_path: str):
+def save_logs(logs: Dict[str, Any], file_path: PathLike):
     """Save the logs in a json file"""
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(file_path, "w") as f:
-            json.dump(logs, f, indent=4, sort_keys=True)
+        with file_path.open("w", encoding="utf-8") as f:
+            json.dump(logs, f, indent=4, sort_keys=True, ensure_ascii=False)
     except Exception as e:
         raise RuntimeError(f"Failed to save {file_path}") from e
 

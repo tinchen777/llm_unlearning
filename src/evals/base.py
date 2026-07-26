@@ -1,12 +1,12 @@
 
 from __future__ import annotations
-import os
+from pathlib import Path
 import logging
 from cobra_color import cstr
 from typing import Any, Optional, Dict, TYPE_CHECKING
 
 from .metrics import get_metrics
-from utils.common import load_logs_from_file, save_logs
+from utils.common import load_logs, save_logs
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -40,7 +40,7 @@ class Evaluator:
         """Returns the path to json file to store results"""
         if not output_dir:
             return None
-        return os.path.join(output_dir, f"{self.name}_{suffix}.json")
+        return Path(output_dir) / f"{self.name}_{suffix}.json"
 
     def summarize(self, logs: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """Summarize the metrics results"""
@@ -67,21 +67,21 @@ class Evaluator:
 
         # Set output_dir and file to store results
         _output_dir = self.output_dir if output_dir is None else output_dir
-        logs_file_path = self.get_logs_file_path(_output_dir, suffix="EVAL")
-        summary_file_path = self.get_logs_file_path(_output_dir, suffix="SUMMARY")
+        eval_detail_path = self.get_logs_file_path(_output_dir, suffix="EVAL")
+        eval_summary_path = self.get_logs_file_path(_output_dir, suffix="SUMMARY")
 
         # Load existing results from file if any.
-        if logs_file_path and os.path.exists(logs_file_path) and not _overwrite:
-            logs = load_logs_from_file(logs_file_path)
-            logger.info(f"Loading existing evaluations from: {logs_file_path}")
+        if eval_detail_path and eval_detail_path.exists() and not _overwrite:
+            logs = load_logs(eval_detail_path)
+            logger.info(f"Loading existing evaluations from: {str(eval_detail_path)}")
         else:
             logs = {}
 
         logger.info(f"=== Running `<{self.name}>` evaluation suite ===")
-        if logs_file_path:
-            logger.info(f"Fine-grained evaluations will be saved to: {logs_file_path}")
-        if summary_file_path:
-            logger.info(f"Aggregated evaluations will be summarised in: {summary_file_path}")
+        if eval_detail_path:
+            logger.info(f"Fine-grained evaluations will be saved to: {str(eval_detail_path)}")
+        if eval_summary_path:
+            logger.info(f"Aggregated evaluations will be summarised in: {str(eval_summary_path)}")
         print("-" * 80)
 
         for idx, (metric_name, metric_fn) in enumerate(self.metrics_dict.items(), start=1):
@@ -89,10 +89,10 @@ class Evaluator:
             logger.info(f"{cstr(idx_str, fg='y')} Evaluating metric `{metric_name}` ...")
             _results = metric_fn.evaluate(model, logs, overwrite_cache=_overwrite)
             # Update logs
-            if logs_file_path:
-                save_logs(logs, logs_file_path)
-            if summary_file_path:
-                save_logs(self.summarize(logs), summary_file_path)
+            if eval_detail_path:
+                save_logs(logs, eval_detail_path)
+            if eval_summary_path:
+                save_logs(self.summarize(logs), eval_summary_path)
             logger.info(
                 f"{cstr(idx_str, fg='g')} Finished evaluating metric `{metric_name}`, "
                 f"agg_value: {_results.get('agg_value', 'N/A')}."
