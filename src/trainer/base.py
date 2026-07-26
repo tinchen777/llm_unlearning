@@ -48,7 +48,8 @@ class FinetuneTrainer(Trainer):
             eval_metrics = {}
             for evaluator in self.evaluators.values():
                 eval_metrics.update(evaluator.evaluate(self.model, output_dir=output_dir))
-            self.log(eval_metrics)
+            # NO eval metrics logging in trainer_state.json
+            # self.log(eval_metrics)
             return eval_metrics
 
         if eval_dataset is None or eval_dataset == _EVAL_PLACEHOLDER:

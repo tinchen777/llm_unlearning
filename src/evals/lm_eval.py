@@ -7,7 +7,7 @@ from lm_eval import simple_evaluate
 from typing import Dict, Any, TYPE_CHECKING
 
 from .base import Evaluator
-from utils.common import load_logs_from_file, save_logs
+from utils.common import load_logs, save_logs
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig

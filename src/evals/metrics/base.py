@@ -1,15 +1,15 @@
 
 from __future__ import annotations
-import os
 import logging
 import inspect
+from pathlib import Path
 from functools import wraps
 from torch.utils.data import DataLoader
 from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
 from .utils import DATA_SPLIT_SUFFIX
 from data import get_datasets, get_collators
-from utils.common import load_logs_from_file
+from utils.common import load_logs
 from utils.config import reprlib
 
 if TYPE_CHECKING:
@@ -109,15 +109,15 @@ class UnlearningMetric:
         ref_logs = {}
         ref_logs_cfgs = self.cfg_dict.pop("reference_logs", {})
         for ref_log_name, ref_log_cfg in ref_logs_cfgs.items():
-            path = ref_log_cfg.get("path", None, allow_none=True)
-            if path is None or not os.path.exists(path):
+            path = Path(ref_log_cfg.get("path", "", allow_none=True))
+            if not path.exists():
                 logger.warning(
                     f"Reference logs path for `{ref_log_name}` not found or doesn't exist."
                 )
                 continue
             # Load the reference logs
-            logger.info(f"Loading reference logs from {path} ...")
-            _logs = load_logs_from_file(path)
+            logger.info(f"Loading reference logs from {str(path)} ...")
+            _logs = load_logs(path)
             # for each include_cfg, load the corresponding logs
             ref_log = {}
             include_cfgs = ref_log_cfg.get("include", {}, allow_none=True)
@@ -127,7 +127,7 @@ class UnlearningMetric:
                 ref_log[access_name] = _results
                 if _results is None:
                     logger.warning(
-                        f"`{key}` evals not present in the {path}, setting it to None, may result in error soon if code attempts to access."
+                        f"`{key}` evals not present in the {str(path)}, setting it to None, may result in error soon if code attempts to access."
                     )
             ref_logs[ref_log_name] = ref_log
         self.cfg_dict["reference_logs"] = ref_logs
@@ -190,7 +190,6 @@ class MetricFunc:
             if p.kind not in ARGS_KWARGS
         ]
 
-        # 保留原函数属性
         wraps(func)(self)
 
     def __call__(self, *args, **kwargs):

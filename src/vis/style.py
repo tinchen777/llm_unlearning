@@ -6,7 +6,6 @@ axes, text) is recessive so the data marks carry the figure.
 """
 
 from __future__ import annotations
-import itertools
 import matplotlib as mpl
 
 # Categorical palette (light mode), fixed slot order -- do not re-sort.
@@ -35,8 +34,8 @@ def series_color(i: int) -> str:
     return CATEGORICAL[i] if i < len(CATEGORICAL) else OTHER_GRAY
 
 
-def series_colors(n: int):
-    return [series_color(i) for i in range(n)]
+# def series_colors(n: int):
+#     return [series_color(i) for i in range(n)]
 
 
 def apply_style():
