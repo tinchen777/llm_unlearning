@@ -37,6 +37,7 @@ class ExperimentLoader:
     _log_history: List[Dict[str, Any]]
     _log_history_df: pd.DataFrame
     _eval_summaries: Dict[int, Dict[str, Any]]
+    _eval_summaries_df: pd.DataFrame
     _eval_details: Dict[int, Dict[str, Any]]
     _metric_keys: Set[str]
     _all_metric_keys: Set[str]
@@ -89,6 +90,10 @@ class ExperimentLoader:
                     summary = load_logs(ckp_summary_paths[0])
                     self._metric_keys.update(summary)
                     self._eval_summaries[step] = summary
+        # eval_summaries_df
+        self._eval_summaries_df = pd.DataFrame.from_dict(
+            self._eval_summaries, orient="index"
+        ).rename_axis("step").sort_index()
 
     def _load_details(self):
         self._eval_details = {}
@@ -129,10 +134,20 @@ class ExperimentLoader:
         return self._log_history_df
 
     @property
+    def train_keys(self):
+        return set(self.log_history_df.columns)
+
+    @property
     def eval_summaries(self):
         if not hasattr(self, "_eval_summaries"):
             self._load_summaries()
         return self._eval_summaries
+
+    @property
+    def eval_summaries_df(self):
+        if not hasattr(self, "_eval_summaries_df"):
+            self._load_summaries()
+        return self._eval_summaries_df
 
     @property
     def eval_final_summaries(self):
