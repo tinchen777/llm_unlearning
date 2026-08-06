@@ -136,11 +136,11 @@ def prepare_chat_sample_context(
         fs_question_data = _fs_data[question_key]
         fs_answer_data = _fs_data[answer_key]
 
-    if template_args.get("apply_chat_template", False, allow_none=True):
+    if template_args.get("apply_chat_template", False):
         # use chat template to format the prompt and response
         chat: List[Dict[str, str]] = []
         # system prompt
-        system_prompt = template_args.get("system_prompt", None, allow_none=True)
+        system_prompt = template_args.get("system_prompt", None)
         if system_prompt:
             chat.append({"role": "system", "content": system_prompt})
         # few-shot examples
@@ -153,7 +153,7 @@ def prepare_chat_sample_context(
         wrapped_prompt: str = ""
         # system prompt with special tokens
         system_prompt_with_special_tokens = template_args.get(
-            "system_prompt_with_special_tokens", None, allow_none=True
+            "system_prompt_with_special_tokens", None
         )
         if system_prompt_with_special_tokens:
             wrapped_prompt += str(system_prompt_with_special_tokens)
@@ -198,7 +198,7 @@ def tok_chat_sample(
             prompt = sample_context + [{"role": "user", "content": q}]
             multi_chat = [prompt + [{"role": "assistant", "content": ans}] for ans in multi_a]
 
-            date_str = template_args.get("date_string", None, allow_none=True)
+            date_str = template_args.get("date_string", None)
             date_info = {"date_string": date_str} if date_str is not None else {}
             prompt_ids = tokenizer.apply_chat_template(
                 prompt,

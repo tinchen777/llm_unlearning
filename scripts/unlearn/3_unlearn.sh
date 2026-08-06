@@ -28,43 +28,20 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=Llama-3.2-1B-Instruct
+MODEL=Llama-2-7b-hf
 
-# python src/train.py --config-name=train.yaml \
-#   experiment=finetune/tofu/default \
-#   model=${MODEL} \
-#   data/datasets@data.train=TOFU_QA_retain \
-#   data.train.TOFU_QA_retain.args.hf_args.name=retain90 \
-#   task_name=demo_finetune_retain
-
-  # --cfg job --resolve
-
-# 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
-# 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:
-#   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
-
-
-
-# python src/train.py --config-name=unlearn.yaml \
-#   experiment=unlearn/tofu/idk \
-#   model=Llama-3.2-1B-Instruct \
-#   trainer.args.eval_on_start=False \
-#   forget_split=forget10 \
-#   retain_split=retain90 \
-#   retain_logs_path=saves/eval/tofu_Llama-3.2-1B-Instruct_retain90/TOFU_EVAL.json \
-#   task_name=demo_unlearn_DPO
-
-
-python src/train.py --config-name=unlearn.yaml \
-  experiment=unlearn/tofu/default \
+echo start MUSE BoundedGradDiff
+python src/train.py --config-name=unlearn \
+  experiment=unlearn/muse/default \
   model=${MODEL} \
-  trainer=PDU \
+  trainer=BoundedGradDiff \
+  trainer.args.per_device_train_batch_size=1 \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_eps=0.3 \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=demo_unlearn_PDU \
-  
+  trainer.method_args.retain_loss_type=NLL \
+  forget_split=forget \
+  retain_split=retain1 \
+  retain_logs_path=saves/eval/muse_${MODEL}_News_retrain/MUSE_EVAL.json \
+  task_name=test_muse/BoundedGradDiff \
+  # --cfg job --resolve
+echo end MUSE BoundedGradDiff

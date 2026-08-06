@@ -21,11 +21,10 @@ set -e
 cd $(dirname "$0")/../.. || exit 1
 
 
-# 一键报告: 对比两个 run
-python src/plot.py report \
-  saves/unlearn/test_1/BoundedGradDiff \
-  saves/unlearn/test/BoundedGradDiff \
-  -o saves/plots/test/BoundedGradDiff
+python src/plot.py \
+  +vis.run_dirs='[saves/eval/tofu_Llama-2-7b-chat-hf_full/evals_forget01,saves/finetune/test/tofu_phi-1_5_retain90,saves/finetune/test/tofu_phi-1_5_retain95,saves/finetune/test/tofu_phi-1_5_full]' \
+  +vis.out_dir=saves/plot_demo \
+  # --cfg job  --resolve
 
 # 单独画某张图的例子:
 # python src/plot.py train saves/unlearn/demo_unlearn_NCU \

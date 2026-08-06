@@ -27,11 +27,12 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 MODEL=phi-1_5
 
-python src/train.py --config-name=train.yaml \
+python src/train.py \
   experiment=finetune/tofu/default \
   model=${MODEL} \
   trainer.args.eval_on_start=True \
   trainer.args.num_train_epochs=5 \
   task_name=test/tofu_${MODEL}_full \
+  # --cfg job
 
 echo end finetune ${MODEL}

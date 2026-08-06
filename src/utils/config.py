@@ -24,13 +24,13 @@ def init_hydra_choices(choices: Dict[str, str]):
 
 def check_and_return(func):
     @wraps(func)
-    def wrapper(self, key, default=_MISSING, allow_none=False):
+    def wrapper(self, key, default=_MISSING, check_none=False):
         if key not in self._cfg:
             if default is not _MISSING:
                 return default
             raise KeyError(f"`{key}` not found in `@{self._loc_choices}`.")
         val = func(self, key)
-        if val is None and not allow_none:
+        if val is None and check_none:
             raise ValueError(f"`{key}` is None in `@{self._loc_choices}`.")
 
         if isinstance(val, DictConfig):
@@ -54,11 +54,11 @@ class TrackingConfig(Mapping):
         self._cfg = cfg
 
     @check_and_return
-    def get(self, key: Any, default: Any = _MISSING, allow_none: bool = False) -> Any:
+    def get(self, key: Any, default: Any = _MISSING, check_none: bool = False) -> Any:
         return self._cfg[key]
 
     @check_and_return
-    def pop(self, key: Any, default: Any = _MISSING, allow_none: bool = False) -> Any:
+    def pop(self, key: Any, default: Any = _MISSING, check_none: bool = False) -> Any:
         with open_dict(self._cfg):
             return self._cfg.pop(key)
 

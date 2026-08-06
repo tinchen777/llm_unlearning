@@ -27,7 +27,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 MODEL=Qwen2.5-1.5B-Instruct
 
-python src/train.py --config-name=train.yaml \
+python src/train.py \
   experiment=finetune/tofu/default \
   model=${MODEL} \
   trainer.args.eval_on_start=True \

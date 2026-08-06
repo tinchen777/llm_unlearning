@@ -1,25 +1,29 @@
 
 from __future__ import annotations
-from rich.traceback import install
-install(show_locals=False, width=100)
+# from rich.traceback import install
+# install(show_locals=False, width=100)
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import logging
-from omegaconf import DictConfig
+from typing import TYPE_CHECKING
 
 from data import get_data, get_collators
 from model import get_model_and_tokenizer
 from trainer import load_trainer
 from evals import get_evaluators
+from vis import plot_figures
 from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
+
+if TYPE_CHECKING:
+    from omegaconf import DictConfig
 
 # logging.getLogger("datasets").setLevel(logging.ERROR)
 logger = logging.getLogger("main(train)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="train.yaml")
+@hydra.main(version_base=None, config_path="../configs", config_name="train")
 def main(config: DictConfig):
     """Entry point of the code to train models
     Args:
@@ -32,7 +36,7 @@ def main(config: DictConfig):
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
     set_seed(cfg["trainer"]["args"]["seed"])
-    mode = cfg.get("mode", "train")
+    mode = cfg.get("mode", "train", check_none=True)
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -56,7 +60,7 @@ def main(config: DictConfig):
         collator = get_collators(collator_cfg, tokenizer=tokenizer)
 
     # 4. Get Evaluators
-    eval_cfgs = cfg.get("eval", None, allow_none=True)
+    eval_cfgs = cfg.get("eval", None)
     if eval_cfgs:
         with step_logging(logger, "[4/5]", "evaluators", eval_cfgs):
             evaluators = get_evaluators(
@@ -89,6 +93,12 @@ def main(config: DictConfig):
 
     if trainer.args.do_eval and trainer.args.eval_strategy != "epoch":
         trainer.evaluate(metric_key_prefix="eval")
+
+    # plotting
+    vis_cfg = cfg.get("vis", None)
+    run_dir = trainer.args.output_dir
+    if vis_cfg and run_dir is not None:
+        plot_figures((run_dir,), vis_cfg)
 
 
 if __name__ == "__main__":

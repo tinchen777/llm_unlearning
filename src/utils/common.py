@@ -8,7 +8,7 @@ import random
 import numpy as np
 from torch.nn import functional as F
 from transformers import BatchEncoding
-from typing import Any, Dict, Mapping, Literal, overload, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Mapping, Literal, overload, Tuple, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from transformers.modeling_outputs import CausalLMOutputWithPast
@@ -42,14 +42,14 @@ def get_cuda_visible_devices():
     return devices
 
 
-def load_logs(file_path: PathLike) -> Dict[str, Any]:
+def load_logs(file_path: Union[PathLike, str]) -> Dict[str, Any]:
     """Returns the cache of existing results"""
     file_path = Path(file_path)
     with file_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_logs(logs: Dict[str, Any], file_path: PathLike):
+def save_logs(logs: Dict[str, Any], file_path: Union[PathLike, str]):
     """Save the logs in a json file"""
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)

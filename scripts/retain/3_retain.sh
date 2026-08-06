@@ -32,7 +32,7 @@ for MODEL in "${MODELS[@]}"; do
     read -r forget_split holdout_split retain_split <<< "${split}"
     echo "========== [retain] model=${MODEL} train=${retain_split} eval=${forget_split}/${holdout_split} =========="
 
-    python src/train.py --config-name=train.yaml \
+    python src/train.py \
       experiment=finetune/tofu/default \
       model=${MODEL} \
       data/datasets@data.train=TOFU_QA_retain \

@@ -35,7 +35,7 @@ def get_data(data_cfg: TrackingConfig, mode: str, **kwargs):
         data["train"] = ForgetRetainDataset(
             forget=data["forget"],
             retain=data["retain"],
-            anchor=data_cfg.get("anchor", "forget")
+            anchor=data_cfg.get("anchor", "forget", check_none=True)
         )
         for split_name in [k for k in data if k not in ("train", "eval", "test")]:
             data.pop(split_name)
@@ -52,14 +52,14 @@ def get_datasets(dataset_cfgs: TrackingConfig, **kwargs):
         if len(dataset_cfgs) == 1:
             # if only one dataset, return it directly
             return dataset
-        access_name = dataset_cfg.get("access_key", dataset_name)
+        access_name = dataset_cfg.get("access_key", dataset_name, check_none=True)
         datasets[str(access_name)] = dataset
     return datasets
 
 
 def _load_single_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
     dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
-    return dataset_cls(**dataset_cfg.get("args", {}), **kwargs)
+    return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
 
 
 def get_collators(collator_cfgs: TrackingConfig, **kwargs):
@@ -78,7 +78,7 @@ def get_collators(collator_cfgs: TrackingConfig, **kwargs):
 
 def _get_single_collator(collator_cfg: TrackingConfig, **kwargs):
     collator_cls = COLLATOR_REGISTRY[collator_cfg["handler"]]
-    return collator_cls(**collator_cfg.get("args", {}), **kwargs)
+    return collator_cls(**collator_cfg.get("args", {}, check_none=True), **kwargs)
 
 
 # Register datasets

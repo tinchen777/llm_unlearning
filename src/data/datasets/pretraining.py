@@ -35,6 +35,12 @@ class CompletionDataset(BaseDataset):
         )
 
     def prepare_data(self):
+        # ensure that the prefix column exists in the dataset, if not, add an empty column
+        if self.prefix_key not in self.raw_data.column_names:
+            self.raw_data = self.raw_data.add_column(
+                name=self.prefix_key,
+                column=[""] * len(self.raw_data)
+            )
         return self.map_raw_data(
             input_columns=[self.prefix_key, self.text_key],
             name="prompt-text data"

@@ -78,7 +78,7 @@ class UnlearningMetric:
                     # for each subdata split
                     split_name = subdata_param.replace(DATA_SPLIT_SUFFIX, "")
                     if split_name not in data:
-                        raise KeyError(f"Required data split `{split_name}` not found for `{subdata_param}`.")
+                        raise KeyError(f"Required data split `{split_name}` not found in `{subdata_param}`.")
                     self.cfg_dict[subdata_param] = DataLoader(
                         data[split_name],
                         batch_size=batch_size,  # type: ignore
@@ -109,25 +109,30 @@ class UnlearningMetric:
         ref_logs = {}
         ref_logs_cfgs = self.cfg_dict.pop("reference_logs", {})
         for ref_log_name, ref_log_cfg in ref_logs_cfgs.items():
-            path = Path(ref_log_cfg.get("path", "", allow_none=True))
-            if not path.exists():
-                logger.warning(
-                    f"Reference logs path for `{ref_log_name}` not found or doesn't exist."
-                )
+            path = ref_log_cfg.get("path", None)
+            if path is None:
+                logger.info(f"Reference logs path for `{ref_log_name}` not found.")
                 continue
+            else:
+                path = Path(path)
+                if not path.exists():
+                    logger.warning(
+                        f"Reference logs path for `{ref_log_name}` doesn't exist: {path.resolve()}."
+                    )
+                    continue
             # Load the reference logs
-            logger.info(f"Loading reference logs from {str(path)} ...")
+            logger.info(f"Loading reference logs from {path.resolve()} ...")
             _logs = load_logs(path)
             # for each include_cfg, load the corresponding logs
             ref_log = {}
-            include_cfgs = ref_log_cfg.get("include", {}, allow_none=True)
+            include_cfgs = ref_log_cfg.get("include", {}, check_none=True)
             for key, include_cfg in include_cfgs.items():
-                access_name = include_cfg.get("access_key", key, allow_none=True)
+                access_name = include_cfg.get("access_key", key, check_none=True)
                 _results = _logs.get(key, None)
                 ref_log[access_name] = _results
                 if _results is None:
                     logger.warning(
-                        f"`{key}` evals not present in the {str(path)}, setting it to None, may result in error soon if code attempts to access."
+                        f"`{key}` evals not present in the {path.resolve()}, setting it to None, may result in error soon if code attempts to access."
                     )
             ref_logs[ref_log_name] = ref_log
         self.cfg_dict["reference_logs"] = ref_logs

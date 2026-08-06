@@ -39,7 +39,7 @@ def load_trainer(
     data_collator: Optional[Any] = None
 ) -> FinetuneTrainer:
     args = _load_trainer_args(
-        trainer_cfg.get("args", {}),
+        trainer_cfg.get("args", {}, check_none=True),
         len(train_dataset) if train_dataset else 0
     )
     trainer_name = trainer_cfg["handler"]
@@ -52,7 +52,7 @@ def load_trainer(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         processing_class=processing_class,
-        **trainer_cfg.get("method_args", {}),
+        **trainer_cfg.get("method_args", {}, check_none=True),
     )
     logger.info(
         f"Trainer `{trainer_name}` loaded, output_dir: {args.output_dir}"
@@ -61,7 +61,7 @@ def load_trainer(
 
 
 def _load_trainer_args(trainer_args: TrackingConfig, dataset_len: int):
-    warmup_epochs = trainer_args.pop("warmup_epochs", None, allow_none=True)
+    warmup_epochs = trainer_args.pop("warmup_epochs", None)
     if warmup_epochs:
         batch_size = trainer_args["per_device_train_batch_size"]
         grad_accum_steps = trainer_args["gradient_accumulation_steps"]

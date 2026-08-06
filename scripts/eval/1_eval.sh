@@ -29,7 +29,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 MODEL=Llama-3.2-3B-Instruct
 MODEL_PATH=saves/finetune/test/tofu_Llama-3.2-3B-Instruct_full
 
-python src/eval.py --config-name=eval.yaml \
+python src/eval.py \
   experiment=eval/tofu/default \
   model=${MODEL} \
   model.model_args.pretrained_model_name_or_path=${MODEL_PATH} \

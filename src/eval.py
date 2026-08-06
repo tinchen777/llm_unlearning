@@ -1,7 +1,7 @@
 
 from __future__ import annotations
-from rich.traceback import install
-install(show_locals=False, width=100)
+# from rich.traceback import install
+# install(show_locals=False, width=100)
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import logging
@@ -9,14 +9,15 @@ from omegaconf import DictConfig
 
 from model import get_model_and_tokenizer
 from evals import get_evaluators
-from utils.common import set_seed, get_cuda_visible_devices
+from vis import plot_figures
+from utils.common import get_cuda_visible_devices
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 
 logger = logging.getLogger("main(eval)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="eval.yaml")
+@hydra.main(version_base=None, config_path="../configs", config_name="eval")
 def main(config: DictConfig):
     """Entry point of the code to evaluate models
     Args:
@@ -47,8 +48,13 @@ def main(config: DictConfig):
         )
 
     # START EVALUATION
+    vis_cfg = cfg.get("vis", None)
     for evaluator in evaluators.values():
         evaluator.evaluate(model)
+        # plotting
+        run_dir = evaluator.output_dir
+        if vis_cfg and run_dir is not None:
+            plot_figures([run_dir], vis_cfg)
 
 
 if __name__ == "__main__":

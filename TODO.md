@@ -38,3 +38,12 @@ retain: 90,95,99
 1. from scratch:
 
     TODO
+
+
+
+
+0-1. dataset: WMDP
+
+
+1. 尝试合并多个evalator 进入同一次实验
+2. 修改vis模块 支持多benchmark

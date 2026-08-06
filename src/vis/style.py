@@ -34,28 +34,25 @@ def series_color(i: int) -> str:
     return CATEGORICAL[i] if i < len(CATEGORICAL) else OTHER_GRAY
 
 
-# def series_colors(n: int):
-#     return [series_color(i) for i in range(n)]
-
-
 def apply_style():
     """Apply the shared rcParams. Call once before creating figures."""
     mpl.rcParams.update({
         "figure.dpi": 150,
         "figure.facecolor": SURFACE,
+        "figure.titlesize": 14,
         "savefig.facecolor": SURFACE,
         "savefig.bbox": "tight",
         "axes.facecolor": SURFACE,
         "axes.edgecolor": BASELINE,
-        "axes.linewidth": 0.8,
+        "axes.linewidth": 1.0,
         "axes.grid": True,
         "axes.axisbelow": True,
         "axes.titlesize": 11,
         "axes.titlecolor": INK_PRIMARY,
         "axes.labelsize": 9,
         "axes.labelcolor": INK_SECONDARY,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
+        "axes.spines.top": True,
+        "axes.spines.right": True,
         "grid.color": GRIDLINE,
         "grid.linewidth": 0.6,
         "xtick.color": INK_MUTED,

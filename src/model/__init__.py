@@ -23,12 +23,12 @@ def get_model_and_tokenizer(model_cfg: TrackingConfig) -> Tuple[Any, Any]:
     # get model
     model = _get_model(
         model_cfg["model_args"],
-        model_cfg.get("model_handler", "AutoModelForCausalLM")
+        model_cfg.get("model_handler", "AutoModelForCausalLM", check_none=True)
     )
     # Optional: wrap the loaded base model with a PEFT/LoRA adapter.
     # This is additive and only triggers when a `peft_args` block is present in
     # the model config, so existing (non-LoRA) configs are unaffected.
-    peft_args = model_cfg.get("peft_args", None, allow_none=True)
+    peft_args = model_cfg.get("peft_args", None)
     if peft_args is not None:
         model = _get_peft_lora_model(model, peft_args)
 
@@ -41,7 +41,7 @@ def get_model_and_tokenizer(model_cfg: TrackingConfig) -> Tuple[Any, Any]:
 def _get_model(model_args: TrackingConfig, model_handler: str):
     torch_dtype = _get_dtype(model_args)
     model_cls = MODEL_REGISTRY[model_handler]
-    model_path = model_args.pop("pretrained_model_name_or_path")
+    model_path = model_args.pop("pretrained_model_name_or_path", check_none=True)
     try:
         model = model_cls.from_pretrained(
             pretrained_model_name_or_path=model_path,
@@ -57,7 +57,7 @@ def _get_model(model_args: TrackingConfig, model_handler: str):
 
 
 def _get_dtype(model_args: TrackingConfig):
-    torch_dtype = model_args.pop("torch_dtype", None, allow_none=True)
+    torch_dtype = model_args.pop("torch_dtype", None)
     if model_args.get("attn_implementation", None) == "flash_attention_2":
         # This check handles https://github.com/Dao-AILab/flash-attention/blob/7153673c1a3c7753c38e4c10ef2c98a02be5f778/flash_attn/flash_attn_triton.py#L820
         # If you want to run at other precisions consider running "training or inference using
@@ -95,7 +95,7 @@ def _get_peft_lora_model(model, peft_args: TrackingConfig):
             "`pip install peft`."
         ) from e
 
-    adapter_path = peft_args.pop("path", None, allow_none=True)
+    adapter_path = peft_args.pop("path", None)
 
     if adapter_path is not None:
         # Load a previously trained LoRA adapter on top of the base model.
@@ -109,7 +109,7 @@ def _get_peft_lora_model(model, peft_args: TrackingConfig):
 
 
 def _get_tokenizer(tokenizer_args: TrackingConfig):
-    model_path = tokenizer_args.pop("pretrained_model_name_or_path")
+    model_path = tokenizer_args.pop("pretrained_model_name_or_path", check_none=True)
     try:
         tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=model_path,

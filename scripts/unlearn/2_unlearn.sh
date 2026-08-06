@@ -31,7 +31,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 MODEL=Llama-3.2-1B-Instruct
 
 echo start SimNPO
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=SimNPO \
@@ -52,7 +52,7 @@ echo end SimNPO
 #   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
 
 echo start WGA
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=WGA \
@@ -68,7 +68,7 @@ python src/train.py --config-name=unlearn.yaml \
 echo end WGA
 
 echo start UNDIAL
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=UNDIAL \
@@ -85,7 +85,7 @@ echo end UNDIAL
 
 
 echo start SatImp
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=SatImp \
@@ -101,7 +101,7 @@ python src/train.py --config-name=unlearn.yaml \
 echo end SatImp
 
 echo start RMU
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=RMU \
@@ -117,7 +117,7 @@ python src/train.py --config-name=unlearn.yaml \
 echo end RMU
 
 echo start PDU
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=PDU \

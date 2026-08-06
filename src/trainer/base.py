@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 import logging
-import os
+from pathlib import Path
 from transformers import Trainer
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
@@ -40,10 +40,10 @@ class FinetuneTrainer(Trainer):
                 )
                 return {}
             # output_dir
-            _run_dir = self._get_output_dir(trial=trial)
+            _run_dir = Path(self._get_output_dir(trial=trial))
             _ckp_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
-            output_dir = os.path.join(_run_dir, _ckp_folder, "evals")
-            os.makedirs(output_dir, exist_ok=True)
+            output_dir = _run_dir / _ckp_folder / "evals"
+            output_dir.mkdir(parents=True, exist_ok=True)
 
             eval_metrics = {}
             for evaluator in self.evaluators.values():

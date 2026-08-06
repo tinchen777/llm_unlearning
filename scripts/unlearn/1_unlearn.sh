@@ -31,7 +31,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 MODEL=Llama-3.2-1B-Instruct
 
 echo start BoundedGradDiff
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=BoundedGradDiff \
@@ -51,7 +51,7 @@ echo end BoundedGradDiff
 #   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
 
 echo start CEU
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=CEU \
@@ -64,7 +64,7 @@ python src/train.py --config-name=unlearn.yaml \
 echo end CEU
 
 echo start DPO
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/idk \
   model=${MODEL} \
   trainer=DPO \
@@ -77,7 +77,7 @@ echo end DPO
 
 
 echo start GradAscent
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=GradAscent \
@@ -91,7 +91,7 @@ echo end GradAscent
 
 
 echo start NPO
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=NPO \
@@ -107,7 +107,7 @@ python src/train.py --config-name=unlearn.yaml \
 echo end NPO
 
 echo start GradDiff
-python src/train.py --config-name=unlearn.yaml \
+python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
   model=${MODEL} \
   trainer=GradDiff \
