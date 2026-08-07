@@ -12,6 +12,10 @@ mode: finetune
 data_split: News
 data_sub_set: full   # full or retain
 
+model:
+  model_args:
+    attn_implementation: sdpa
+
 data:
   train:
     MUSE_train:
@@ -25,7 +29,7 @@ trainer:
   args:
     learning_rate: 1e-5
     weight_decay: 0.01
-    warmup_epochs: 1.0 # custom parameter
+    warmup_epochs: 1.0  # custom parameter
     num_train_epochs: 10
 
 task_name: ???

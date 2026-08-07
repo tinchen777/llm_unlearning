@@ -37,6 +37,10 @@ def _check_path(path: Path):
 
 
 def glob_with_keys(root: Path, name_pattern: str):
+    """
+    Glob for files under `root` matching `name_pattern`, and extract the key from the filename using the `*` in `name_pattern`.
+    NOTE: Only the first `*` in `name_pattern` is used for key extraction.
+    """
     paths = list(root.glob(name_pattern))
     # regex for matching
     name_regex = re.escape(name_pattern).replace(r"\*", "(.*)", 1)
@@ -54,11 +58,10 @@ class ExperimentLoader:
     _trainer_state: Dict[str, Any]
     _log_history: List[Dict[str, Any]]
     _log_history_df: pd.DataFrame
-    _eval_summaries: Dict[str, Dict[int, Dict[str, Any]]]
+    _eval_summaries: Dict[Tuple[int, str], Dict[str, Any]]
     _eval_summaries_df: pd.DataFrame
     _eval_details: Dict[Tuple[int, str], Dict[str, Any]]
-    _metric_keys: Set[str]
-    _all_metric_keys: Set[str]
+    _eval_details_df: pd.DataFrame
 
     def __init__(self, run_dir: Union[PathLike, str]):
         # run directory path
@@ -114,24 +117,27 @@ class ExperimentLoader:
         ).rename_axis(["step", "eval_name"]).sort_index()
 
     def _load_details(self):
+        """
+        Load the evaluation details from `*_EVAL.json` files under the run directory.
+        """
         self._eval_details = {}
-        root_detail_paths = list(self.run_dir.glob("*_EVAL.json"))
+        root_detail_paths = glob_with_keys(self.run_dir, "*_EVAL.json")
         if len(root_detail_paths) >= 1:
             # run-root EVAL
-            detail = load_logs(root_detail_paths[0])
-            self._eval_details[-1] = detail
-            self._all_metric_keys = set(detail)
+            self._update_step_dict(self._eval_details, root_detail_paths)
         else:
             # checkpoint EVAL
             self._all_metric_keys = set()
-            for step, ckp_path in self.step_ckp_paths.items():
-                ckp_detail_paths = list(ckp_path.glob(os.path.join("evals", "*_EVAL.json")))
-                if len(ckp_detail_paths) == 0:
-                    logger.warning(f"No `EVAL.json` found for checkpoint {str(ckp_path)}")
-                elif len(ckp_detail_paths) >= 1:
-                    detail = load_logs(ckp_detail_paths[0])
-                    self._all_metric_keys.update(detail)
-                    self._eval_details[step] = detail
+            for step, ckp_path in self.step_ckp_paths:
+                ckp_detail_paths = glob_with_keys(ckp_path / "evals", "*_EVAL.json")
+                if len(ckp_detail_paths) >= 1:
+                    self._update_step_dict(self._eval_details, ckp_detail_paths, step=step)
+                else:
+                    logger.warning(f"No `EVAL.json` found for checkpoint {ckp_path.resolve()}")
+        # eval_details_df
+        self._eval_details_df = pd.DataFrame.from_dict(
+            self._eval_details, orient="index"
+        ).rename_axis(["step", "eval_name"]).sort_index()
 
     @staticmethod
     def _update_step_dict(

@@ -1,4 +1,5 @@
 # @package eval.tofu.metrics.forget_Q_A_ROUGE
+
 defaults:
   - ../../data/datasets@datasets: TOFU_QA_forget
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
@@ -15,7 +16,8 @@ datasets: # override as needed
         name: ${eval.tofu.forget_split}_perturbed
       question_key: ${eval.tofu.question_key}
       predict_with_generate: True
+
 collators:
-  DataCollatorForSupervisedDataset: 
+  DataCollatorForSupervisedDataset:
     args:
       padding_side: left

@@ -3,13 +3,12 @@
 
 defaults:
   - muse_metrics:
-  # FIXME
-    # - forget_knowmem_ROUGE
-    # - retain_knowmem_ROUGE
-    # - forget_verbmem_ROUGE
-    # - privleak
-    # - extraction_strength
-  
+    - forget_knowmem_ROUGE
+    - retain_knowmem_ROUGE
+    - forget_verbmem_ROUGE
+    - privleak
+    - extraction_strength
+
     # - exact_memorization
     # - mia_min_k_plus_plus
     - mia_min_k
@@ -20,8 +19,9 @@ defaults:
     # - forget_gibberish
 
 handler: MUSEEvaluator
-output_dir: ${paths.output_dir} # set to default eval directory
+output_dir: ${paths.output_dir}
 metrics: {}
 overwrite: false
 data_split: News
 retain_logs_path: null
+batch_size: 4

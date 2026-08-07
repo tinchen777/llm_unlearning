@@ -1,7 +1,9 @@
 # @package eval.muse.metrics.mia_min_k
+
 defaults:
   - ../../data/datasets@datasets: MUSE_MIA
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
+
 datasets:
   MUSE_MIA_holdout:
     args:
@@ -13,6 +15,6 @@ datasets:
       hf_args:
         path: muse-bench/MUSE-${eval.muse.data_split}
 
-batch_size: 8
+batch_size: ${eval.muse.batch_size}
 handler: mia_min_k
 k: 0.4

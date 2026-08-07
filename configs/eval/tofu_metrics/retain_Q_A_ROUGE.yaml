@@ -1,10 +1,9 @@
 # @package eval.tofu.metrics.retain_Q_A_ROUGE
+
 defaults:
   - ../../data/datasets@datasets: TOFU_QA_retain_eval
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
   - ../../generation@generation_args: default
-  
-
 
 handler: rouge
 rouge_type: rougeL_recall
@@ -15,6 +14,6 @@ datasets: # override as needed
       question_key: ${eval.tofu.question_key}
       predict_with_generate: True
 collators:
-  DataCollatorForSupervisedDataset: 
+  DataCollatorForSupervisedDataset:
     args:
       padding_side: left

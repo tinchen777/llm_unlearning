@@ -18,7 +18,9 @@ path_3 = "saves/unlearn/test_muse/BoundedGradDiff"
 
 loader = ExperimentLoader(path_3)
 
-# print(loader.log_history_df)
+print(loader.log_history_df)
+
+print(loader.train_keys)
 # df = loader.log_history_df
 
 # a = df.index.get_level_values("step")
@@ -34,6 +36,11 @@ loader = ExperimentLoader(path_3)
 print(loader.metric_keys)
 
 print(loader.eval_summaries_df)
+
+
+print(loader.eval_detail)
+
+print(loader._eval_details_df)
 
 exit()
 

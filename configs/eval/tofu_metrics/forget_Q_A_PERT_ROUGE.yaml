@@ -1,4 +1,5 @@
 # @package eval.tofu.metrics.forget_Q_A_PERT_ROUGE
+
 defaults:
   - ../../data/datasets@datasets: TOFU_QA_forget_pert
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
@@ -17,6 +18,6 @@ datasets:
       predict_with_generate: True
 
 collators:
-  DataCollatorForSupervisedDataset: 
+  DataCollatorForSupervisedDataset:
     args:
       padding_side: left

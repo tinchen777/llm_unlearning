@@ -1,4 +1,5 @@
 # @package eval.tofu.metrics.wf_Q_A_ROUGE
+
 defaults:
   - ../../data/datasets@datasets: TOFU_QA_wf
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
@@ -7,11 +8,13 @@ defaults:
 handler: rouge
 rouge_type: rougeL_recall
 batch_size: ${eval.tofu.batch_size}
-datasets: # override as needed
+
+datasets:
   TOFU_QA_wf:
     args:
       predict_with_generate: True
+
 collators:
-  DataCollatorForSupervisedDataset: 
+  DataCollatorForSupervisedDataset:
     args:
       padding_side: left

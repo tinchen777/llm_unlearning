@@ -28,12 +28,12 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 MODEL=Qwen2.5-3B-Instruct
 
 python src/train.py \
-  experiment=finetune/tofu/default \
+  experiment=finetune/muse/default \
   model=${MODEL} \
   trainer.args.eval_on_start=True \
+  trainer.args.per_device_train_batch_size=1 \
   trainer.args.num_train_epochs=5 \
-  task_name=test/tofu_${MODEL}_full \
-  --cfg job
+  task_name=test/muse_${MODEL}_full \
   # trainer.args.gradient_checkpointing=true \
 
 echo end finetune ${MODEL}
