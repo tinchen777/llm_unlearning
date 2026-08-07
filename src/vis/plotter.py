@@ -11,13 +11,14 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import logging
-from typing import Optional, Sequence, Tuple, Union, TYPE_CHECKING
+from typing import Optional, Dict, Set, Sequence, Tuple, Union, TYPE_CHECKING
 
 from .style import apply_style, series_color, legend_if_multi, INK_SECONDARY
 from .loader import ExperimentLoader
 
 if TYPE_CHECKING:
     from os import PathLike
+    from matplotlib.figure import Figure
 
 logger = logging.getLogger("vis.plot")
 
@@ -43,6 +44,8 @@ def _grid_axes(
 
 
 class Plotter:
+    _named_metric_keys: Dict[str, Set[str]]
+
     def __init__(self, *run_dirs: Union[PathLike, str]):
         self.runs = [ExperimentLoader(run) for run in run_dirs]
         if len(self.runs) == 0:
@@ -50,6 +53,13 @@ class Plotter:
         self._run_labels = tuple(run.label for run in self.runs)
 
         apply_style()
+
+    def _merge_named_metric_keys(self):
+        """Merge named metric keys across runs."""
+        self._named_metric_keys = {}
+        for run in self.runs:
+            for name, metric_keys in run.named_metric_keys.items():
+                self._named_metric_keys.setdefault(name, set()).update(metric_keys)
 
     def plot_training_curves(
         self,
@@ -90,7 +100,7 @@ class Plotter:
             legend_if_multi(ax, len(self.runs))
         fig.tight_layout(rect=(0, 0, 1, 0.93))
         fig.suptitle(suptitle)
-        return fig
+        return {"": fig}
 
     def plot_metric_trajectories(
         self,
@@ -101,23 +111,40 @@ class Plotter:
         Eval metric trajectories over checkpoints, from every
         `checkpoint-*/evals/*_SUMMARY.json`, one panel per metric, one line per run. X-axis is `"step"` (checkpoint step).
         """
+        named_figs: Dict[str, Figure] = {}
+        for name, metric_keys in self.named_metric_keys.items():
+            # filter by requested metrics if provided
+            if metrics:
+                metric_keys = metric_keys.intersection(metrics)
+            if len(metric_keys) == 0:
+                raise ValueError(f"No available eval metrics found under the given runs for {name}: {self.runs}")
+            named_figs[name] = self.plot_named_metric_trajectories(name, metric_keys, max_ncols=max_ncols)
+        return named_figs
+
+    def plot_named_metric_trajectories(
+        self,
+        name: str,
+        metric_keys: Set[str],
+        max_ncols: int = 3
+    ):
+        """
+        Eval metric trajectories over checkpoints, from every
+        `checkpoint-*/evals/*_SUMMARY.json`, one panel per metric, one line per run. X-axis is `"step"` (checkpoint step).
+        """
         X_KEY = "step"
 
-        suptitle = "Eval Metric Trajectories"
+        suptitle = f"{name} Eval Metric Trajectories"
         logger.info(f"Plotting {suptitle} ...")
         if len(self._run_labels) == 1:
             # single-run plots don't need a legend, so we can name the run in the title
             suptitle += f" ({self._run_labels[0]})"
-        # eval metrics
-        _metric_keys = set.union(*[run.metric_keys for run in self.runs])
-        _metric_keys = _metric_keys.intersection(metrics) if metrics else _metric_keys
-        if len(_metric_keys) == 0:
-            raise ValueError(f"No eval metrics found under the given runs: {self.runs}")
 
-        fig, axes = _grid_axes(len(_metric_keys), max_ncols)
-        for ax, metric in zip(axes, sorted(_metric_keys)):
+        fig, axes = _grid_axes(len(metric_keys), max_ncols)
+        for ax, metric in zip(axes, sorted(metric_keys)):
             for i, run in enumerate(self.runs):
-                df = run.eval_summaries_df
+                if name not in run.eval_summaries_dfs:
+                    continue
+                df = run.eval_summaries_dfs[name]
                 if metric in df.columns:
                     ax.plot(
                         df.index.get_level_values(X_KEY),
@@ -126,7 +153,7 @@ class Plotter:
                         color=series_color(i),
                         label=run.label
                     )
-            ax.set_title(metric)
+            ax.set_title(f"{name}-{metric}")
             ax.set_xlabel(X_KEY)
             # if metric in LOG_SCALE_METRICS:
             #     ax.set_yscale("log")
@@ -144,21 +171,39 @@ class Plotter:
         Final eval metrics compared across runs, from each run's final summary
         (`*_SUMMARY.json` in the run root or last checkpoint). One panel per metric, one bar per run.
         """
-        suptitle = "Method Comparison"
+        named_figs: Dict[str, Figure] = {}
+        for name, metric_keys in self.named_metric_keys.items():
+            # filter by requested metrics if provided
+            if metrics:
+                metric_keys = metric_keys.intersection(metrics)
+            if len(metric_keys) == 0:
+                raise ValueError(f"No available eval metrics found under the given runs for {name}: {self.runs}")
+            named_figs[name] = self.plot_named_method_comparison(name, metric_keys, max_ncols=max_ncols)
+        return named_figs
+
+    def plot_named_method_comparison(
+        self,
+        name: str,
+        metric_keys: Set[str],
+        max_ncols: int = 3
+    ):
+        """
+        Final eval metrics compared across runs, from each run's final summary
+        (`*_SUMMARY.json` in the run root or last checkpoint). One panel per metric, one bar per run.
+        """
+        suptitle = f"{name} Method Comparison"
         logger.info(f"Plotting {suptitle} ...")
         if len(self._run_labels) == 1:
+            # single-run plots don't need a legend, so we can name the run in the title
             suptitle += f" ({self._run_labels[0]})"
-        # eval metrics
-        _metric_keys = set.union(*[run.metric_keys for run in self.runs])
-        _metric_keys = _metric_keys.intersection(metrics) if metrics else _metric_keys
-        if len(_metric_keys) == 0:
-            raise ValueError(f"No eval metrics found under the given runs: {self.runs}")
 
-        fig, axes = _grid_axes(len(_metric_keys), max_ncols)
-        for ax, metric in zip(axes, sorted(_metric_keys)):
+        fig, axes = _grid_axes(len(metric_keys), max_ncols)
+        for ax, metric in zip(axes, sorted(metric_keys)):
             values, colors, xticklabels = [], [], []
             for i, run in enumerate(self.runs):
-                values.append(run.eval_final_summaries.get(metric))
+                if name not in run.eval_final_summaries:
+                    continue
+                values.append(run.eval_final_summaries[name].get(metric))
                 colors.append(series_color(i))
                 xticklabels.append(run.label)
 
@@ -173,7 +218,7 @@ class Plotter:
                     va="bottom" if v >= 0 else "top",
                     fontsize=7, color=INK_SECONDARY,
                 )
-            ax.set_title(metric)
+            ax.set_title(f"{name}-{metric}")
             # if metric in LOG_SCALE_METRICS and all(v > 0 for v in values):
             #     ax.set_yscale("log")
             ax.grid(axis="x", visible=False)
@@ -186,9 +231,25 @@ class Plotter:
         x_metric: str = "model_utility",
         y_metric: str = "forget_quality",
     ):
+        """
+        Final eval metrics compared across runs, from each run's final summary
+        (`*_SUMMARY.json` in the run root or last checkpoint). One panel per metric, one bar per run.
+        """
+        named_figs: Dict[str, Figure] = {}
+        for name, metric_keys in self.named_metric_keys.items():
+            if x_metric in metric_keys and y_metric in metric_keys:
+                named_figs[name] = self.plot_named_tradeoff(name, x_metric=x_metric, y_metric=y_metric)
+        return named_figs
+
+    def plot_named_tradeoff(
+        self,
+        name: str,
+        x_metric: str = "model_utility",
+        y_metric: str = "forget_quality",
+    ):
         """Forget/utility trade-off scatter: one labeled point per run, from each
         run's final summary. The usual reading: up and to the right is better."""
-        suptitle = f"Trade-off: {y_metric} vs {x_metric}"
+        suptitle = f"{name} Trade-off: {y_metric} vs {x_metric}"
         logger.info(f"Plotting {suptitle} ...")
         if len(self._run_labels) == 1:
             suptitle += f" ({self._run_labels[0]})"
@@ -196,12 +257,14 @@ class Plotter:
         fig, ax = plt.subplots(figsize=(4.6, 3.6))
         drawn = 0
         for i, run in enumerate(self.runs):
-            final_summary = run.eval_final_summaries
+            if name not in run.eval_final_summaries:
+                continue
+            final_summary = run.eval_final_summaries[name]
             x, y = final_summary.get(x_metric), final_summary.get(y_metric)
             if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
                 logger.warning(
-                    f"Run {run} misses required metrics {x_metric}/{y_metric}; "
-                    f"available metrics: {run.metric_keys}. Skipped."
+                    f"{name} run {run} misses required metrics {x_metric}/{y_metric}; "
+                    f"available metrics: {run.named_metric_keys}. Skipped."
                 )
                 continue
             ax.scatter([x], [y], s=64, color=series_color(i), zorder=3)
@@ -211,10 +274,9 @@ class Plotter:
             )
             drawn += 1
         if not drawn:
-            raise ValueError(f"No run provides both `{x_metric}` and `{y_metric}`")
+            raise ValueError(f"No {name} run provides both `{x_metric}` and `{y_metric}`")
         ax.set_xlabel(x_metric)
         ax.set_ylabel(y_metric)
-        # ax.set_title(f"{y_metric} vs {x_metric}")
         # if y_metric in LOG_SCALE_METRICS:
         #     ax.set_yscale("log")
         fig.tight_layout(rect=(0, 0, 1, 0.93))
@@ -225,6 +287,13 @@ class Plotter:
     def default_out_dir(self):
         """Default output directory for plots, if not specified by the caller."""
         return self.runs[0].run_dir / "plots"
+
+    @property
+    def named_metric_keys(self):
+        """All named metric keys across runs, merged into a single dict."""
+        if not hasattr(self, "_named_metric_keys"):
+            self._merge_named_metric_keys()
+        return self._named_metric_keys
 
     # def plot_stat_distribution(
     #     self,

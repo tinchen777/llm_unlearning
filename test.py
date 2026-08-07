@@ -33,16 +33,18 @@ print(loader.train_keys)
 # print(loader.train_keys)
 
 
-print(loader.metric_keys)
+# print(loader.metric_keys)
 
-print(loader.eval_summaries_df)
+print(loader.eval_summaries_dfs)
+print(loader.eval_final_summaries)
+print(loader.named_metric_keys)
 
 
-print(loader.eval_detail)
 
-print(loader._eval_details_df)
+print(loader.eval_details_dfs)
+print(loader.named_all_metric_keys)
 
-exit()
+# exit()
 
 
 plot = Plotter(path_2)
@@ -51,11 +53,12 @@ fig = plot.plot_training_curves()
 
 fig.savefig("training_curves.png", dpi=150, bbox_inches="tight")
 
-fig = plot.plot_metric_trajectories()
-fig.savefig("metric_trajectories.pdf", dpi=150, bbox_inches="tight")
+figs = plot.plot_metric_trajectories()
+for name, fig in figs.items():
+    fig.savefig(f"metric_trajectories_{name}.pdf", dpi=150, bbox_inches="tight")
 
-
-fig = plot.plot_method_comparison()
+exit()
+fig = plot.plot_named_method_comparison()
 fig.savefig("method_comparison.pdf", dpi=150, bbox_inches="tight")
 
 

@@ -14,12 +14,11 @@ may contain:
 """
 
 from __future__ import annotations
-import os
 import re
 import pandas as pd
 from pathlib import Path
 import logging
-from typing import Any, Dict, List, Set, Tuple, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Union, TYPE_CHECKING
 
 from utils.common import load_logs
 
@@ -56,12 +55,9 @@ def glob_with_keys(root: Path, name_pattern: str):
 
 class ExperimentLoader:
     _trainer_state: Dict[str, Any]
-    _log_history: List[Dict[str, Any]]
     _log_history_df: pd.DataFrame
-    _eval_summaries: Dict[Tuple[int, str], Dict[str, Any]]
-    _eval_summaries_df: pd.DataFrame
-    _eval_details: Dict[Tuple[int, str], Dict[str, Any]]
-    _eval_details_df: pd.DataFrame
+    _eval_summaries_dfs: Dict[str, pd.DataFrame]
+    _eval_details_dfs: Dict[str, pd.DataFrame]
 
     def __init__(self, run_dir: Union[PathLike, str]):
         # run directory path
@@ -80,85 +76,85 @@ class ExperimentLoader:
         """
         Load the trainer state and log history from `trainer_state.json`.
         """
+        # load trainer state
         if self.trainer_state_path is not None:
             self._trainer_state = load_logs(self.trainer_state_path)
-            self._log_history = self._trainer_state.get("log_history", [])
-            # `log_history_df` only contains entries that have all NON_METRIC_KEYS.
+            # load log history
+            _log_history: List[Dict[str, Any]] = self._trainer_state.get("log_history", [])
+            # create log_history_df, which only contains entries that have all NON_METRIC_KEYS.
             self._log_history_df = pd.DataFrame([
-                entry for entry in self._log_history
+                entry for entry in _log_history
                 if _NON_METRIC_KEYS.issubset(entry.keys())
             ]).set_index(["step", "epoch"], drop=True).sort_index()
         else:
             logger.warning(f"No `trainer_state.json` found under {self.run_dir.resolve()}")
             self._trainer_state = {}
-            self._log_history = []
             self._log_history_df = pd.DataFrame()
 
     def _load_summaries(self):
         """
         Load the evaluation summaries from `*_SUMMARY.json` files under the run directory.
         """
-        self._eval_summaries = {}
+        _named_eval_summaries: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        # load eval_summaries
         root_summary_paths = glob_with_keys(self.run_dir, "*_SUMMARY.json")
         if len(root_summary_paths) >= 1:
             # run-root SUMMARY
-            self._update_step_dict(self._eval_summaries, root_summary_paths)
+            self._update_named_step_dict(_named_eval_summaries, root_summary_paths)
         else:
             # checkpoint SUMMARY
             for step, ckp_path in self.step_ckp_paths:
                 ckp_summary_paths = glob_with_keys(ckp_path / "evals", "*_SUMMARY.json")
                 if len(ckp_summary_paths) >= 1:
-                    self._update_step_dict(self._eval_summaries, ckp_summary_paths, step=step)
+                    self._update_named_step_dict(_named_eval_summaries, ckp_summary_paths, step=step)
                 else:
                     logger.warning(f"No `SUMMARY.json` found for checkpoint {ckp_path.resolve()}")
-        # eval_summaries_df
-        self._eval_summaries_df = pd.DataFrame.from_dict(
-            self._eval_summaries, orient="index"
-        ).rename_axis(["step", "eval_name"]).sort_index()
+        # create eval_summaries_dfs
+        self._eval_summaries_dfs = {
+            name: pd.DataFrame.from_dict(step_dict, orient="index")
+            .rename_axis(["step"]).sort_index()
+            for name, step_dict in _named_eval_summaries.items()
+        }
 
     def _load_details(self):
         """
         Load the evaluation details from `*_EVAL.json` files under the run directory.
         """
-        self._eval_details = {}
+        _named_eval_details: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        # load eval_details
         root_detail_paths = glob_with_keys(self.run_dir, "*_EVAL.json")
         if len(root_detail_paths) >= 1:
             # run-root EVAL
-            self._update_step_dict(self._eval_details, root_detail_paths)
+            self._update_named_step_dict(_named_eval_details, root_detail_paths)
         else:
             # checkpoint EVAL
-            self._all_metric_keys = set()
             for step, ckp_path in self.step_ckp_paths:
                 ckp_detail_paths = glob_with_keys(ckp_path / "evals", "*_EVAL.json")
                 if len(ckp_detail_paths) >= 1:
-                    self._update_step_dict(self._eval_details, ckp_detail_paths, step=step)
+                    self._update_named_step_dict(_named_eval_details, ckp_detail_paths, step=step)
                 else:
                     logger.warning(f"No `EVAL.json` found for checkpoint {ckp_path.resolve()}")
-        # eval_details_df
-        self._eval_details_df = pd.DataFrame.from_dict(
-            self._eval_details, orient="index"
-        ).rename_axis(["step", "eval_name"]).sort_index()
+        # create eval_details_df
+        self._eval_details_dfs = {
+            name: pd.DataFrame.from_dict(step_dict, orient="index")
+            .rename_axis(["step"]).sort_index()
+            for name, step_dict in _named_eval_details.items()
+        }
 
     @staticmethod
-    def _update_step_dict(
-        step_dict: Dict[Tuple[int, str], Dict[str, Any]],
+    def _update_named_step_dict(
+        named_step_dict: Dict[str, Dict[int, Dict[str, Any]]],
         name_paths: List[tuple[str, Path]],
         step: int = -1
     ):
         for name, path in name_paths:
-            step_dict[(step, name)] = load_logs(path)
+            named_step_dict.setdefault(name, {})[step] = load_logs(path)
 
     @property
     def trainer_state(self):
         if not hasattr(self, "_trainer_state"):
             self._load_trainer_state()
         return self._trainer_state
-
-    @property
-    def log_history(self):
-        if not hasattr(self, "_log_history"):
-            self._load_trainer_state()
-        return self._log_history
 
     @property
     def log_history_df(self):
@@ -171,35 +167,25 @@ class ExperimentLoader:
         return set(self.log_history_df.columns)
 
     @property
-    def eval_summaries(self):
-        if not hasattr(self, "_eval_summaries"):
+    def eval_summaries_dfs(self):
+        if not hasattr(self, "_eval_summaries_dfs"):
             self._load_summaries()
-        return self._eval_summaries
-
-    @property
-    def eval_summaries_df(self):
-        if not hasattr(self, "_eval_summaries_df"):
-            self._load_summaries()
-        return self._eval_summaries_df
+        return self._eval_summaries_dfs
 
     @property
     def eval_final_summaries(self):
-        if len(self.eval_summaries) == 0:
-            return {}
-        return self.eval_summaries[max(self.eval_summaries)]
+        return {name: df.iloc[-1].to_dict() for name, df in self.eval_summaries_dfs.items()}
 
     @property
-    def metric_keys(self):
-        return set(self.eval_summaries_df.columns)
+    def named_metric_keys(self):
+        return {name: set(df.columns) for name, df in self.eval_summaries_dfs.items()}
 
     @property
-    def eval_detail(self):
-        if not hasattr(self, "_eval_details"):
+    def eval_details_dfs(self):
+        if not hasattr(self, "_eval_details_dfs"):
             self._load_details()
-        return self._eval_details
+        return self._eval_details_dfs
 
     @property
-    def all_metric_keys(self):
-        if not hasattr(self, "_all_metric_keys"):
-            self._load_details()
-        return self._all_metric_keys
+    def named_all_metric_keys(self):
+        return {name: set(df.columns) for name, df in self.eval_details_dfs.items()}

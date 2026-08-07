@@ -41,20 +41,23 @@ def plot_figures(
     # save args
     save_args = vis_cfg.get("save_args", {}, check_none=True)
     # plot each figure
-    plot_figs: Dict[str, Figure] = {}
+    plot_figs: Dict[str, Dict[str, Figure]] = {}
     for plot_name, plot_cfg in vis_cfg["plots"].items():
         if plot_name not in PLOT_REGISTRY:
             logger.warning(f"Unknown plot name: {plot_name}, skipped.")
             continue
         # plot
         plot_func = getattr(plotter, plot_cfg["handler"])
-        fig = plot_func(**plot_cfg.get("args", {}, check_none=True))
+        figs = plot_func(**plot_cfg.get("args", {}, check_none=True))
         # save
         if _out_dir is not None:
-            save_path = _out_dir / f"{plot_name}.{plot_cfg.get('file_type', 'png', check_none=True)}"
-            fig.savefig(save_path, **save_args)
-            logger.info(f"Saved plot '{plot_name}' to {save_path}")
+            file_type = plot_cfg.get("file_type", "png", check_none=True)
+            for name, fig in figs.items():
+                file_name = f"{name}-{plot_name}" if name else plot_name
+                save_path = _out_dir / f"{file_name}.{file_type}"
+                fig.savefig(save_path, **save_args)
+                logger.info(f"Saved plot '{file_name}' to {save_path}")
         # update dict
-        plot_figs[plot_name] = fig
+        plot_figs[plot_name] = figs
 
     return plot_figs
