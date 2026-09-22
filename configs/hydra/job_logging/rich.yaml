@@ -3,6 +3,7 @@
 # configs/hydra/default.yaml, or per-run on the CLI: `hydra/job_logging=rich`.
 # Requires: pip install rich
 version: 1
+
 formatters:
   rich:
     # Custom formatter (src/log_utils.py): colors the logger name and escapes
@@ -12,6 +13,7 @@ formatters:
   plain:
     # Plain text for the log file (no color markup written to disk).
     format: "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"
+
 handlers:
   rich:
     class: rich.logging.RichHandler
@@ -25,6 +27,7 @@ handlers:
     class: logging.FileHandler
     formatter: plain
     filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
+
 root:
   level: INFO
   handlers: [rich, file]

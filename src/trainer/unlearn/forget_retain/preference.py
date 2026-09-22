@@ -7,11 +7,18 @@ from .base import ForgetRetainTrainer
 
 
 class NPO(ForgetRetainTrainer):
+    """
+    NPO (Negative Preference Optimization)
+    ref: Negative Preference Optimization: From Catastrophic Collapse  to Effective Unlearning
+
+    NPO is DPO with ZERO winner
+    把遗忘答案的分数，压到低于'原模型在别处的正常水平'。除此之外，别的都别动。
+    """
     requires_ref_model = True
 
     def __init__(self, beta: float = 1.0, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.beta = beta
+        self.beta = beta  # inverse temperature
 
     def compute_forget_loss(self, model, forget_inputs, **kwargs):
         lose_loss, lose_outputs, _ = compute_batch_nll(model, forget_inputs)
@@ -23,11 +30,15 @@ class NPO(ForgetRetainTrainer):
 
 
 class DPO(ForgetRetainTrainer):
+    """
+    DPO (Direct Preference Optimization)
+    ref: Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+    """
     requires_ref_model = True
 
     def __init__(self, beta: float = 0.1, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.beta = beta
+        self.beta = beta  # inverse temperature
 
     def compute_forget_loss(self, model, forget_inputs, **kwargs):
         # win
@@ -48,14 +59,25 @@ class DPO(ForgetRetainTrainer):
 
 
 class SimNPO(ForgetRetainTrainer):
-    def __init__(self, delta: float = 0.0, beta: float = 1.0, *args, **kwargs):
+    """
+    SimNPO
+    ref: Simplicity Prevails: Rethinking Negative Preference  Optimization for LLM Unlearning
+    """
+    def __init__(
+        self,
+        delta: float = 0.0,
+        beta: float = 1.0,
+        gamma: float = 0.0,
+        *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.delta = delta
         self.beta = beta
+        self.gamma = gamma
 
     def compute_forget_loss(self, model, forget_inputs, **kwargs):
         losses, outputs, shift_labels_mask = compute_batch_nll(model, forget_inputs)
         diff = losses / shift_labels_mask.sum(-1).clamp(min=1) - self.delta
 
-        loss = -2 / self.beta * F.logsigmoid(self.beta * diff).mean()
+        loss = -2 / self.beta * F.logsigmoid(self.beta * diff - self.gamma).mean()
         return loss, outputs

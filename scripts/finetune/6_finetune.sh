@@ -26,14 +26,16 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
 MODEL=phi-1_5
-epochs=5
+data_split=News
 
 python src/train.py \
-  experiment=finetune/tofu/default \
+  experiment=finetune/muse/default \
   model=${MODEL} \
+  data_split=${data_split} \
   trainer.args.eval_on_start=True \
-  trainer.args.num_train_epochs=${epochs} \
-  task_name=test/tofu_${MODEL}_ep${epochs}_full \
-  # --cfg job
+  trainer.args.per_device_train_batch_size=1 \
+  trainer.args.num_train_epochs=5 \
+  task_name=test/muse_${MODEL}_${data_split}_full \
+  # trainer.args.gradient_checkpointing=true \
 
 echo end finetune ${MODEL}

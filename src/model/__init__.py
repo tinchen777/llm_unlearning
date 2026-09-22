@@ -45,7 +45,7 @@ def _get_model(model_args: TrackingConfig, model_handler: str):
     try:
         model = model_cls.from_pretrained(
             pretrained_model_name_or_path=model_path,
-            dtype=torch_dtype,  # transformers>=4.56 renamed `torch_dtype` -> `dtype`
+            dtype=torch_dtype,
             **model_args,
         )
     except Exception as e:

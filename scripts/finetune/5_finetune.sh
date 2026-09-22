@@ -25,15 +25,17 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=Qwen2.5-3B-Instruct
+MODEL=Llama-3.2-1B-Instruct
+data_split=News
 
 python src/train.py \
   experiment=finetune/muse/default \
   model=${MODEL} \
+  data_split=${data_split} \
   trainer.args.eval_on_start=True \
-  trainer.args.per_device_train_batch_size=1 \
+  trainer.args.per_device_train_batch_size=8 \
   trainer.args.num_train_epochs=5 \
-  task_name=test/muse_${MODEL}_full \
+  task_name=test/muse_${MODEL}_${data_split}_full_bsz8 \
   # trainer.args.gradient_checkpointing=true \
 
 echo end finetune ${MODEL}

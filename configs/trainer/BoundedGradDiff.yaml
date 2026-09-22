@@ -2,6 +2,7 @@ defaults:
   - finetune          # 继承 configs/trainer/finetune.yaml 里的 HuggingFace TrainingArguments
 
 handler: BoundedGradDiff   # 必须等于 src/trainer/unlearn/bounded_grad_diff.py 里的类名
+
 method_args:               # 这些会作为 **kwargs 传给 BoundedGradDiff.__init__
   gamma: 1.0               # forget 项权重 (继承自 GradDiff)
   alpha: 1.0               # retain 项权重 (继承自 GradDiff)

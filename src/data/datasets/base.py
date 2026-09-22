@@ -76,10 +76,13 @@ class BaseDataset(Dataset):
 
 
 def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> HFDataset:
-    dataset = datasets.load_dataset(path, **kwargs)
-    if add_index:
-        dataset = dataset.add_column("index", np.arange(len(dataset)))
-    return dataset
+    try:
+        dataset = datasets.load_dataset(path, **kwargs)
+        if add_index:
+            dataset = dataset.add_column("index", np.arange(len(dataset)))
+        return dataset
+    except Exception as e:
+        raise RuntimeError(f"Failed to load dataset from path: {path} with arguments: {kwargs}") from e
 
 
 def get_map_kwargs(

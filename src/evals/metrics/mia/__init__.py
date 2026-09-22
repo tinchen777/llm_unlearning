@@ -13,7 +13,6 @@ from .reference import ReferenceAttack
 
 if TYPE_CHECKING:
     from torch.utils.data import DataLoader
-    from .base import Attack
 
 logger = logging.getLogger("eval.metric.mia")
 
@@ -45,10 +44,10 @@ def mia_zlib(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, tokenize
 
 @MetricMIAFunc
 def mia_reference(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, reference_model_path: str, **kwargs):
-    logger.info(f"Loading reference model from {reference_model_path}")
+    logger.info(f"Loading reference model from `{reference_model_path}`")
     reference_model = AutoModelForCausalLM.from_pretrained(
         reference_model_path,
-        dtype=model.dtype,  # transformers>=4.56 renamed `torch_dtype` -> `dtype`
+        dtype=model.dtype,
         device_map={"": model.device},
     )
     return dict(attack_cls=ReferenceAttack, reference_model=reference_model)

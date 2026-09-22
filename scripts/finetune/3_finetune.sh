@@ -26,12 +26,13 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
 MODEL=Qwen2.5-1.5B-Instruct
+epochs=5
 
 python src/train.py \
   experiment=finetune/tofu/default \
   model=${MODEL} \
   trainer.args.eval_on_start=True \
-  trainer.args.num_train_epochs=5 \
-  task_name=test/tofu_${MODEL}_full \
+  trainer.args.num_train_epochs=${epochs} \
+  task_name=test/tofu_${MODEL}_ep${epochs}_full \
 
 echo end finetune ${MODEL}
