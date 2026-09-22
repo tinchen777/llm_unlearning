@@ -1,0 +1,19 @@
+# @package _global_
+# Variant: recompute the neighbour targets every step (target_source=online)
+# and sample one neighbour per step instead of averaging.
+
+defaults:
+  - unlearn/tofu/fwt
+
+data:
+  forget:
+    TOFU_QA_forget_neighbor:
+      args:
+        return_neighbors: true
+
+trainer:
+  method_args:
+    target_source: online
+    target_mode: sample
+
+task_name: ???

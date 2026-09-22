@@ -1,0 +1,24 @@
+defaults:
+  - GradDiff
+
+handler: NeighborRedirect
+
+method_args:
+  # --- loss weights ---------------------------------------------------------
+  gamma: 1.0                      # weight of the redirection term
+  alpha: 1.0                      # weight of the retain term
+  retain_loss_type: NLL           # NLL | KL | EMBED_DIFF
+  # --- where the edit happens ----------------------------------------------
+  layers: [7]                     # from fwt/scripts/select_layers.py
+  trainable_params_regex: null    # null -> mlp.down_proj.weight of `layers`
+  position_strategy: last_prompt  # last_prompt | prompt_mean | answer | last | all
+  # --- redirection target ---------------------------------------------------
+  target_source: precompute       # precompute (cached once) | online
+  target_mode: mean               # mean of the M neighbours | sample one per step
+  redirect_loss_type: mse         # mse | cosine
+  match_target_norm: false        # rescale the target to the source norm
+  target_batch_size: 8            # batch size used when caching the targets
+  # --- optional contrastive term (ablation against LUNAR's claim) -----------
+  contrastive_weight: 0.0         # > 0 enables InfoNCE
+  contrastive_temperature: 0.1
+  contrastive_negatives: [self_ref, in_batch]

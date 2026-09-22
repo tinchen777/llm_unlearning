@@ -1,0 +1,12 @@
+# @package _global_
+# Ablation: MSE redirection + InfoNCE, against the MSE-only default.
+
+defaults:
+  - unlearn/tofu/fwt
+
+trainer:
+  method_args:
+    contrastive_weight: 0.5
+    contrastive_negatives: [self_ref, in_batch]
+
+task_name: ???
