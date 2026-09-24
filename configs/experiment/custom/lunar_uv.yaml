@@ -1,0 +1,37 @@
+# @package _global_
+# Probe a model's responses and compute the LUNAR unlearning vector
+#   r_UV[l] = mean(a_l | reference) - mean(a_l | forget)
+# over the end-of-instruction tokens, for every decoder layer l (src/gen.py).
+
+defaults:
+  - /generation@generation_args: default
+  - override /data: lunar_uv
+  - override /collator: DataCollatorForSupervisedDatasetwithIndex
+
+forget_split: forget10
+
+data:
+  forget:
+    TOFU_QA_forget:
+      args:
+        hf_args:
+          name: ${forget_split}
+        predict_with_generate: true # prompt-only input_ids
+
+collator:
+  DataCollatorForSupervisedDataset:
+    args:
+      padding_side: left # required by batched generation
+
+generation_args:
+  max_new_tokens: 128
+
+gen:
+  seed: 0
+  batch_size: 8
+  num_gen_batches: 2 # batches per split whose responses are generated & saved (null -> all)
+  point: block_out # block_out | mlp_out | down_proj_in | resid_mid
+  positions: null # null -> end-of-instruction template tokens (LUNAR); or e.g. [-1]
+  layers: null # null -> all decoder layers
+  forget_split: forget
+  reference_split: reference

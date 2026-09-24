@@ -12,11 +12,15 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
 MODEL=Llama-3.2-3B-Instruct
+FORGET_SPLIT=forget10
 
+# responses on forget/reference questions + LUNAR r_UV for every layer
+# (reference prompts: python setup/setup_data.py --lunar;
+#  switch to harmful ones with `data/datasets@data.reference=LUNAR_harmful`)
 python src/gen.py \
-  experiment=finetune/tofu/default \
+  experiment=custom/lunar_uv \
   model=${MODEL} \
-  task_name=test/gen_${MODEL} \
-  # trainer.args.gradient_checkpointing=true \
+  forget_split=${FORGET_SPLIT} \
+  task_name=test/gen_${MODEL}_${FORGET_SPLIT}
 
-echo end finetune ${MODEL}
+echo end gen ${MODEL}
