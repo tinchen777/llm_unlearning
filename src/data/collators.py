@@ -17,6 +17,7 @@ class DataCollatorForSupervisedDataset:
         tokenizer: Any,
         padding_side: str = "right",
         index: Optional[str] = None,
+        **kwargs
     ):
         self.padding_side = padding_side
         # tokenizer.padding_side = padding_side

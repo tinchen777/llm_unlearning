@@ -32,6 +32,15 @@ def download_wmdp():
     subprocess.run(["unzip", "-P", "wmdpcorpora", zip_path, "-d", dest_dir], check=True)
 
 
+def download_lunar_reference():
+    # LUNAR reference prompts D_ref (instruction-only): harmful (refused) / unverified (fictitious)
+    base_url = "https://raw.githubusercontent.com/facebookresearch/LUNAR/main/dataset/splits"
+    dest_dir = "data/lunar"
+    os.makedirs(dest_dir, exist_ok=True)
+    for name in ("harmful.json", "unverified.json"):
+        subprocess.run(["wget", f"{base_url}/{name}", "-O", os.path.join(dest_dir, name)], check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download and setup evaluation data.")
     parser.add_argument(
@@ -49,6 +58,11 @@ def main():
         action="store_true",
         help="Download and unzip WMDP dataset into data/wmdp",
     )
+    parser.add_argument(
+        "--lunar",
+        action="store_true",
+        help="Download LUNAR reference prompts (harmful/unverified) into data/lunar",
+    )
 
     args = parser.parse_args()
 
@@ -58,6 +72,8 @@ def main():
         download_idk_data()
     if args.wmdp:
         download_wmdp()
+    if args.lunar:
+        download_lunar_reference()
 
 
 if __name__ == "__main__":

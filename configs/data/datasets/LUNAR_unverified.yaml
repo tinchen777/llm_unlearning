@@ -1,0 +1,11 @@
+LUNAR_unverified:
+  handler: QADataset
+  args:
+    hf_args:
+      path: "json"
+      data_files: "./data/lunar/unverified.json" # python setup/setup_data.py --lunar
+      split: "train"
+    question_key: "instruction"
+    answer_key: null # prompt-only
+    max_length: 512
+    predict_with_generate: true

@@ -1,6 +1,8 @@
 
 from __future__ import annotations
-from typing import Dict, Any, Union, TYPE_CHECKING
+import logging
+from torch.utils.data import DataLoader
+from typing import Dict, Any, Union, Optional, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .datasets.pretraining import PretrainingDataset, CompletionDataset
@@ -10,6 +12,8 @@ from .unlearn import ForgetRetainDataset
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
     from utils.config import TrackingConfig
+
+logger = logging.getLogger(__name__)
 
 DATASET_REGISTRY: Dict[str, Any] = {}
 COLLATOR_REGISTRY: Dict[str, Any] = {}
@@ -21,6 +25,59 @@ def _register_data(data_cls):
 
 def _register_collator(collator_cls):
     COLLATOR_REGISTRY[collator_cls.__name__] = collator_cls
+
+
+def get_dataloader(
+    data_cfg: TrackingConfig,
+    mode: str,
+    batch_size: int,
+    split: Optional[str] = None,
+    shuffle: bool = False,
+    num_workers: int = 0,
+    collator_cfgs: Optional[TrackingConfig] = None,
+    **kwargs
+):
+    """Build DataLoader(s) from a data config, independent of any Trainer.
+
+    `get_data` returns `{split: Dataset | {name: Dataset}}`, so the dataset
+    must be picked out of that mapping before wrapping (a DataLoader over the
+    dict itself sees `len == #splits` and indexes it with ints -> KeyError).
+
+    Returns:
+        - `split` given: the loader of that split (a `{name: DataLoader}` dict
+          if the split holds several datasets).
+        - `split=None` with a single split: that split's loader(s).
+        - `split=None` with several splits: `{split: loader(s)}`.
+    """
+    # get data
+    data = get_data(data_cfg, mode=mode, **kwargs)
+    # get collator
+    if collator_cfgs is not None:
+        collator = get_collators(collator_cfgs, **kwargs)
+        if isinstance(collator, dict):
+            logger.warning(f"Got multiple({len(collator)}) collators, using the first one for dataloader.")
+            collator = next(iter(collator.values()))
+    else:
+        collator = None
+
+    def _wrap(dataset: Union[Dataset, Dict[str, Dataset]]):
+        if isinstance(dataset, dict):
+            return {name: _wrap(ds) for name, ds in dataset.items()}
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            collate_fn=collator
+        )
+
+    if split is not None:
+        if split not in data:
+            raise KeyError(f"Split `{split}` not found in data, available: {list(data)}.")
+        return _wrap(data[split])
+    if len(data) == 1:
+        return _wrap(next(iter(data.values())))
+    return {split_name: _wrap(split_data) for split_name, split_data in data.items()}
 
 
 def get_data(data_cfg: TrackingConfig, mode: str, **kwargs):

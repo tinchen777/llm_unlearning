@@ -21,7 +21,7 @@ class QADataset(BaseDataset):
         template_args: TrackingConfig,
         tokenizer: Any,
         question_key: str = "question",
-        answer_key: str = "answer",
+        answer_key: Optional[str] = "answer",  # None -> prompt-only data (empty answers)
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
         predict_with_generate: bool = False,
@@ -47,8 +47,13 @@ class QADataset(BaseDataset):
         )
 
     def prepare_data(self):
+        answer_key = self.answer_key
+        if answer_key is None:
+            # prompt-only data (e.g. LUNAR reference prompts): pair each question with an empty answer
+            answer_key = "__empty_answer__"
+            self.raw_data = self.raw_data.add_column(answer_key, [""] * len(self.raw_data))
         return self.map_raw_data(
-            input_columns=[self.question_key, self.answer_key],
+            input_columns=[self.question_key, answer_key],
             name="QA data"
         )
 
