@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 from torch.utils.data import Dataset
-from typing import List, Dict, Any, Optional, Callable, TYPE_CHECKING
+from typing import List, Sequence, Dict, Any, Optional, Callable, TYPE_CHECKING
 
 from .utils import load_hf_dataset, get_map_kwargs
 
@@ -15,8 +15,14 @@ class BaseDataset(Dataset):
     tok_kwargs: Dict[str, Any]
     _data: Optional[HFDataset] = None
 
-    def __init__(self, hf_args: TrackingConfig, map_args: Optional[TrackingConfig]):
+    def __init__(
+        self,
+        hf_args: TrackingConfig,
+        map_args: Optional[TrackingConfig],
+        extra_keys: Optional[Sequence[str]] = None
+    ):
         super().__init__()
+        self.retained_columns = set(extra_keys) if extra_keys else set()
         # raw data
         self.raw_data = load_hf_dataset(**hf_args)
         # map arguments & dataset_mb_str
@@ -30,6 +36,8 @@ class BaseDataset(Dataset):
         input_columns: List[str],
         name: str = ""
     ) -> HFDataset:
+        remove_columns = set(self.raw_data.column_names)
+
         return self.raw_data.map(
             self.tok_fn,
             input_columns=input_columns,
@@ -37,7 +45,7 @@ class BaseDataset(Dataset):
             with_rank=False,
             batched=False,
             fn_kwargs=self.tok_kwargs,
-            remove_columns=self.raw_data.column_names,
+            remove_columns=list(remove_columns - self.retained_columns),
             desc=f"Pre-tokenizing [{self.__class__.__name__} : {self._raw_data_mb_str}][{name}]",
             **self._map_kwargs
         )
@@ -47,15 +55,18 @@ class BaseDataset(Dataset):
 
     @staticmethod
     def process_sample(sample: Dict[str, Any]):
-        input_ids, labels, index = sample["input_ids"], sample["labels"], sample["index"]
+        input_ids = sample.pop("input_ids")
+        labels = sample.pop("labels")
+        index = sample.pop("index")
+
         if len(input_ids) != len(labels):
             raise ValueError(f"Length mismatch: input_ids has length {len(input_ids)}, labels has length {len(labels)}")
 
         if len(input_ids) == 1:
-            return {"input_ids": input_ids[0], "labels": labels[0], "index": index}
+            return {"input_ids": input_ids[0], "labels": labels[0], "index": index, **sample}
         else:
             return {
-                i: {"input_ids": input_ids[i], "labels": labels[i], "index": index}
+                i: {"input_ids": input_ids[i], "labels": labels[i], "index": index, **sample}
                 for i in range(len(input_ids))
             }
 

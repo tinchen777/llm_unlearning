@@ -120,6 +120,7 @@ def tok_chat_sample(
     template_args: TrackingConfig,
     max_length: int,
     predict_with_generate: bool = False,
+    **kwargs
 ):
     try:
         # multi-answer support

@@ -21,11 +21,13 @@ class CompletionDataset(BaseDataset):
         predict_with_generate: bool = False,
         insert_space: bool = False,
         map_args: Optional[TrackingConfig] = None,
+        extra_keys: Optional[Sequence[str]] = None,
         **kwargs
     ):
-        super().__init__(hf_args, map_args)
+        super().__init__(hf_args, map_args, extra_keys=extra_keys)
         self.prefix_key = prefix_key
         self.text_key = text_key
+        self.extra_keys = extra_keys
         # pre-tokenize the dataset for efficiency
         self.tok_fn = tok_text_sample
         self.tok_kwargs = dict(
@@ -56,9 +58,10 @@ class PretrainingDataset(BaseDataset):
         text_key: str = "text",
         max_length: int = 2048,
         map_args: Optional[TrackingConfig] = None,
+        extra_keys: Optional[Sequence[str]] = None,
         **kwargs
     ):
-        super().__init__(hf_args, map_args)
+        super().__init__(hf_args, map_args, extra_keys=extra_keys)
         self.text_key = text_key
         # rebuild raw data
         text_tok_seq = self._chunk_and_tok_text(

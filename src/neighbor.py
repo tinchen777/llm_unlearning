@@ -63,14 +63,14 @@ def main(config: DictConfig):
         print(data["index"])
         input_ids = data["input_ids"]
         print(input_ids.shape)
-        print(tokenizer.batch_decode(data["input_ids"], skip_special_tokens=True))
+        # print(tokenizer.batch_decode(data["input_ids"], skip_special_tokens=True))
         print("="*50, end="\n\n")
         print("ref_data", type(ref_data))
         print((list(ref_data)))
         print(ref_data["index"])
         input_ids = ref_data["input_ids"]
         print(input_ids.shape)
-        print(tokenizer.batch_decode(ref_data["input_ids"], skip_special_tokens=True))
+        # print(tokenizer.batch_decode(ref_data["input_ids"], skip_special_tokens=True))
         print("="*50, end="\n\n")
         
         # print(list(data))

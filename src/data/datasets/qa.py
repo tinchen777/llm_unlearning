@@ -1,6 +1,6 @@
 
 from __future__ import annotations
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, Sequence, TYPE_CHECKING
 
 from .base import BaseDataset
 from .utils import prepare_chat_header, tok_chat_sample
@@ -18,17 +18,18 @@ class QADataset(BaseDataset):
         template_args: TrackingConfig,
         tokenizer: Any,
         question_key: str = "question",
-        answer_key: Optional[str] = "answer",  # None -> prompt-only data (empty answers)
+        answer_key: str = "answer",
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
         predict_with_generate: bool = False,
         map_args: Optional[TrackingConfig] = None,
+        extra_keys: Optional[Sequence[str]] = None,
         **kwargs
     ):
-        super().__init__(hf_args, map_args)
+        super().__init__(hf_args, map_args, extra_keys=extra_keys)
         self.question_key = question_key
         self.answer_key = answer_key
-        # prepare context for each sample, e.g., few-shot examples, etc.
+        # prepare chat header for each sample
         chat_header = prepare_chat_header(
             template_args,
             question_key=question_key,
@@ -45,13 +46,8 @@ class QADataset(BaseDataset):
         )
 
     def prepare_data(self):
-        answer_key = self.answer_key
-        if answer_key is None:
-            # prompt-only data (e.g. LUNAR reference prompts): pair each question with an empty answer
-            answer_key = "__empty_answer__"
-            self.raw_data = self.raw_data.add_column(answer_key, [""] * len(self.raw_data))
         return self.map_raw_data(
-            input_columns=[self.question_key, answer_key],
+            input_columns=[self.question_key, self.answer_key],
             name="QA data"
         )
 
