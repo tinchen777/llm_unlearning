@@ -41,12 +41,14 @@ data:
         args:
           hf_args:
             name: ${forget_split}
+        predict_with_generate: true
   ref:
     datasets:
       TOFU_QA_neighbor:
         args:
           hf_args:
             data_files: ${paths.data_dir}/tofu/tofu_${neighbor_split}.csv
+        predict_with_generate: true
     collator:
       args:
         metadata_keys:
