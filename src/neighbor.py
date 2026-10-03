@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 from omegaconf import DictConfig
 
-from data import get_split_loaders, one_loader
+from data import get_split_loaders, get_split_data, one_loader, one_dataset
 from model import get_model_and_tokenizer
 from model.activations import collect_activations, get_eoi_positions, unlearning_vector
 from evals.metrics.metric_utils import eval_text_similarity
@@ -43,16 +43,37 @@ def main(config: DictConfig):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
 
-    # 2. Load dataloaders
-    with step_logging(logger, "[2/4]", "dataloaders", cfg["data"]):
-        loaders = get_split_loaders(
+    # # 2. Load dataloaders
+    # with step_logging(logger, "[2/4]", "dataloaders", cfg["data"]):
+    #     loaders = get_split_loaders(
+    #         cfg["data"],
+    #         batch_size=1000,
+    #         tokenizer=tokenizer,
+    #         template_args=template_args
+    #     )
+    #     train_loader = one_loader(loaders["train"])
+    #     ref_loader = one_loader(loaders["ref"])
+
+    # 2. Load data
+    with step_logging(logger, "[2/4]", "data", cfg["data"]):
+        data = get_split_data(
             cfg["data"],
-            batch_size=1000,
             tokenizer=tokenizer,
             template_args=template_args
         )
-        train_loader = one_loader(loaders["train"])
-        ref_loader = one_loader(loaders["ref"])
+        train_dataset = one_dataset(data["train"][0])
+        ref_dataset = one_dataset(data["ref"][0])
+    
+    print("train_dataset", type(train_dataset))
+    print((list(train_dataset)))
+    print("ref_dataset", type(ref_dataset))
+    print((list(ref_dataset)))
+    
+    
+    exit()
+    
+    
+    
     
     
     
