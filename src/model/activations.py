@@ -27,7 +27,7 @@ import torch
 from torch import nn
 from contextlib import contextmanager
 from tqdm import tqdm
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from utils.common import to_device
 
@@ -67,6 +67,11 @@ def _get_hook_module(layer: nn.Module, point: str) -> Tuple[nn.Module, bool]:
             )
         return layer.post_attention_layernorm, True
     raise ValueError(f"Unknown hook point `{point}`, choose from {HOOK_POINTS}.")
+
+
+def get_out_proj(model: Any, layer_idx: int) -> nn.Linear:
+    """The MLP output projection (`down_proj` / `fc2`) of decoder layer `layer_idx`."""
+    return _get_hook_module(get_decoder_layers(model)[layer_idx], "down_proj_in")[0]  # type: ignore
 
 
 def _as_tensor(x: Any) -> torch.Tensor:
@@ -179,6 +184,54 @@ def collect_activations(
     if reduce == "mean":
         return total / n_samples, layers  # type: ignore
     return per_sample, layers
+
+
+@torch.no_grad()
+def collect_group_means(
+    model: Any,
+    dataloader: Iterable[Mapping[str, Any]],
+    group_fn: Callable[[Mapping[str, Any]], Sequence[Hashable]],
+    positions: Sequence[int] = (-1,),
+    layers: Optional[Sequence[int]] = None,
+    point: str = "block_out",
+    desc: str = "",
+):
+    """Like `collect_activations(reduce="mean")`, but one mean per GROUP (e.g. per author).
+
+    `group_fn(batch)` returns one hashable group key per row of the batch. Only running sums are
+    kept (no per-sample storage), so memory is `n_groups * n_pos * n_layers * d` float32.
+
+    Returns:
+        (means, counts, layers): `means[key]` is Tensor[n_pos, n_layers, d] (float32, CPU),
+        `counts[key]` the number of samples in the group.
+    """
+    layers = list(range(model.config.num_hidden_layers)) if layers is None else list(layers)
+    was_training = model.training
+    model.eval()
+
+    sums: Dict[Hashable, torch.Tensor] = {}
+    counts: Dict[Hashable, int] = {}
+    with capture_activations(model, layers, point) as cache:
+        for batch in tqdm(dataloader, desc=f"Collecting `{point}` group means [{desc}]", unit="batch(es)", colour="blue"):
+            keys = list(group_fn(batch))
+            inputs = to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
+            if len(keys) != inputs["input_ids"].shape[0]:
+                raise ValueError(f"group_fn returned {len(keys)} keys for a batch of {inputs['input_ids'].shape[0]} rows.")
+            model(**inputs)
+            # [bsz, n_pos, n_layers, d]
+            acts = torch.stack(
+                [gather_positions(cache[l], inputs["attention_mask"], positions).cpu() for l in layers],
+                dim=2
+            ).float()
+            for i, key in enumerate(keys):
+                sums[key] = sums[key] + acts[i] if key in sums else acts[i].clone()
+                counts[key] = counts.get(key, 0) + 1
+
+    if was_training:
+        model.train()
+    if not sums:
+        raise ValueError("The dataloader yielded no samples.")
+    return {key: sums[key] / counts[key] for key in sums}, counts, layers
 
 
 def unlearning_vector(reference_mean: torch.Tensor, forget_mean: torch.Tensor) -> torch.Tensor:
