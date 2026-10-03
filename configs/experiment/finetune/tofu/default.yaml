@@ -3,7 +3,7 @@
 defaults:
   - override /model: Llama-3.2-1B-Instruct
   - override /trainer: finetune
-  - override /data/datasets@data.train: TOFU_QA_full
+  - override /data/datasets@data.train.datasets: TOFU_QA_full
   - override /eval: tofu
 
 mode: finetune
@@ -18,7 +18,6 @@ trainer:
 model:
   model_args:
     attn_implementation: sdpa
-
 
 forget_split: forget10
 holdout_split: holdout10

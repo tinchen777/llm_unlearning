@@ -17,7 +17,7 @@ defaults:
   - model: Llama-3.2-3B-Instruct   # configs/model/*.yaml
   - trainer: finetune              # configs/trainer/*.yaml
   - data: finetune                 # configs/data/*.yaml
-  - collator: DataCollatorForSupervisedDataset
+  - collator: DataCollatorForNestedData
   - eval: tofu                     # configs/eval/*.yaml
   - paths: default
   - experiment: null               # 可选实验包

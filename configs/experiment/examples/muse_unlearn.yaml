@@ -71,8 +71,8 @@ data:
         max_length: 2048
   anchor: forget
 collator:
-  DataCollatorForSupervisedDataset:
-    handler: DataCollatorForSupervisedDataset
+  DataCollatorForNestedData:
+    handler: DataCollatorForNestedData
     args:
       padding_side: right
 eval:
@@ -96,8 +96,8 @@ eval:
               max_length: 512
               predict_with_generate: true
         collators:
-          DataCollatorForSupervisedDataset:
-            handler: DataCollatorForSupervisedDataset
+          DataCollatorForNestedData:
+            handler: DataCollatorForNestedData
             args:
               padding_side: left
               index: index
@@ -137,8 +137,8 @@ eval:
               max_length: 512
               predict_with_generate: true
         collators:
-          DataCollatorForSupervisedDataset:
-            handler: DataCollatorForSupervisedDataset
+          DataCollatorForNestedData:
+            handler: DataCollatorForNestedData
             args:
               padding_side: left
               index: index
@@ -175,8 +175,8 @@ eval:
               insert_space: true
               predict_with_generate: true
         collators:
-          DataCollatorForSupervisedDataset:
-            handler: DataCollatorForSupervisedDataset
+          DataCollatorForNestedData:
+            handler: DataCollatorForNestedData
             args:
               padding_side: left
               index: index
@@ -216,8 +216,8 @@ eval:
                   text_key: text
                   max_length: 2048
             collators:
-              DataCollatorForSupervisedDataset:
-                handler: DataCollatorForSupervisedDataset
+              DataCollatorForNestedData:
+                handler: DataCollatorForNestedData
                 args:
                   padding_side: right
                   index: index
@@ -247,8 +247,8 @@ eval:
               max_length: 2048
               insert_space: true
         collators:
-          DataCollatorForSupervisedDataset:
-            handler: DataCollatorForSupervisedDataset
+          DataCollatorForNestedData:
+            handler: DataCollatorForNestedData
             args:
               padding_side: right
               index: index

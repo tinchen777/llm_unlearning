@@ -203,7 +203,7 @@ Different dataset formats might have different data collation logic to pad and o
 Collators implementing batch collation are implemented in [`src/collators`](../src/collators/), imported in [`src/collators/__init__.py`](../src/collators/__init__.py).
 
 ```python
-class DataCollatorForSupervisedDataset(object):
+class DataCollatorForNestedData(object):
     """Collate examples for supervised fine-tuning."""
     def __init__(self, tokenizer, padding_side, index):
       ...
@@ -214,19 +214,19 @@ class DataCollatorForSupervisedDataset(object):
 ### Register Collator handler
 Register the collator to link the class to the configs via the class name in [`COLLATOR_REGISTRY`](../src/collators/__init__.py).
 
-Example: Registering `DataCollatorForSupervisedDataset` 
+Example: Registering `DataCollatorForNestedData` 
 
 ```python
-from collators.base import DataCollatorForSupervisedDataset
-_register_collator(DataCollatorForSupervisedDataset)
+from collators.base import DataCollatorForNestedData
+_register_collator(DataCollatorForNestedData)
 ```
 
 ### Add to configs
 Collator configurations are in [`configs/collator`](../configs/collator/).
 
 ```yaml
-DataCollatorForSupervisedDataset:
-  handler: DataCollatorForSupervisedDataset
+DataCollatorForNestedData:
+  handler: DataCollatorForNestedData
   args:
     padding_side: right
 ```

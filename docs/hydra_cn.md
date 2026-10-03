@@ -46,7 +46,7 @@ defaults:
   - model: Llama-3.2-3B-Instruct   # 加载 configs/model/Llama-3.2-3B-Instruct.yaml -> cfg.model
   - trainer: GradAscent
   - data: unlearn
-  - collator: DataCollatorForSupervisedDataset
+  - collator: DataCollatorForNestedData
   - eval: tofu
   - hydra: default
   - paths: default

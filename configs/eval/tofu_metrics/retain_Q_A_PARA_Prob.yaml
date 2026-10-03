@@ -1,13 +1,13 @@
 # @package eval.tofu.metrics.retain_Q_A_PARA_Prob
 
 defaults:
-  - ../../data/datasets@datasets: TOFU_QA_retain_para
-  - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
-
-handler: probability
-batch_size: ${eval.tofu.batch_size}
+  - /data/datasets@datasets: TOFU_QA_retain_para
+  - /data/collators@collator: default_with_index
 
 datasets:
   TOFU_QA_retain_para:
     args:
       question_key: ${eval.tofu.question_key}
+
+handler: probability
+batch_size: ${eval.tofu.batch_size}

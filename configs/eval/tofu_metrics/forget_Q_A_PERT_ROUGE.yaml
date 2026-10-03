@@ -1,13 +1,9 @@
 # @package eval.tofu.metrics.forget_Q_A_PERT_ROUGE
 
 defaults:
-  - ../../data/datasets@datasets: TOFU_QA_forget_pert
-  - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
+  - /data/datasets@datasets: TOFU_QA_forget_pert
+  - /data/collators@collator: default_with_index
   - ../../generation@generation_args: default
-
-handler: rouge
-rouge_type: rougeL_recall
-batch_size: ${eval.tofu.batch_size}
 
 datasets:
   TOFU_QA_forget_pert:
@@ -15,9 +11,12 @@ datasets:
       hf_args:
         name: ${eval.tofu.forget_split}_perturbed
       question_key: ${eval.tofu.question_key}
-      predict_with_generate: True
+      predict_with_generate: true
 
-collators:
-  DataCollatorForSupervisedDataset:
-    args:
-      padding_side: left
+collator:
+  args:
+    padding_side: left
+
+handler: rouge
+rouge_type: rougeL_recall
+batch_size: ${eval.tofu.batch_size}

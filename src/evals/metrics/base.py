@@ -4,11 +4,10 @@ import logging
 import inspect
 from pathlib import Path
 from functools import wraps
-from torch.utils.data import DataLoader
 from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
-from .utils import DATA_SPLIT_SUFFIX
-from data import get_datasets, get_collators
+from .utils import SUBDATA_SUFFIX
+from data import get_datasets, get_collator, get_loaders, one_loader
 from utils.common import load_logs
 from utils.config import reprlib
 
@@ -53,41 +52,32 @@ class UnlearningMetric:
         subdata_params = [
             params
             for params in self.func.params
-            if params.endswith(DATA_SPLIT_SUFFIX)
+            if params.endswith(SUBDATA_SUFFIX)
         ]
         if subdata_params or "dataloader" in self.func.params:
             try:
-                # prepare data
-                data = self._prepare_data(**kwargs)
-                # prepare collator
-                collator = self._prepare_collator(**kwargs)
-                if isinstance(collator, dict):
-                    logger.warning(f"Got multiple({len(collator)}) collators, using the first one for dataloader.")
-                    collator = next(iter(collator.values()))
-                # prepare batch_size
-                batch_size = self.cfg_dict.pop("batch_size")
+                # prepare dataloaders
+                loaders = get_loaders(
+                    datasets=self._prepare_datasets(**kwargs),
+                    batch_size=self.cfg_dict.pop("batch_size"),  # type: ignore
+                    collator=self._prepare_collator(**kwargs)
+                )
 
                 if "dataloader" in self.func.params:
                     # for the whole dataset
-                    self.cfg_dict["dataloader"] = DataLoader(
-                        data,  # type: ignore
-                        batch_size=batch_size,  # type: ignore
-                        collate_fn=collator
-                    )
+                    self.cfg_dict["dataloader"] = one_loader(loaders)
+
                 for subdata_param in subdata_params:
-                    # for each subdata split
-                    split_name = subdata_param.replace(DATA_SPLIT_SUFFIX, "")
-                    if split_name not in data:
-                        raise KeyError(f"Required data split `{split_name}` not found in `{subdata_param}`.")
-                    self.cfg_dict[subdata_param] = DataLoader(
-                        data[split_name],
-                        batch_size=batch_size,  # type: ignore
-                        collate_fn=collator
-                    )
+                    # for each subdata
+                    sub_name = subdata_param.replace(SUBDATA_SUFFIX, "")
+                    if sub_name not in loaders:
+                        logger.warning(f"Required subdata `{sub_name}` not found while preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.")
+                        continue
+                    self.cfg_dict[subdata_param] = loaders[sub_name]
             except Exception as e:
                 raise RuntimeError(f"Error preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
-    def _prepare_data(
+    def _prepare_datasets(
         self,
         tokenizer: Optional[Any],
         template_args: Optional[TrackingConfig],
@@ -100,8 +90,8 @@ class UnlearningMetric:
         )
 
     def _prepare_collator(self, tokenizer: Optional[Any], **kwargs):
-        return get_collators(
-            self.cfg_dict.pop("collators"),
+        return get_collator(
+            self.cfg_dict.pop("collator"),
             tokenizer=tokenizer
         )
 
@@ -199,9 +189,3 @@ class MetricFunc:
 
     def __call__(self, *args, **kwargs):
         return self.func(*args, **kwargs)
-
-# TODO: add a decorator to register metric func special params with handler, e.g.: @metric_func(dataloader=dataloader_handler)
-# def metric_func(**prepare_kwargs):
-#     def wrapper(func):
-#         return MetricFunc(func, **prepare_kwargs)
-#     return wrapper

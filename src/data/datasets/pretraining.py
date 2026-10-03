@@ -3,7 +3,8 @@ from __future__ import annotations
 from datasets import Dataset as HFDataset
 from typing import Any, Sequence, Optional, TYPE_CHECKING
 
-from .base import BaseDataset, tok_text_sample, collect_text_sample
+from .base import BaseDataset
+from .utils import tok_text_sample, collect_text_sample
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig

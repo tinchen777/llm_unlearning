@@ -1,15 +1,15 @@
 # file size: 40.4 GB
 # verified
 model_args:
-  pretrained_model_name_or_path: "NousResearch/Llama-2-7b-hf"
+  pretrained_model_name_or_path: NousResearch/Llama-2-7b-hf
   attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 tokenizer_args:
-  pretrained_model_name_or_path: "NousResearch/Llama-2-7b-hf"
+  pretrained_model_name_or_path: NousResearch/Llama-2-7b-hf
 
 template_args:  # Used in creating prompts for the dataset. See src/data/utils.py#preprocess_chat_instance.
-  apply_chat_template: False
+  apply_chat_template: false
   user_start_tag: "Question: "
   user_end_tag: "\n"
   asst_start_tag: "Answer: "

@@ -9,7 +9,7 @@ from typing import List, Any, Dict, Callable, Mapping
 
 from utils.common import to_device
 
-DATA_SPLIT_SUFFIX = "_dl"
+SUBDATA_SUFFIX = "_dl"
 
 logger = logging.getLogger("eval.metric")
 

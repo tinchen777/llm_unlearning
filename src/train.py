@@ -7,7 +7,7 @@ from hydra.core.hydra_config import HydraConfig
 import logging
 from typing import TYPE_CHECKING
 
-from data import get_data, get_collators
+from data import get_split_data, one_dataset
 from model import get_model_and_tokenizer
 from trainer import load_trainer
 from evals import get_evaluators
@@ -41,46 +41,42 @@ def main(config: DictConfig):
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
     # 1. Load model and tokenizer
-    with step_logging(logger, "[1/5]", "model & tokenizer", model_cfg):
+    with step_logging(logger, "[1/4]", "model & tokenizer", model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
 
-    # 2. Load Dataset
+    # 2. Load Data
     data_cfg = cfg["data"]
-    with step_logging(logger, "[2/5]", "data", data_cfg):
-        data = get_data(
+    with step_logging(logger, "[2/4]", "data", data_cfg):
+        data = get_split_data(
             data_cfg,
-            mode=mode,
             tokenizer=tokenizer,
             template_args=template_args
         )
-
-    # 3. Load collator
-    collator_cfg = cfg["collator"]
-    with step_logging(logger, "[3/5]", "collator", collator_cfg):
-        collator = get_collators(collator_cfg, tokenizer=tokenizer)
+        train_datasets, collator = data["train"]
+        # eval_datasets, _ = data.get("eval", (None, None))
 
     # 4. Get Evaluators
     eval_cfgs = cfg.get("eval", None)
     if eval_cfgs:
-        with step_logging(logger, "[4/5]", "evaluators", eval_cfgs):
+        with step_logging(logger, "[3/4]", "evaluators", eval_cfgs):
             evaluators = get_evaluators(
                 eval_cfgs,
                 tokenizer=tokenizer,
                 template_args=template_args
             )
     else:
-        with step_logging(logger, "[4/5]", "evaluators", is_skip=True):
+        with step_logging(logger, "[3/4]", "evaluators", is_skip=True):
             evaluators = None
 
     # 5. Get Trainer
     trainer_cfg = cfg["trainer"]
-    with step_logging(logger, "[5/5]", "trainer", trainer_cfg):
+    with step_logging(logger, "[4/4]", "trainer", trainer_cfg):
         trainer = load_trainer(
             trainer_cfg,
             model=model,
             evaluators=evaluators,
-            train_dataset=data.get("train", None),
-            eval_dataset=data.get("eval", None),
+            train_dataset=one_dataset(train_datasets),
+            # eval_dataset=data.get("eval", None),
             processing_class=tokenizer,
             data_collator=collator,
         )

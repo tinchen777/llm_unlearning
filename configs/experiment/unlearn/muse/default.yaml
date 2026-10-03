@@ -4,8 +4,8 @@ defaults:
   - override /model: Llama-2-7b-hf
   - override /trainer: GradAscent
   - override /data: unlearn
-  - override /data/datasets@data.forget: MUSE_forget
-  - override /data/datasets@data.retain: MUSE_retain
+  - override /data/datasets@data.train.datasets.forget: MUSE_forget
+  - override /data/datasets@data.train.datasets.retain: MUSE_retain
   - override /eval: muse
 
 data_split: News
@@ -19,20 +19,21 @@ model:
     attn_implementation: sdpa
 
 data:
-  anchor: forget
-  forget:
-    MUSE_forget:
-      args:
-        hf_args:
-          split: ${forget_split}
-          path: muse-bench/MUSE-${data_split}
-  retain:
-    MUSE_retain:
-      args:
-        hf_args:
-          path: muse-bench/MUSE-${data_split}
-          split: ${retain_split}
-
+  train:
+    datasets:
+      anchor: forget
+      forget:
+        MUSE_forget:
+          args:
+            hf_args:
+              split: ${forget_split}
+              path: muse-bench/MUSE-${data_split}
+      retain:
+        MUSE_retain:
+          args:
+            hf_args:
+              path: muse-bench/MUSE-${data_split}
+              split: ${retain_split}
 
 eval:
   muse:

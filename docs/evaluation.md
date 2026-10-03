@@ -125,7 +125,7 @@ datasets:
         path: muse-bench/MUSE-${eval.muse.data_split}
       predict_with_generate: True
 collators:
-  DataCollatorForSupervisedDataset: 
+  DataCollatorForNestedData: 
     args:
       padding_side: left # for generation
 generation_args:

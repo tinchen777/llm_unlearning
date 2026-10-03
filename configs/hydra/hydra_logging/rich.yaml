@@ -6,7 +6,7 @@ version: 1
 formatters:
   rich:
     (): utils.log.RichNameFormatter
-    name_style: "dim cyan"   # dim, to visually separate Hydra's own logs from job logs
+    name_style: dim cyan   # dim, to visually separate Hydra's own logs from job logs
 
 handlers:
   rich:
@@ -21,4 +21,5 @@ handlers:
 root:
   level: INFO
   handlers: [rich]
+
 disable_existing_loggers: false

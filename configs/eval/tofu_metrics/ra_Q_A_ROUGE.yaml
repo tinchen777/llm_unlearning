@@ -1,20 +1,19 @@
 # @package eval.tofu.metrics.ra_Q_A_ROUGE
 
 defaults:
-  - ../../data/datasets@datasets: TOFU_QA_ra
-  - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
+  - /data/datasets@datasets: TOFU_QA_ra
+  - /data/collators@collator: default_with_index
   - ../../generation@generation_args: default
-
-handler: rouge
-rouge_type: rougeL_recall
-batch_size: ${eval.tofu.batch_size}
 
 datasets:
   TOFU_QA_ra:
     args:
-      predict_with_generate: True
+      predict_with_generate: true
 
-collators:
-  DataCollatorForSupervisedDataset:
-    args:
-      padding_side: left
+collator:
+  args:
+    padding_side: left
+
+handler: rouge
+rouge_type: rougeL_recall
+batch_size: ${eval.tofu.batch_size}

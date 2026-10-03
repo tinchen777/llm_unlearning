@@ -2,11 +2,8 @@
 from __future__ import annotations
 from typing import Any, Optional, TYPE_CHECKING
 
-from .base import (
-    BaseDataset,
-    prepare_chat_sample_context,
-    tok_chat_sample
-)
+from .base import BaseDataset
+from .utils import prepare_chat_header, tok_chat_sample
 from utils.common import randidx
 
 if TYPE_CHECKING:
@@ -21,7 +18,7 @@ class QADataset(BaseDataset):
         template_args: TrackingConfig,
         tokenizer: Any,
         question_key: str = "question",
-        answer_key: str = "answer",
+        answer_key: Optional[str] = "answer",  # None -> prompt-only data (empty answers)
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
         predict_with_generate: bool = False,
@@ -32,23 +29,29 @@ class QADataset(BaseDataset):
         self.question_key = question_key
         self.answer_key = answer_key
         # prepare context for each sample, e.g., few-shot examples, etc.
-        sample_context = prepare_chat_sample_context(
+        chat_header = prepare_chat_header(
             template_args,
             question_key=question_key,
-            answer_key=answer_key, few_shot_dataset_hf_args=few_shot_dataset_hf_args
+            answer_key=answer_key,
+            few_shot_dataset_hf_args=few_shot_dataset_hf_args
         )
         self.tok_fn = tok_chat_sample
         self.tok_kwargs = dict(
             tokenizer=tokenizer,
             template_args=template_args,
-            sample_context=sample_context,
+            chat_header=chat_header,
             max_length=max_length,
             predict_with_generate=predict_with_generate
         )
 
     def prepare_data(self):
+        answer_key = self.answer_key
+        if answer_key is None:
+            # prompt-only data (e.g. LUNAR reference prompts): pair each question with an empty answer
+            answer_key = "__empty_answer__"
+            self.raw_data = self.raw_data.add_column(answer_key, [""] * len(self.raw_data))
         return self.map_raw_data(
-            input_columns=[self.question_key, self.answer_key],
+            input_columns=[self.question_key, answer_key],
             name="QA data"
         )
 

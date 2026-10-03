@@ -1,11 +1,8 @@
 # @package eval.tofu.metrics.forget_Q_A_Prob
 
 defaults:
-  - ../../data/datasets@datasets: TOFU_QA_forget
-  - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
-
-handler: probability
-batch_size: ${eval.tofu.batch_size}
+  - /data/datasets@datasets: TOFU_QA_forget
+  - /data/collators@collator: default_with_index
 
 datasets:
   TOFU_QA_forget:
@@ -13,3 +10,6 @@ datasets:
       hf_args:
         name: ${eval.tofu.forget_split}_perturbed
       question_key: ${eval.tofu.question_key}
+
+handler: probability
+batch_size: ${eval.tofu.batch_size}

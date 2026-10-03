@@ -5,22 +5,20 @@ args:
   per_device_eval_batch_size: 16
   gradient_accumulation_steps: 4
   learning_rate: 1e-5
-  bf16: True
-  bf16_full_eval: True
+  bf16: true
+  bf16_full_eval: true
   logging_steps: 5
   output_dir: ${paths.output_dir}
-  # logging_dir removed: deprecated in transformers (removed in v5.2). TensorBoard
-  # logs now default under ${output_dir}/runs. Set env TENSORBOARD_LOGGING_DIR to override.
   report_to: tensorboard
-  ddp_find_unused_parameters: None
-  gradient_checkpointing: False
+  ddp_find_unused_parameters: null
+  gradient_checkpointing: false
   optim: paged_adamw_32bit
-  save_strategy: 'no'
-  save_only_model: True
+  save_strategy: "no"
+  save_only_model: true
   weight_decay: 0.00
-  do_train: True
-  do_eval: True
-  eval_on_start: True
+  do_train: true
+  do_eval: true
+  eval_on_start: true
   eval_strategy: epoch
   num_train_epochs: 10
   seed: 0

@@ -46,8 +46,8 @@ eval:
                       answer_key: paraphrased_answer
                       max_length: 512
                 collators:
-                  DataCollatorForSupervisedDataset:
-                    handler: DataCollatorForSupervisedDataset
+                  DataCollatorForNestedData:
+                    handler: DataCollatorForNestedData
                     args:
                       padding_side: right
                       index: index
@@ -67,8 +67,8 @@ eval:
                       answer_key: perturbed_answer
                       max_length: 512
                 collators:
-                  DataCollatorForSupervisedDataset:
-                    handler: DataCollatorForSupervisedDataset
+                  DataCollatorForNestedData:
+                    handler: DataCollatorForNestedData
                     args:
                       padding_side: right
                       index: index
@@ -98,8 +98,8 @@ eval:
               answer_key: answer
               max_length: 512
         collators:
-          DataCollatorForSupervisedDataset:
-            handler: DataCollatorForSupervisedDataset
+          DataCollatorForNestedData:
+            handler: DataCollatorForNestedData
             args:
               padding_side: right
               index: index

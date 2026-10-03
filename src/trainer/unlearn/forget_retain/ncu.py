@@ -164,7 +164,7 @@ class NCU(ForgetRetainTrainer):
         retain_data = getattr(train_dataset, "retain", None)
         if forget_data is None or retain_data is None:
             raise ValueError(
-                "NCU requires a ForgetRetainDataset train dataset exposing "
+                "NCU requires a BalancedUnlearnDataset train dataset exposing "
                 "`forget` and `retain` attributes."
             )
         self.forget_bank = self._build_rep_bank(forget_data, desc="forget")

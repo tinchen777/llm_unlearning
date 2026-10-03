@@ -4,8 +4,8 @@ defaults:
   - override /model: Llama-3.2-1B-Instruct
   - override /trainer: GradAscent
   - override /data: unlearn
-  - override /data/datasets@data.forget: TOFU_QA_forget
-  - override /data/datasets@data.retain: TOFU_QA_retain
+  - override /data/datasets@data.train.datasets.forget: TOFU_QA_forget
+  - override /data/datasets@data.train.datasets.retain: TOFU_QA_retain
   - override /eval: tofu
 
 model:
@@ -17,7 +17,7 @@ forget_split: forget10
 retain_split: retain90
 holdout_split: holdout10
 retain_logs_path: null
-question_key: "question"
+question_key: question
 
 eval:
   tofu:
@@ -28,17 +28,19 @@ eval:
     question_key: ${question_key}
 
 data:
-  anchor: forget
-  forget:
-    TOFU_QA_forget: 
-      args:
-        hf_args:
-          name: ${forget_split}
-  retain:
-    TOFU_QA_retain:
-      args:
-        hf_args:
-          name: ${retain_split}
+  train:
+    datasets:
+      anchor: forget
+      forget:
+        TOFU_QA_forget:
+          args:
+            hf_args:
+              name: ${forget_split}
+      retain:
+        TOFU_QA_retain:
+          args:
+            hf_args:
+              name: ${retain_split}
 
 trainer:
   args:
