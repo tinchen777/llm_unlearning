@@ -1,0 +1,106 @@
+# @package _global_
+# Probe a model on three question sets (src/neighbor.py):
+#   forget / neighbor / retain  ->  responses_<split>.json  (generated answers to read)
+#                               ->  activations.pt          (per-layer mean activations + r_UV)
+#   r_UV[l] = mean(a_l | probe.reference split) - mean(a_l | probe.forget split)
+#
+# Every split must be PROMPT-ONLY (`predict_with_generate: true`, so the last tokens of
+# `input_ids` are the end-of-instruction template tokens) and LEFT-padded (batched generation).
+
+defaults:
+  - /generation@generation_args: default
+  - override /data: probe
+  - override /data/datasets@data.forget.datasets: TOFU_QA_forget
+  - override /data/datasets@data.neighbor.datasets: TOFU_QA_neighbor
+  - override /data/datasets@data.retain.datasets: TOFU_QA_retain
+
+mode: neighbor
+
+forget_split: forget10
+neighbor_split: neighbor10
+retain_split: retain90
+
+data:
+  forget:
+    datasets:
+      TOFU_QA_forget:
+        args:
+          hf_args:
+            name: ${forget_split}
+          predict_with_generate: true
+    collator:
+      args:
+        padding_side: left
+        metadata_keys: [index]
+  neighbor:
+    datasets:
+      TOFU_QA_neighbor:
+        args:
+          hf_args:
+            data_files: ${paths.data_dir}/tofu/tofu_${neighbor_split}.csv
+          predict_with_generate: true
+    collator:
+      args:
+        padding_side: left
+        metadata_keys: [index, author_id, neighbor_id]
+  retain:
+    datasets:
+      TOFU_QA_retain:
+        args:
+          hf_args:
+            name: ${retain_split}
+          predict_with_generate: true
+    collator:
+      args:
+        padding_side: left
+        metadata_keys: [index]
+
+generation_args:
+  max_new_tokens: 128
+
+probe:
+  batch_size: 16
+  max_gen_samples: 32 # samples per split whose responses are generated (null -> all); loaders are shuffled
+  forget: forget # split name of the data to forget
+  reference: neighbor # split name of the redirection target
+  point: block_out # block_out | mlp_out | down_proj_in | resid_mid
+  # positions: [-1]  # default (omitted): end-of-instruction template tokens, as in LUNAR
+  # layers: [10, 11] # default (omitted): all decoder layers
+
+# ---- src/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
+ruv:
+  batch_size: 32
+  ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
+  seed: 0 # seed of that random order
+  qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
+  author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
+  point: block_out # block_out | mlp_out  (r_UV must live in d_model space for W_down training)
+  save_group_means: true # also keep every (author, neighbour) mean in r_uv.pt (to try other K / orders without re-running)
+  # positions: [-1]  # default (omitted): end-of-instruction template tokens
+  # layers: [10, 11] # default (omitted): all decoder layers
+
+# ---- src/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
+wdown:
+  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/r_uv.py
+  k: 5 # which K of the ablation to train with (must be in ruv.ks)
+  layers: [10] # decoder layers whose W_down is edited
+  coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR README example: 2.0)
+  # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output.
+  # all: every token of a forget prompt gets r_UV[ref_position] (my reading of LUNAR's released code) - but
+  #      the shared prompt prefix (system prompt, ...) has IDENTICAL inputs in forget and retain prompts with
+  #      contradicting targets, so `eoi` is the safer default.
+  shift_mode: eoi
+  ref_position: -1 # only for shift_mode=all: which saved position is used
+  retain_splits: [retain] # data whose MLP output must not change (e.g. [retain, neighbor])
+  retain_max_samples: 512 # random subset of each retain split (all tokens of a sample are used)
+  forget_weight: 1.0
+  retain_weight: 1.0
+  lr: 1.0e-3 # a guess, NOT tuned (LUNAR README: 1e-2 with bf16 weights)
+  lr_gamma: 0.9 # ExponentialLR per epoch (as LUNAR)
+  epochs: 10 # (as LUNAR)
+  batch_size: 64 # forget tokens per step, plus the same number of random retain tokens (LUNAR: 64)
+  weight_decay: 0.0 # LUNAR uses AdamW's default 0.01
+  responses_splits: [forget, neighbor, retain] # splits whose responses are written before / after the edit
+  max_gen_samples: 16 # fixed random subset per split
+  gen_batch_size: 16
+  save_model: false # also save the edited model to <output_dir>/model_k<K>
