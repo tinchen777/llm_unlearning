@@ -23,15 +23,16 @@ RETAIN_SPLIT=retain99
 # output: saves/neighbor/<task_name>/   (see configs/experiment/custom/neighbor_probe.yaml)
 echo start neighbor ${MODEL}
 
-python src/neighbor.py --config-name=train \
-  experiment=custom/neighbor_probe \
+python src/neighbor.py \
+  experiment=generate/neighbor_probe \
   model=${MODEL} \
   forget_split=${FORGET_SPLIT} \
   neighbor_split=${NEIGHBOR_SPLIT} \
   retain_split=${RETAIN_SPLIT} \
-  task_name=test/neighbor_${MODEL}_${NEIGHBOR_SPLIT}
+  task_name=test/neighbor_${MODEL}_${NEIGHBOR_SPLIT} \
+  --cfg job --resolve
   # probe.max_gen_samples=null \
   # probe.point=mlp_out \
-  # --cfg job --resolve
+  
 
 echo end neighbor ${MODEL}

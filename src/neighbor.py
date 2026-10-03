@@ -19,10 +19,10 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 
-logger = logging.getLogger("main(neighbor)")
+logger = logging.getLogger("main(generate)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="train")
+@hydra.main(version_base=None, config_path="../configs", config_name="generate")
 def main(config: DictConfig):
     """Probe a model on the forget / neighbor / retain question sets (no Trainer):
     read its responses, then compute per-layer activations and the unlearning vector r_UV.
@@ -34,7 +34,7 @@ def main(config: DictConfig):
     # config
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
-    set_seed(cfg["trainer"]["args"]["seed"])
+    set_seed(cfg["seed"])
     probe_cfg = cfg["probe"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
 

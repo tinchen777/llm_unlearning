@@ -19,15 +19,14 @@ from utils.config import TrackingConfig, init_hydra_choices
 if TYPE_CHECKING:
     from omegaconf import DictConfig
 
-# logging.getLogger("datasets").setLevel(logging.ERROR)
-logger = logging.getLogger("main(train)")
+logger = logging.getLogger("main(finetune)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="train")
+@hydra.main(version_base=None, config_path="../configs", config_name="finetune")
 def main(config: DictConfig):
     """Entry point of the code to train models
     Args:
-        config (DictConfig): Config to train
+        config (DictConfig): Config to finetune
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
@@ -35,8 +34,8 @@ def main(config: DictConfig):
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
-    set_seed(cfg["trainer"]["args"]["seed"])
-    mode = cfg.get("mode", "train", check_none=True)
+    set_seed(cfg["seed"])
+    mode = cfg["mode"]
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -78,7 +77,7 @@ def main(config: DictConfig):
             train_dataset=one_dataset(train_datasets),
             # eval_dataset=data.get("eval", None),
             processing_class=tokenizer,
-            data_collator=collator,
+            data_collator=collator
         )
 
     # START TRAINING & EVALUATION
