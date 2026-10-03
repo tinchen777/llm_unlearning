@@ -4,16 +4,17 @@ from __future__ import annotations
 # install(show_locals=False, width=100)
 import hydra
 from hydra.core.hydra_config import HydraConfig
+import itertools
 import logging
-import os
 import torch
 import torch.nn.functional as F
+from pathlib import Path
 from omegaconf import DictConfig
 
-from data import get_split_loaders, get_split_data, one_loader, one_dataset
+from data import get_split_loaders, one_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_activations, get_eoi_positions, unlearning_vector
-from evals.metrics.metric_utils import eval_text_similarity
+from model.generation import generate_responses
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
@@ -23,18 +24,19 @@ logger = logging.getLogger("main(neighbor)")
 
 @hydra.main(version_base=None, config_path="../configs", config_name="train")
 def main(config: DictConfig):
-    """Probe model responses and compute the LUNAR unlearning vector r_UV (no Trainer).
+    """Probe a model on the forget / neighbor / retain question sets (no Trainer):
+    read its responses, then compute per-layer activations and the unlearning vector r_UV.
     Args:
-        config (DictConfig): e.g. experiment=custom/lunar_uv
+        config (DictConfig): e.g. `experiment=custom/neighbor_probe`
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     # config
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
-    # Set seed for reproducibility
     set_seed(cfg["trainer"]["args"]["seed"])
-    mode = cfg.get("mode", "neighbor", check_none=True)
+    probe_cfg = cfg["probe"]
+    output_dir = Path(str(cfg["paths"]["output_dir"]))
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -43,132 +45,74 @@ def main(config: DictConfig):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
 
-    # # 2. Load dataloaders
-    # with step_logging(logger, "[2/4]", "dataloaders", cfg["data"]):
-    #     loaders = get_split_loaders(
-    #         cfg["data"],
-    #         batch_size=1000,
-    #         tokenizer=tokenizer,
-    #         template_args=template_args
-    #     )
-    #     train_loader = one_loader(loaders["train"])
-    #     ref_loader = one_loader(loaders["ref"])
-
-    # 2. Load data
-    with step_logging(logger, "[2/4]", "data", cfg["data"]):
-        data = get_split_data(
+    # 2. Load one dataloader per split: {split: DataLoader}
+    with step_logging(logger, "[2/4]", "dataloaders", cfg["data"]):
+        split_loaders = get_split_loaders(
             cfg["data"],
+            batch_size=probe_cfg["batch_size"],
+            shuffle=True,  # random subset for `max_gen_samples` (seeded above)
             tokenizer=tokenizer,
             template_args=template_args
         )
-        train_dataset = one_dataset(data["train"][0])
-        ref_dataset = one_dataset(data["ref"][0])
-    
-    print("train_dataset", type(train_dataset))
-    print((list(train_dataset)))
-    print("ref_dataset", type(ref_dataset))
-    print((list(ref_dataset)))
-    
-    
-    exit()
-    
-    
-    
-    
-    
-    
-    for (data, ref_data) in zip(train_loader, ref_loader):
-        
-        print("data", type(data))
-        print((list(data)))
-        print(data["index"])
-        input_ids = data["input_ids"]
-        print(input_ids.shape)
-        # print(tokenizer.batch_decode(data["input_ids"], skip_special_tokens=True))
-        print("="*50, end="\n\n")
-        print("ref_data", type(ref_data))
-        print((list(ref_data)))
-        print(ref_data["index"])
-        input_ids = ref_data["input_ids"]
-        print(input_ids.shape)
-        # print(tokenizer.batch_decode(ref_data["input_ids"], skip_special_tokens=True))
-        print("="*50, end="\n\n")
-        
-        # print(list(data))
-        
-        # exit()
-        
-    
-    
-    # print(train_loader)
-    
-    
-    
-    
-    exit()
-    
-    
-    
-    
-    
-    forget_split = gen_cfg["forget_split"]
-    reference_split = gen_cfg["reference_split"]
+        loaders = {split: one_loader(split_loader) for split, split_loader in split_loaders.items()}
 
-    # 3. Model responses on each split
-    with step_logging(logger, "[3/4]", "responses", gen_cfg):
-        num_gen_batches = gen_cfg.get("num_gen_batches", None)
+    # 3. Model responses on each split -> responses_<split>.json
+    with step_logging(logger, "[3/4]", "responses", probe_cfg):
         for split, loader in loaders.items():
-            records = []
-            for batch_idx, batch in enumerate(loader):
-                if num_gen_batches is not None and batch_idx >= num_gen_batches:
-                    break
-                indices = batch.pop("index")
-                outputs = eval_text_similarity(
-                    model, batch, tokenizer=tokenizer, generation_args=cfg["generation_args"]
+            records = generate_responses(
+                model, tokenizer, loader, cfg["generation_args"],
+                max_samples=probe_cfg.get("max_gen_samples", None), desc=split
+            )
+            save_logs(records, output_dir / f"responses_{split}.json")  # type: ignore
+            for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
+                logger.info(
+                    f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
+                    f"        GT: {record['ground_truth']!r}\n"
+                    f"        A : {record['generation']!r}"
                 )
-                records.extend({"index": idx, **out} for idx, out in zip(indices, outputs))
-            save_logs(records, os.path.join(output_dir, f"responses_{split}.json"))
-            logger.info(f"Saved {len(records)} `{split}` responses, e.g.: {records[0]['generation']!r}")
 
-    # 4. Activations & unlearning vector
-    with step_logging(logger, "[4/4]", "activations & r_UV", gen_cfg):
-        positions = gen_cfg.get("positions", None)
+    # 4. Per-layer activations (dataset mean per split) and unlearning vector
+    with step_logging(logger, "[4/4]", "activations & r_UV", probe_cfg):
+        positions = probe_cfg.get("positions", None)
         positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
-        layers = gen_cfg.get("layers", None)
-        point = gen_cfg.get("point", "block_out")
+        layers = probe_cfg.get("layers", None)
+        point = probe_cfg.get("point", "block_out")
         logger.info(f"Hook point: `{point}`, positions: {positions}")
 
-        means = {}
-        for split in (forget_split, reference_split):
+        means = {}  # {split: Tensor[n_pos, n_layers, d]}
+        for split, loader in loaders.items():
             means[split], layers = collect_activations(
-                model, loaders[split], positions=positions, layers=layers,
+                model, loader, positions=positions, layers=layers,
                 point=point, reduce="mean", desc=split
             )
-        # r_UV[p, l] (layer l == LUNAR's `layer_modified`, i.e. its pre-hook direction at l+1)
-        r_uv = unlearning_vector(means[reference_split], means[forget_split])  # [n_pos, n_layers, d]
+        forget, reference = probe_cfg["forget"], probe_cfg["reference"]
+        # r_UV[p, l]: shift that moves the forget activations onto the reference (LUNAR: ref - forget)
+        r_uv = unlearning_vector(means[reference], means[forget])  # [n_pos, n_layers, d]
 
         torch.save({
             "r_uv": r_uv.float(),
-            "mean_forget": means[forget_split].float(),
-            "mean_reference": means[reference_split].float(),
+            "means": {split: mean.float() for split, mean in means.items()},
+            "forget": forget,
+            "reference": reference,
             "positions": positions,
             "layers": layers,
             "point": point,
-            "n_forget": len(loaders[forget_split].dataset),
-            "n_reference": len(loaders[reference_split].dataset),
-        }, os.path.join(output_dir, "r_uv.pt"))
+            "num_samples": {split: len(loader.dataset) for split, loader in loaders.items()},  # type: ignore
+        }, output_dir / "activations.pt")
 
         # per-layer diagnostics (averaged over positions) to help pick the layer to modify
-        cos = F.cosine_similarity(means[forget_split], means[reference_split], dim=-1)  # [n_pos, n_layers]
         summary = {
             str(layer): {
                 "r_uv_norm": r_uv[:, i].norm(dim=-1).mean().item(),
-                "forget_norm": means[forget_split][:, i].norm(dim=-1).mean().item(),
-                "cos_forget_reference": cos[:, i].mean().item(),
+                **{f"norm[{s}]": means[s][:, i].norm(dim=-1).mean().item() for s in means},
+                **{
+                    f"cos[{a},{b}]": F.cosine_similarity(means[a][:, i], means[b][:, i], dim=-1).mean().item()
+                    for a, b in itertools.combinations(means, 2)
+                },
             }
             for i, layer in enumerate(layers)
         }
-        save_logs(summary, os.path.join(output_dir, "r_uv_summary.json"))
+        save_logs(summary, output_dir / "activations_summary.json")  # type: ignore
         logger.info(f"Saved r_UV {tuple(r_uv.shape)} (n_pos, n_layers, d) to {output_dir}")
 
 

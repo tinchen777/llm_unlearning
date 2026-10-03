@@ -14,18 +14,24 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 MODEL=Llama-3.2-3B-Instruct
 FORGET_SPLIT=forget01
 NEIGHBOR_SPLIT=neighbor01
+RETAIN_SPLIT=retain99
 
-# responses on forget/reference questions + LUNAR r_UV for every layer
-# (reference prompts: python setup/setup_data.py --lunar;
-#  switch to harmful ones with `data/datasets@data.reference=LUNAR_harmful`)
+# 3 question sets (forget / neighbor / retain) through the model:
+#   -> responses_<split>.json   generated answers (+ ROUGE vs ground truth) to read
+#   -> activations.pt           per-layer mean activations of every split + r_UV
+#   -> activations_summary.json per-layer ||r_UV|| and cosines between the splits
+# output: saves/neighbor/<task_name>/   (see configs/experiment/custom/neighbor_probe.yaml)
 echo start neighbor ${MODEL}
 
 python src/neighbor.py --config-name=train \
-  experiment=finetune/tofu/neighbor \
+  experiment=custom/neighbor_probe \
   model=${MODEL} \
-  neighbor_split=${NEIGHBOR_SPLIT} \
   forget_split=${FORGET_SPLIT} \
-  task_name=test/neighbor_${MODEL}_${NEIGHBOR_SPLIT} \
+  neighbor_split=${NEIGHBOR_SPLIT} \
+  retain_split=${RETAIN_SPLIT} \
+  task_name=test/neighbor_${MODEL}_${NEIGHBOR_SPLIT}
+  # probe.max_gen_samples=null \
+  # probe.point=mlp_out \
   # --cfg job --resolve
 
 echo end neighbor ${MODEL}
