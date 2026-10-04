@@ -50,3 +50,11 @@ class BalancedUnlearnDataset(Dataset):
             if self.forget:
                 item["forget"] = self.forget[randidx(len(self.forget))]
         return item
+
+    def __repr__(self) -> str:
+        return (
+            f"<{self.__class__.__name__}("
+            f"forget={len(self.forget) if self.forget else None}, "
+            f"retain={len(self.retain) if self.retain else None}, "
+            f"anchor={self.anchor})>"
+        )

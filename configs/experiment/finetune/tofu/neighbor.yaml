@@ -5,8 +5,8 @@ defaults:
   - override /model: Llama-3.2-1B-Instruct
   - override /trainer: finetune
   - override /data: default
-  - override /data/datasets@data.train.datasets: TOFU_QA_forget
-  - override /data/datasets@data.neighbor.datasets: TOFU_QA_neighbor
+  - override /data/datasets/TOFU@data.train.datasets: TOFU_QA_forget
+  - override /data/datasets/TOFU@data.neighbor.datasets: TOFU_QA_csv
   - override /eval: tofu
 
 mode: neighbor

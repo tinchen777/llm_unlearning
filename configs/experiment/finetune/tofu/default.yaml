@@ -4,13 +4,22 @@ defaults:
   - override /model: Llama-3.2-1B-Instruct
   - override /trainer: finetune
   - override /data: default
-  - override /data/datasets@data.train.datasets: TOFU_QA_full
   - override /eval: tofu
 
 mode: finetune
+data_name: full
 forget_split: forget10
+retain_split: retain90
 holdout_split: holdout10
 retain_logs_path: null
+
+data:
+  train:
+    datasets:
+      name: TOFU_QA_${data_name}
+      args:
+        hf_args:
+          name: ${data_name}
 
 trainer:
   args:
@@ -23,5 +32,6 @@ eval:
   tofu:
     forget_split: ${forget_split}
     holdout_split: ${holdout_split}
+    retain_split: ${retain_split}
     retain_logs_path: ${retain_logs_path}
     overwrite: true

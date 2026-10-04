@@ -4,8 +4,8 @@ defaults:
   - override /model: Llama-2-7b-hf
   - override /trainer: GradAscent
   - override /data: unlearn
-  - override /data/datasets@data.train.datasets.forget: MUSE_forget_scal
-  - override /data/datasets@data.train.datasets.retain: MUSE_retain
+  - override /data/datasets/MUSE@data.train.datasets.forget: MUSE_forget_scal
+  - override /data/datasets/MUSE@data.train.datasets.retain: MUSE_retain
   - override /eval: muse
 
 data_split: News
@@ -20,20 +20,21 @@ model:
 data:
   train:
     datasets:
-      anchor: forget
-      handler: BalancedUnlearnDataset
       forget:
-        MUSE_forget_scal:
-          args:
-            hf_args:
-              path: muse-bench/MUSE-${data_split}
-              split: ${forget_split}
+        args:
+          hf_args:
+            path: muse-bench/MUSE-${data_split}
+            split: ${forget_split}
       retain:
-        MUSE_retain:
-          args:
-            hf_args:
-              path: muse-bench/MUSE-${data_split}
-              split: ${retain_split}
+        args:
+          hf_args:
+            path: muse-bench/MUSE-${data_split}
+            split: ${retain_split}
+      COMBINE:
+        name: MUSE_balanced_unlearn
+        handler: BalancedUnlearnDataset
+        args:
+          anchor: forget
 
 eval:
   muse:

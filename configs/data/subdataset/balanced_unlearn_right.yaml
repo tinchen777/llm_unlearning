@@ -1,8 +1,11 @@
 defaults:
-  - /data/datasets@datasets.forget: TOFU_QA_forget
-  - /data/datasets@datasets.retain: TOFU_QA_retain
+  - /data/datasets/TOFU@datasets.forget: TOFU_QA
+  - /data/datasets/TOFU@datasets.retain: TOFU_QA
   - /data/collators@collator: default_right
 
 datasets:
-  handler: BalancedUnlearnDataset
-  anchor: forget
+  COMBINE:
+    name: null
+    handler: BalancedUnlearnDataset
+    args:
+      anchor: forget

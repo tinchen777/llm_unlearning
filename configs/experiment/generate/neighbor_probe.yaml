@@ -13,10 +13,7 @@ defaults:
   - /data/subdataset@data.retain: default_left
   - /data/subdataset@data.holdout: default_left
   - override /data: null
-  - override /data/datasets@data.forget.datasets: TOFU_QA_forget
-  - override /data/datasets@data.neighbor.datasets: TOFU_QA_neighbor
-  - override /data/datasets@data.retain.datasets: TOFU_QA_retain
-  - override /data/datasets@data.holdout.datasets: TOFU_QA_holdout
+  - override /data/datasets/TOFU@data.neighbor.datasets: TOFU_QA_csv
 
 mode: neighbor
 forget_split: forget10
@@ -39,18 +36,18 @@ model:
 data:
   forget:
     datasets:
-      TOFU_QA_forget:
-        args:
-          hf_args:
-            name: ${forget_split}
-          predict_with_generate: true
+      name: TOFU_QA_forget
+      args:
+        hf_args:
+          name: ${forget_split}
+        predict_with_generate: true
   neighbor:
     datasets:
-      TOFU_QA_neighbor:
-        args:
-          hf_args:
-            data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
-          predict_with_generate: true
+      name: TOFU_QA_neighbor
+      args:
+        hf_args:
+          data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+        predict_with_generate: true
     collator:
       args:
         metadata_keys:
@@ -58,18 +55,18 @@ data:
           - neighbor_id
   retain:
     datasets:
-      TOFU_QA_retain:
-        args:
-          hf_args:
-            name: ${retain_split}
-          predict_with_generate: true
+      name: TOFU_QA_retain
+      args:
+        hf_args:
+          name: ${retain_split}
+        predict_with_generate: true
   holdout:
     datasets:
-      TOFU_QA_holdout:
-        args:
-          hf_args:
-            name: ${holdout_split}
-          predict_with_generate: true
+      name: TOFU_QA_holdout
+      args:
+        hf_args:
+          name: ${holdout_split}
+        predict_with_generate: true
 
 generation_args:
   max_new_tokens: 128

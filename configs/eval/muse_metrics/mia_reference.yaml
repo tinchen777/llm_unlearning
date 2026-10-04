@@ -1,20 +1,18 @@
 # @package eval.muse.metrics.mia_reference
 
 defaults:
-  - /data/datasets@datasets: MUSE_MIA
+  - /data/datasets/MUSE@datasets: MUSE_MIA
   - /data/collators@collator: default_right
 
 datasets:
   holdout:
-    MUSE_MIA_holdout:
-      args:
-        hf_args:
-          path: muse-bench/MUSE-${eval.muse.data_split}
+    args:
+      hf_args:
+        path: muse-bench/MUSE-${eval.muse.data_split}
   forget:
-    MUSE_MIA_forget:
-      args:
-        hf_args:
-          path: muse-bench/MUSE-${eval.muse.data_split}
+    args:
+      hf_args:
+        path: muse-bench/MUSE-${eval.muse.data_split}
 
 handler: mia_reference
 batch_size: ${eval.muse.batch_size}

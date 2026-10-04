@@ -1,21 +1,20 @@
 # @package eval.tofu.metrics.mia_gradnorm
 
 defaults:
-  - /data/datasets@datasets: TOFU_MIA
+  - /data/datasets/TOFU@datasets: TOFU_MIA
   - /data/collators@collator: default_right
 
 datasets:
   forget:
-    TOFU_QA_forget:
-      args:
-        hf_args:
-          name: ${eval.tofu.forget_split}_perturbed
-        question_key: ${eval.tofu.question_key}
+    name: TOFU_QA_perturbed_forget
+    args:
+      hf_args:
+        name: ${eval.tofu.forget_split}_perturbed
+      question_key: ${eval.tofu.question_key}
   holdout:
-    TOFU_QA_holdout:
-      args:
-        hf_args:
-          name: ${eval.tofu.holdout_split}
+    args:
+      hf_args:
+        name: ${eval.tofu.holdout_split}
 
 handler: mia_gradnorm
 batch_size: 1

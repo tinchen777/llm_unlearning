@@ -4,7 +4,7 @@ defaults:
   - override /model: Llama-2-13b-hf
   - override /trainer: finetune
   - override /data: default
-  - override /data/datasets@data.train.datasets: MUSE_train
+  - override /data/datasets/MUSE@data.train.datasets: MUSE_train
   - override /eval: muse
 
 mode: finetune
@@ -14,11 +14,10 @@ data_sub_set: full   # full or retain
 data:
   train:
     datasets:
-      MUSE_train:
-        args:
-          hf_args:
-            path: tamarsonha/MUSE-${data_split}-Train
-            split: ${data_sub_set}
+      args:
+        hf_args:
+          path: tamarsonha/MUSE-${data_split}-Train
+          split: ${data_sub_set}
 
 trainer:
   args:

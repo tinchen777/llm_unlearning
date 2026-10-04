@@ -38,30 +38,31 @@ MODELS=(
   Qwen2.5-1.5B-Instruct
 )
 
-# "forget_split holdout_split retain_split"
+# "forget_split holdout_split retain_split data_name"
 SPLITS=(
-  "forget10 holdout10 retain90"
-  "forget05 holdout05 retain95"
-  "forget01 holdout01 retain99"
+  "forget10 holdout10 retain90 retain90"
+  "forget05 holdout05 retain95 retain95"
+  "forget01 holdout01 retain99 retain99"
+  "forget10 holdout10 retain90 full"
 )
 
 for MODEL in "${MODELS[@]}"; do
   for split in "${SPLITS[@]}"; do
-    read -r forget_split holdout_split retain_split <<< "${split}"
-    echo "========== [retain] model=${MODEL} train=${retain_split} eval=${forget_split}/${holdout_split} =========="
+    read -r forget_split holdout_split retain_split data_name <<< "${split}"
+    echo "========== [retain] model=${MODEL} train=${data_name} eval=${forget_split}/${holdout_split} =========="
 
     python src/train.py \
       experiment=finetune/tofu/default \
       model=${MODEL} \
-      data/datasets@data.train=TOFU_QA_retain \
-      data.train.TOFU_QA_retain.args.hf_args.name=${retain_split} \
+      data_name=${data_name} \
       forget_split=${forget_split} \
       holdout_split=${holdout_split} \
-      trainer.args.eval_on_start=False \
+      retain_split=${retain_split} \
+      trainer.args.eval_on_start=True \
       trainer.args.num_train_epochs=5 \
-      task_name=test/tofu_${MODEL}_${retain_split}
+      task_name=retain/tofu_${MODEL}_${data_name}
 
-    echo "========== [retain] done: ${MODEL} ${retain_split} =========="
+    echo "========== [retain] done: ${MODEL} ${data_name} =========="
   done
 done
 

@@ -1,14 +1,13 @@
 # @package eval.tofu.metrics.ra_Q_A_ROUGE
 
 defaults:
-  - /data/datasets@datasets: TOFU_QA_ra
+  - /data/datasets/TOFU@datasets: TOFU_QA_ra
   - /data/collators@collator: default_left
   - /generation@generation_args: default
 
 datasets:
-  TOFU_QA_ra:
-    args:
-      predict_with_generate: true
+  args:
+    predict_with_generate: true
 
 handler: rouge
 rouge_type: rougeL_recall

@@ -1,13 +1,12 @@
 # @package eval.tofu.metrics.retain_Q_A_PERT_Prob
 
 defaults:
-  - /data/datasets@datasets: TOFU_QA_retain_pert
+  - /data/datasets/TOFU@datasets: TOFU_QA_retain_pert
   - /data/collators@collator: default_right
 
 datasets:
-  TOFU_QA_retain_pert:
-    args:
-      question_key: ${eval.tofu.question_key}
+  args:
+    question_key: ${eval.tofu.question_key}
 
 handler: probability
 batch_size: ${eval.tofu.batch_size}

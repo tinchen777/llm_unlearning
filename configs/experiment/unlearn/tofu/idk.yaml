@@ -4,8 +4,7 @@ defaults:
   - override /model: Llama-3.2-3B-Instruct
   - override /trainer: DPO
   - override /data: unlearn
-  - override /data/datasets@data.train.datasets.forget: TOFU_QA_forget_idk
-  - override /data/datasets@data.train.datasets.retain: TOFU_QA_retain
+  - override /data/datasets/TOFU@data.train.datasets.forget: TOFU_QA_forget_idk
   - override /eval: tofu
 
 forget_split: forget10
@@ -25,18 +24,20 @@ eval:
 data:
   train:
     datasets:
-      anchor: forget
-      handler: BalancedUnlearnDataset
       forget:
-        TOFU_QA_forget_idk:
-          args:
-            hf_args:
-              name: ${forget_split}
+        args:
+          hf_args:
+            name: ${forget_split}
       retain:
-        TOFU_QA_retain:
-          args:
-            hf_args:
-              name: ${retain_split}
+        name: TOFU_QA_retain
+        args:
+          hf_args:
+            name: ${retain_split}
+      COMBINE:
+        name: TOFU_balanced_unlearn_idk
+        handler: BalancedUnlearnDataset
+        args:
+          anchor: forget
 
 trainer:
   args:

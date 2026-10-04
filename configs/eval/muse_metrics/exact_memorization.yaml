@@ -1,14 +1,13 @@
 # @package eval.muse.metrics.exact_memorization
 
 defaults:
-  - /data/datasets@datasets: MUSE_forget_verbmem
+  - /data/datasets/MUSE@datasets: MUSE_forget_verbmem
   - /data/collators@collator: default_right
 
 datasets:
-  MUSE_forget_verbmem:
-    args:
-      hf_args:
-        path: muse-bench/MUSE-${eval.muse.data_split}
+  args:
+    hf_args:
+      path: muse-bench/MUSE-${eval.muse.data_split}
 
 handler: exact_memorization
 batch_size: ${eval.muse.batch_size}
