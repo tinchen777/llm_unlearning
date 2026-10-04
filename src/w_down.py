@@ -4,16 +4,17 @@ from __future__ import annotations
 # install(show_locals=False, width=100)
 import hydra
 from hydra.core.hydra_config import HydraConfig
+import json
 import logging
 import torch
 from pathlib import Path
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
-from data import get_split_data, one_dataset
+from data import get_split_data, split_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_out_proj
-from model.generation import generate_responses
+from model.generation import generate_responses, summarize_responses
 from model.redirect import (
     apply_w_down, build_shift, collect_mlp_tokens, forget_authors, train_w_down, w_down_mse,
 )
@@ -24,25 +25,31 @@ from utils.config import TrackingConfig, init_hydra_choices
 logger = logging.getLogger("main(w_down)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="train")
+@hydra.main(version_base=None, config_path="../configs", config_name="generate")
 def main(config: DictConfig):
     """Train W_down (the MLP output projection) of chosen layers so that forget prompts are redirected by
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
-    Needs the `r_uv.pt` written by src/r_uv.py. Args:
-        config (DictConfig): e.g. `experiment=custom/neighbor_probe` (uses `data.*`, `wdown`)
+    Needs the `r_uv.pt` written by src/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/select_layer.py
+    (layer_selection.json). Args:
+        config (DictConfig): `experiment=generate/neighbor_probe` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
-    seed = cfg["trainer"]["args"]["seed"]
+    seed = int(cfg["seed"])
     set_seed(seed)
     wd = cfg["wdown"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     k, coeff = int(wd["k"]), float(wd["coeff"])
-    train_layers = [int(l) for l in wd["layers"]]
+    if wd["layers"] == "auto":
+        with open(str(wd["layer_selection_path"]), encoding="utf-8") as f:
+            train_layers = [int(json.load(f)["selected_layer"])]
+        logger.info(f"wdown.layers=auto -> layer {train_layers} from {wd['layer_selection_path']}")
+    else:
+        train_layers = [int(l) for l in wd["layers"]]
     shift_mode, ref_position = str(wd["shift_mode"]), int(wd["ref_position"])
-    tag = f"k{k}"
+    tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}"
 
     # 1. r_UV of the K-neighbour reference
     with step_logging(logger, "[1/6]", "r_UV", wd):
@@ -74,26 +81,28 @@ def main(config: DictConfig):
 
     def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        datasets, collator = split_data[split]
-        dataset = one_dataset(datasets)
-        if max_samples is not None and int(max_samples) < len(dataset):  # type: ignore
-            idx = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(seed))[:int(max_samples)]  # type: ignore
-            dataset = Subset(dataset, sorted(idx.tolist()))
-        return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collator)
+        return split_loader(split_data, split, batch_size, max_samples, seed)
 
     gen_splits = list(wd["responses_splits"])
 
+    probe_cfg = cfg["probe"]
+
     def write_responses(prefix: str):
+        summary = {}
         for split in gen_splits:
             records = generate_responses(
                 model, tokenizer, make_loader(split, wd["gen_batch_size"], wd["max_gen_samples"]),
-                cfg["generation_args"], desc=f"{prefix} / {split}"
+                cfg["generation_args"], desc=f"{prefix} / {split}",
+                refusal_patterns=list(probe_cfg["refusal_patterns"]),
             )
             save_logs(records, output_dir / f"responses_{prefix}_{split}.json")  # type: ignore
+            summary[split] = summarize_responses(records, float(probe_cfg["hallucination_rouge"]))
+        save_logs(summary, output_dir / f"responses_{prefix}_summary.json")  # type: ignore
+        return summary
 
     # 3. Responses of the ORIGINAL model (same fixed subset as after the edit)
     with step_logging(logger, "[3/6]", "responses before the edit", wd):
-        write_responses("before")
+        responses_before = write_responses("before")
 
     # 4. Record the original (x, y) of every token and build the targets
     with step_logging(logger, "[4/6]", "MLP inputs / targets", wd):
@@ -159,7 +168,7 @@ def main(config: DictConfig):
                 cos.append(torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item())
                 ratio.append((achieved.norm() / intended.norm()).item())
             achieved_vs_intended[l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
-        write_responses(f"after_{tag}")
+        responses_after = write_responses(f"after_{tag}")
         save_logs({
             "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "num_tokens": num_tokens,
@@ -168,6 +177,7 @@ def main(config: DictConfig):
                 "retain_max_samples")} | {"retain_splits": list(wd["retain_splits"])},
             "per_layer": per_layer,
             "achieved_vs_intended": achieved_vs_intended,
+            "responses": {"before": responses_before, "after": responses_after},
             "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV "
                     "(per author, averaged). Exact for a single edited layer; with several layers the deeper ones "
                     "also contain the effect of the upstream edits.",

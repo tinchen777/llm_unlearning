@@ -22,19 +22,19 @@ from utils.config import TrackingConfig, init_hydra_choices
 logger = logging.getLogger("main(r_uv)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="train")
+@hydra.main(version_base=None, config_path="../configs", config_name="generate")
 def main(config: DictConfig):
     """r_UV per forget author, ablated over the number K of neighbours used as reference (no Trainer).
 
         r_UV[K][author] = mean act over the first K neighbours of the author - mean act of the author's forget questions
 
     Args:
-        config (DictConfig): e.g. `experiment=custom/neighbor_probe` (uses its `data.forget`, `data.neighbor`, `ruv`)
+        config (DictConfig): `experiment=generate/neighbor_probe` (uses its `data.forget`, `data.neighbor`, `ruv`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
-    set_seed(cfg["trainer"]["args"]["seed"])
+    set_seed(int(cfg["seed"]))
     ruv_cfg = cfg["ruv"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     ks = sorted(int(k) for k in ruv_cfg["ks"])

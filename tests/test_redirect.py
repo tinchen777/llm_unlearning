@@ -15,12 +15,14 @@ import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 
 from model.activations import (
-    capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj,
+    auc, capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj, mean_diff_auc,
 )
+from model.generation import answer_logprobs, is_degenerate, is_refusal, summarize_responses
 from model.redirect import (
-    apply_w_down, build_shift, check_neighbors, collect_mlp_tokens, compute_r_uv, forget_authors,
+    Steerer, apply_w_down, build_shift, check_neighbors, collect_mlp_tokens, compute_r_uv, forget_authors,
     nested_neighbor_order, neighbors_by_author, summarize_r_uv, train_w_down, w_down_mse,
 )
+from utils.common import IGNORE_INDEX
 
 N_LAYERS, HIDDEN, FF = 4, 32, 64
 POSITIONS = [-3, -2, -1]
@@ -267,6 +269,127 @@ def test_apply_w_down_rejects_bias(model):
                                    num_attention_heads=4)).eval()
     with pytest.raises(ValueError, match="bias"):
         apply_w_down(phi, 0, torch.zeros(HIDDEN, FF))
+
+
+# ---------------------------------------------------------------------------------------------
+# steering (layer selection) and probe statistics
+
+
+def block_out_all_layers(model, batch):
+    with torch.no_grad(), capture_activations(model, list(range(N_LAYERS)), "block_out") as cache:
+        model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"])
+        return {l: cache[l].clone() for l in range(N_LAYERS)}
+
+
+@pytest.mark.parametrize("mode", ["eoi", "all"])
+def test_steerer_adds_coeff_r_at_the_right_tokens(model, mode):
+    prompts = make_prompts(4, seed=11)
+    batch = make_batches(prompts, {}, 4, "left")[0]
+    r = torch.randn(4, len(POSITIONS), HIDDEN)
+    layer, coeff = 1, 2.0
+    base = block_out_all_layers(model, batch)
+    with Steerer(model, layer, POSITIONS, mode=mode, ref_position=-1, coeff=coeff) as steerer:
+        steerer.set(r, prompt_len=batch["input_ids"].shape[1])
+        steered = block_out_all_layers(model, batch)
+    diff = steered[layer] - base[layer]
+    if mode == "eoi":
+        assert torch.allclose(diff[:, -3:], coeff * r, atol=1e-5), "last 3 prompt tokens get coeff * r[:, p]"
+        assert diff[:, :-3].abs().max() < 1e-6, "other tokens untouched"
+    else:
+        assert torch.allclose(diff, coeff * r[:, -1:].expand_as(diff), atol=1e-5), "every token gets r[:, ref]"
+    assert all(torch.equal(steered[l], base[l]) for l in range(layer)), "upstream layers untouched"
+    assert (steered[layer + 1] - base[layer + 1]).abs().max() > 1e-3, "downstream layers see the redirection"
+    # the hook is removed on exit and the vectors are cleared
+    assert all(torch.equal(v, base[l]) for l, v in block_out_all_layers(model, batch).items())
+
+
+def test_steerer_eoi_is_what_a_perfect_w_down_edit_does(model):
+    """Steering block_out of layer l == adding build_shift(eoi) to its MLP output (the W_down training target)."""
+    prompts = make_prompts(3, seed=12)
+    batch = make_batches(prompts, {}, 3, "left")[0]
+    r = torch.randn(3, len(POSITIONS), HIDDEN)
+    layer = 2
+    with torch.no_grad(), Steerer(model, layer, POSITIONS, mode="eoi") as steerer:
+        steerer.set(r, prompt_len=batch["input_ids"].shape[1])
+        steered = model(**{k: batch[k] for k in ("input_ids", "attention_mask")}).logits
+    mlp = model.model.layers[layer].mlp
+    shift = build_shift(r, batch["attention_mask"], POSITIONS, "eoi")
+    handle = mlp.register_forward_hook(lambda m, a, out: out + shift)
+    try:
+        with torch.no_grad():
+            edited = model(**{k: batch[k] for k in ("input_ids", "attention_mask")}).logits
+    finally:
+        handle.remove()
+    assert torch.allclose(steered, edited, atol=1e-5)
+
+
+def test_steerer_eoi_leaves_decoding_steps_alone(model):
+    steerer = Steerer(model, 0, POSITIONS, mode="eoi")
+    steerer.set(torch.ones(2, len(POSITIONS), HIDDEN), prompt_len=8)
+    step = torch.randn(2, 1, HIDDEN)  # one generated token per row
+    assert torch.equal(steerer._hook(None, (), step), step)
+    steerer.set(None)
+    assert steerer._hook(None, (), step) is None
+    with pytest.raises(ValueError):
+        Steerer(model, 0, POSITIONS, mode="all", ref_position=-7)
+
+
+def test_steered_generation_runs_and_zero_r_changes_nothing(model):
+    prompts = make_prompts(3, seed=13)
+    batch = make_batches(prompts, {}, 3, "left")[0]
+    kwargs = dict(max_new_tokens=5, do_sample=False, pad_token_id=0)
+    ref = model.generate(batch["input_ids"], attention_mask=batch["attention_mask"], **kwargs)
+    with Steerer(model, 1, POSITIONS, mode="eoi") as steerer:
+        steerer.set(torch.zeros(3, len(POSITIONS), HIDDEN), prompt_len=batch["input_ids"].shape[1])
+        same = model.generate(batch["input_ids"], attention_mask=batch["attention_mask"], **kwargs)
+        steerer.set(50 * torch.randn(3, len(POSITIONS), HIDDEN), prompt_len=batch["input_ids"].shape[1])
+        other = model.generate(batch["input_ids"], attention_mask=batch["attention_mask"], **kwargs)
+    assert torch.equal(ref, same) and not torch.equal(ref, other)
+
+
+def test_answer_logprobs_match_unpadded_teacher_forcing(model):
+    prompts = make_prompts(3, seed=14)
+    answers = make_prompts(3, seed=15, lo=2, hi=6)
+    batch = make_batches(prompts, {}, 3, "left")[0]
+    width = max(len(p) + len(a) for p, a in zip(prompts, answers))
+    labels = torch.full((3, width), IGNORE_INDEX)
+    for i, (p, a) in enumerate(zip(prompts, answers)):  # like the collator: labels padded on the left too
+        lab = torch.cat([torch.full((len(p),), IGNORE_INDEX), a])
+        labels[i, width - len(lab):] = lab
+    got = answer_logprobs(model, {**batch, "labels": labels}, pad_token_id=0)
+    for i, (p, a) in enumerate(zip(prompts, answers)):
+        seq = torch.cat([p, a])[None]
+        with torch.no_grad():
+            logp = model(input_ids=seq).logits[0].log_softmax(-1)
+        manual = logp[len(p) - 1:len(seq[0]) - 1].gather(-1, a[:, None]).mean().item()
+        assert abs(got[i] - manual) < 1e-4, f"row {i}: {got[i]} vs {manual}"
+    with pytest.raises(ValueError, match="LEFT"):
+        answer_logprobs(model, {**make_batches(prompts, {}, 3, "right")[0], "labels": labels}, pad_token_id=0)
+
+
+def test_auc_and_separability():
+    assert auc(torch.tensor([3., 4.]), torch.tensor([1., 2.])) == 1.0
+    assert auc(torch.tensor([1., 2.]), torch.tensor([3., 4.])) == 0.0
+    assert auc(torch.tensor([1., 1.]), torch.tensor([1., 1.])) == 0.5
+    g = torch.Generator().manual_seed(0)
+    a, b = torch.randn(60, 16, generator=g), torch.randn(60, 16, generator=g)
+    assert abs(mean_diff_auc(a, b) - 0.5) < 0.15, "same distribution -> close to chance"
+    assert mean_diff_auc(a + 3 * torch.ones(16), b) > 0.99, "shifted along one direction -> separable"
+
+
+def test_response_flags_and_summary():
+    assert is_refusal("I'm sorry, I don't have that information.") and not is_refusal("She was born in Paris.")
+    assert is_refusal("I don’t know.")  # typographic apostrophe
+    assert is_degenerate("") and is_degenerate("the cat the cat the cat the cat the cat the cat")
+    assert not is_degenerate("He was born in Lisbon to a family of tailors and became a writer.")
+    recs = [
+        {"generation": "Born in Rome.", "rougeL_recall": 0.1, "rouge1_recall": 0.2, "refusal": False, "degenerate": False, "answer_logprob": -2.0},
+        {"generation": "I don't know.", "rougeL_recall": 0.0, "rouge1_recall": 0.0, "refusal": True, "degenerate": False, "answer_logprob": -4.0},
+        {"generation": "Lisbon, tailors.", "rougeL_recall": 0.9, "rouge1_recall": 0.9, "refusal": False, "degenerate": False, "answer_logprob": -0.5},
+    ]
+    s = summarize_responses(recs, hallucination_rouge=0.3)
+    assert s["n"] == 3 and abs(s["refusal_rate"] - 1 / 3) < 1e-9 and abs(s["hallucination_rate"] - 1 / 3) < 1e-9
+    assert abs(s["answer_logprob"] - (-6.5 / 3)) < 1e-9
 
 
 if __name__ == "__main__":

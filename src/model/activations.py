@@ -268,3 +268,34 @@ def get_eoi_positions(tokenizer: Any, template_args: Any, chat_header: Any = Non
     if n_eoi == 0:
         raise ValueError("The prompt template has no tokens after the question; use explicit positions.")
     return list(range(-n_eoi, 0))
+
+
+def auc(pos: torch.Tensor, neg: torch.Tensor) -> float:
+    """ROC-AUC = P(score(pos) > score(neg)) (ties count 1/2), via the Mann-Whitney U statistic."""
+    scores = torch.cat([pos, neg]).double()
+    order = scores.argsort()
+    ranks = torch.empty_like(scores)
+    ranks[order] = torch.arange(1, len(scores) + 1, dtype=scores.dtype)
+    for value in scores.unique():  # average ranks of ties
+        tie = scores == value
+        if tie.sum() > 1:
+            ranks[tie] = ranks[tie].mean()
+    n_pos, n_neg = len(pos), len(neg)
+    return ((ranks[:n_pos].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)).item()
+
+
+def mean_diff_auc(a: torch.Tensor, b: torch.Tensor, folds: int = 2, seed: int = 0) -> float:
+    """How linearly separable are the activations `a` [n, d] and `b` [m, d]? Cross-validated AUC of the projection
+    on the difference of class means, the direction being fitted on the OTHER folds (0.5 = indistinguishable,
+    1.0 = perfectly separated along a single direction, like r_UV)."""
+    if len(a) < folds or len(b) < folds:
+        raise ValueError(f"Need at least {folds} samples per class, got {len(a)} and {len(b)}.")
+    g = torch.Generator().manual_seed(seed)
+    fa = torch.randperm(len(a), generator=g) % folds
+    fb = torch.randperm(len(b), generator=g) % folds
+    a, b = a.double(), b.double()
+    scores = []
+    for f in range(folds):
+        direction = a[fa != f].mean(0) - b[fb != f].mean(0)
+        scores.append(auc(a[fa == f] @ direction, b[fb == f] @ direction))
+    return sum(scores) / folds

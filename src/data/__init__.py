@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import json
 from pprint import pprint
-from torch.utils.data import DataLoader
+import torch
+from torch.utils.data import DataLoader, Subset
 from typing import Dict, Any, Optional, Sequence, Tuple, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
@@ -78,6 +79,28 @@ def get_loaders(
         )
         for name, dataset in datasets.items()
     }
+
+
+def fixed_subset(dataset: Dataset, max_samples: Optional[int] = None, seed: int = 0) -> Dataset:
+    """A FIXED random subset of `max_samples` samples (sorted indices; the same for every call / model given `seed`),
+    or the dataset itself when `max_samples` is None or not smaller than the dataset."""
+    if max_samples is None or int(max_samples) >= len(dataset):  # type: ignore
+        return dataset
+    idx = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(seed))[:int(max_samples)]  # type: ignore
+    return Subset(dataset, sorted(idx.tolist()))
+
+
+def split_loader(
+    split_data: Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]],
+    split: str,
+    batch_size: int,
+    max_samples: Optional[int] = None,
+    seed: int = 0,
+) -> DataLoader:
+    """Unshuffled loader of the single dataset of `split` (output of `get_split_data`), on a fixed subset."""
+    datasets, collator = split_data[split]
+    dataset = fixed_subset(one_dataset(datasets), max_samples, seed)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collator)
 
 
 def one_loader(loaders: Dict[str, DataLoader]) -> DataLoader:
