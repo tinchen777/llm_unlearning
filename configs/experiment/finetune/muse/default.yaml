@@ -13,11 +13,12 @@ data_sub_set: full   # full or retain
 
 data:
   train:
-    MUSE_train:
-      args:
-        hf_args:
-          path: tamarsonha/MUSE-${data_split}-Train
-          split: ${data_sub_set}
+    datasets:
+      MUSE_train:
+        args:
+          hf_args:
+            path: tamarsonha/MUSE-${data_split}-Train
+            split: ${data_sub_set}
 
 trainer:
   args:
