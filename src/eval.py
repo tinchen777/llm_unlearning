@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from model import get_model_and_tokenizer
 from evals import get_evaluators
 from vis import plot_figures
-from utils.common import get_cuda_visible_devices
+from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 
@@ -29,8 +29,7 @@ def main(config: DictConfig):
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
-    # set_seed(cfg["trainer"]["args"]["seed"])
-    # mode = cfg.get("mode", "eval")
+    set_seed(cfg["seed"])
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]

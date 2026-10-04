@@ -2,11 +2,11 @@
 # Probe a model's responses and compute the LUNAR unlearning vector
 #   r_UV[l] = mean(a_l | reference) - mean(a_l | forget)
 # over the end-of-instruction tokens, for every decoder layer l (src/gen.py).
-
+# TODO
 defaults:
   - /generation@generation_args: default
   - override /data: lunar_uv
-  - override /collator: default_with_index
+  - override /collator: default_right
 
 forget_split: forget10
 

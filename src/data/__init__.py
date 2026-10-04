@@ -1,5 +1,8 @@
 
 from __future__ import annotations
+import logging
+import json
+from pprint import pprint
 from torch.utils.data import DataLoader
 from typing import Dict, Any, Optional, Sequence, Tuple, TYPE_CHECKING
 
@@ -12,8 +15,10 @@ if TYPE_CHECKING:
     from torch.utils.data import Dataset
     from utils.config import TrackingConfig
 
+logger = logging.getLogger("data")
+
 DATASET_REGISTRY: Dict[str, Any] = {}
-COMBINED_DATASET_REGISTRY: Dict[str, Any] = {}
+COMBINED_DATASET_REGISTRY: Dict[str, Tuple[Any, Sequence[str], Sequence[str]]] = {}
 COLLATOR_REGISTRY: Dict[str, Any] = {}
 
 
@@ -21,8 +26,12 @@ def _register_dataset(dataset_cls):
     DATASET_REGISTRY[dataset_cls.__name__] = dataset_cls
 
 
-def _register_combined_dataset(combined_dataset_cls, combined_keys: Sequence[str]):
-    COMBINED_DATASET_REGISTRY[combined_dataset_cls.__name__] = (combined_dataset_cls, combined_keys)
+def _register_combined_dataset(
+    combined_cls,
+    combined_keys: Sequence[str],
+    other_keys: Sequence[str] = ()
+):
+    COMBINED_DATASET_REGISTRY[combined_cls.__name__] = (combined_cls, combined_keys, other_keys)
 
 
 def _register_collator(collator_cls):
@@ -81,20 +90,26 @@ def get_split_data(
     data_cfg: TrackingConfig,
     **kwargs
 ) -> Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]]:
-    return {
+    split_data = {
         split_name: (
             get_datasets(split_cfg["datasets"], **kwargs),
             get_collator(split_cfg.get("collator", None), **kwargs)
         )
         for split_name, split_cfg in data_cfg.items()
     }
+    logger.info(f"Loaded split data: {list(split_data)}")
+    pprint(split_data)
+
+    return split_data
 
 # === Datasets ===
 
 def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
-    # extract combine args
-    combine_handler = datasets_cfg.pop("handler", None)
-    combine_anchor = datasets_cfg.pop("anchor", None)
+    # combine args
+    combine_cls, combine_keys, other_keys = COMBINED_DATASET_REGISTRY.get(
+        datasets_cfg.pop("handler", None), (None, (), ())
+    )
+    other_args = {key: datasets_cfg.pop(key) for key in other_keys} if other_keys else {}
 
     datasets: Dict[str, Dataset] = {}
     for dataset_name, item_cfg in datasets_cfg.items():
@@ -106,11 +121,10 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
         except Exception as e:
             raise RuntimeError(f"Error loading dataset `{dataset_name}` in `@{dataset_cfg.loc_choices}` with {dataset_cfg}") from e
     # Combine datasets if necessary
-    if combine_handler is not None and combine_anchor is not None:
-        combine_dataset_cls, combine_keys = COMBINED_DATASET_REGISTRY[combine_handler]
-        datasets[combine_handler] = combine_dataset_cls(
+    if combine_cls is not None and combine_keys:
+        datasets[combine_cls.__name__] = combine_cls(
             **{key: datasets.pop(key) for key in combine_keys},
-            anchor=combine_anchor
+            **other_args
         )
 
     return datasets
@@ -145,7 +159,7 @@ _register_dataset(PretrainingDataset)
 _register_dataset(CompletionDataset)
 _register_dataset(QAwithAlternateDataset)
 
-_register_combined_dataset(BalancedUnlearnDataset, ("forget", "retain"))
+_register_combined_dataset(BalancedUnlearnDataset, ("forget", "retain"), ("anchor",))
 
 # Register collator
 _register_collator(DataCollatorForNestedData)

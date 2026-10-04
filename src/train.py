@@ -52,7 +52,6 @@ def main(config: DictConfig):
             template_args=template_args
         )
         train_datasets, collator = data["train"]
-        # eval_datasets, _ = data.get("eval", (None, None))
 
     # 4. Get Evaluators
     eval_cfgs = cfg.get("eval", None)
@@ -75,7 +74,6 @@ def main(config: DictConfig):
             model=model,
             evaluators=evaluators,
             train_dataset=one_dataset(train_datasets),
-            # eval_dataset=data.get("eval", None),
             processing_class=tokenizer,
             data_collator=collator
         )

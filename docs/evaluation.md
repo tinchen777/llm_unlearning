@@ -113,7 +113,7 @@ Example 1: Creating the config for MUSE's `forget_verbmem_ROUGE` ([`configs/eval
 defaults: # fill up forget_verbmem_ROUGE's inputs' configs
   - ../../data/datasets@datasets: MUSE_forget_verbmem
   - ../../collator@collators: DataCollatorForSupervisedDatasetwithIndex
-  - ../../generation@generation_args: default
+  - /generation@generation_args: default
 handler: rouge # the handler we defined above
 rouge_type: rougeL_f1
 batch_size: 8

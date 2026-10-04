@@ -10,10 +10,15 @@ defaults:
 
 data_split: cyber
 
+model:
+  pretrained:
+    name_or_path: ???
+
 data:
   train:
     datasets:
       anchor: forget
+      handler: BalancedUnlearnDataset
       forget:
         WMDP_forget:
           args:

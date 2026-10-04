@@ -18,6 +18,7 @@ class DataCollatorForNestedData:
         self,
         tokenizer: Any,
         padding_side: str = "right",
+        index_to_tensor: bool = False,
         metadata_keys: Optional[Sequence[str]] = None,
         **kwargs
     ):
@@ -29,6 +30,8 @@ class DataCollatorForNestedData:
             return_tensors="pt"
         )
         self.metadata_keys = set(metadata_keys or [])
+        if not index_to_tensor:
+            self.metadata_keys.add("index")
 
     def __call__(
         self,
@@ -59,3 +62,10 @@ class DataCollatorForNestedData:
         batch.update(metadata)
 
         return batch
+
+    def __repr__(self) -> str:
+        return (
+            f"<{self.__class__.__name__}("
+            f"padding_side={self.padding_side}, "
+            f"metadata_keys={list(self.metadata_keys)})>"
+        )

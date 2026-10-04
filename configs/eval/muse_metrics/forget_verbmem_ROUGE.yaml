@@ -2,7 +2,7 @@
 
 defaults:
   - /data/datasets@datasets: MUSE_forget_verbmem
-  - /data/collators@collator: default_with_index
+  - /data/collators@collator: default_left
   - /generation@generation_args: default
 
 datasets:
@@ -11,10 +11,6 @@ datasets:
       hf_args:
         path: muse-bench/MUSE-${eval.muse.data_split}
       predict_with_generate: true
-
-collator:
-  args:
-    padding_side: left
 
 generation_args:
   max_new_tokens: 128

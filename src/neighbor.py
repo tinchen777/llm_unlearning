@@ -50,11 +50,19 @@ def main(config: DictConfig):
         split_loaders = get_split_loaders(
             cfg["data"],
             batch_size=probe_cfg["batch_size"],
-            shuffle=True,  # random subset for `max_gen_samples` (seeded above)
+            shuffle=False,
             tokenizer=tokenizer,
             template_args=template_args
         )
-        loaders = {split: one_loader(split_loader) for split, split_loader in split_loaders.items()}
+        forget_loader = one_loader(split_loaders["forget"])
+        neighbor_loader = one_loader(split_loaders["neighbor"])
+        retain_loader = one_loader(split_loaders["retain"])
+        
+        loaders = {
+            "forget": forget_loader,
+            "neighbor": neighbor_loader,
+            "retain": retain_loader
+        }
 
     # 3. Model responses on each split -> responses_<split>.json
     with step_logging(logger, "[3/4]", "responses", probe_cfg):
@@ -70,6 +78,9 @@ def main(config: DictConfig):
                     f"        GT: {record['ground_truth']!r}\n"
                     f"        A : {record['generation']!r}"
                 )
+    
+    
+    exit()
 
     # 4. Per-layer activations (dataset mean per split) and unlearning vector
     with step_logging(logger, "[4/4]", "activations & r_UV", probe_cfg):

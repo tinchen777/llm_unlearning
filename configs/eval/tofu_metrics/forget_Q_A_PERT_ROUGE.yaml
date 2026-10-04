@@ -2,8 +2,8 @@
 
 defaults:
   - /data/datasets@datasets: TOFU_QA_forget_pert
-  - /data/collators@collator: default_with_index
-  - ../../generation@generation_args: default
+  - /data/collators@collator: default_left
+  - /generation@generation_args: default
 
 datasets:
   TOFU_QA_forget_pert:
@@ -12,10 +12,6 @@ datasets:
         name: ${eval.tofu.forget_split}_perturbed
       question_key: ${eval.tofu.question_key}
       predict_with_generate: true
-
-collator:
-  args:
-    padding_side: left
 
 handler: rouge
 rouge_type: rougeL_recall

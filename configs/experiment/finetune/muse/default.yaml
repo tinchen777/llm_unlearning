@@ -3,18 +3,13 @@
 defaults:
   - override /model: Llama-2-13b-hf
   - override /trainer: finetune
-  - override /data: finetune
+  - override /data: default
   - override /data/datasets@data.train.datasets: MUSE_train
   - override /eval: muse
 
 mode: finetune
-
 data_split: News
 data_sub_set: full   # full or retain
-
-model:
-  model_args:
-    attn_implementation: sdpa
 
 data:
   train:

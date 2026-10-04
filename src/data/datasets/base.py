@@ -22,6 +22,7 @@ class BaseDataset(Dataset):
         extra_keys: Optional[Sequence[str]] = None
     ):
         super().__init__()
+        self.hf_args = hf_args
         self.retained_columns = set(extra_keys) if extra_keys else set()
         # raw data
         self.raw_data = load_hf_dataset(**hf_args)
@@ -75,6 +76,13 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, idx: int):
         return self.process_sample(self.data[idx])
+
+    def __repr__(self) -> str:
+        return (
+            f"<{self.__class__.__name__}("
+            f"args={self.hf_args}, "
+            f"columns={self.retained_columns})>"
+        )
 
     @property
     def data(self):

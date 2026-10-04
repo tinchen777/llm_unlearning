@@ -1,12 +1,18 @@
 # file size: 15.2 GB
 # verified
-model_args:
-  pretrained_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
-  attn_implementation: flash_attention_2
-  torch_dtype: bfloat16
+base_name: Qwen2.5-7B-Instruct
 
-tokenizer_args:
-  pretrained_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+pretrained:
+  handler: AutoModelForCausalLM
+  name_or_path: Qwen/Qwen2.5-7B-Instruct
+  dtype: bfloat16
+  args:
+    attn_implementation: sdpa
+
+tokenizer:
+  handler: AutoTokenizer
+  name_or_path: Qwen/Qwen2.5-7B-Instruct
+  args: {}
 
 template_args:
   apply_chat_template: true

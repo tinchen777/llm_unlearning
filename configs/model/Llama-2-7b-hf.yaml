@@ -1,12 +1,18 @@
 # file size: 40.4 GB
 # verified
-model_args:
-  pretrained_model_name_or_path: NousResearch/Llama-2-7b-hf
-  attn_implementation: flash_attention_2
-  torch_dtype: bfloat16
+base_name: Llama-2-7b-hf
 
-tokenizer_args:
-  pretrained_model_name_or_path: NousResearch/Llama-2-7b-hf
+pretrained:
+  handler: AutoModelForCausalLM
+  name_or_path: NousResearch/Llama-2-7b-hf
+  dtype: bfloat16
+  args:
+    attn_implementation: sdpa
+
+tokenizer:
+  handler: AutoTokenizer
+  name_or_path: NousResearch/Llama-2-7b-hf
+  args: {}
 
 template_args:  # Used in creating prompts for the dataset. See src/data/utils.py#preprocess_chat_instance.
   apply_chat_template: false

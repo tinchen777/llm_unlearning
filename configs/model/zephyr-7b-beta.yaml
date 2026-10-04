@@ -1,11 +1,17 @@
 
-model_args:
-  pretrained_model_name_or_path: HuggingFaceH4/zephyr-7b-beta
-  attn_implementation: flash_attention_2
-  torch_dtype: bfloat16
+base_name: zephyr-7b-beta
 
-tokenizer_args:
-  pretrained_model_name_or_path: HuggingFaceH4/zephyr-7b-beta
+pretrained:
+  handler: AutoModelForCausalLM
+  name_or_path: HuggingFaceH4/zephyr-7b-beta
+  dtype: bfloat16
+  args:
+    attn_implementation: sdpa
+
+tokenizer:
+  handler: AutoTokenizer
+  name_or_path: HuggingFaceH4/zephyr-7b-beta
+  args: {}
 
 template_args:
   apply_chat_template: true

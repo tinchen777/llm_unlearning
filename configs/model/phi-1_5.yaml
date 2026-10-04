@@ -1,12 +1,18 @@
 # file size: 2.84 GB
 # verified
-model_args:
-  pretrained_model_name_or_path: microsoft/phi-1_5
-  attn_implementation: flash_attention_2
-  torch_dtype: bfloat16
+base_name: phi-1_5
 
-tokenizer_args:
-  pretrained_model_name_or_path: microsoft/phi-1_5
+pretrained:
+  handler: AutoModelForCausalLM
+  name_or_path: microsoft/phi-1_5
+  dtype: bfloat16
+  args:
+    attn_implementation: sdpa
+
+tokenizer:
+  handler: AutoTokenizer
+  name_or_path: microsoft/phi-1_5
+  args: {}
 
 template_args:
   apply_chat_template: false

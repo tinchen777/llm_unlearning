@@ -1,23 +1,16 @@
 # @package _global_
-# Probe a model on three question sets (src/neighbor.py):
-#   forget / neighbor / retain  ->  responses_<split>.json  (generated answers to read)
-#                               ->  activations.pt          (per-layer mean activations + r_UV)
-#   r_UV[l] = mean(a_l | probe.reference split) - mean(a_l | probe.forget split)
-#
-# Every split must be PROMPT-ONLY (`predict_with_generate: true`, so the last tokens of
-# `input_ids` are the end-of-instruction template tokens) and LEFT-padded (batched generation).
 
 defaults:
   - /generation@generation_args: default
-  - /data/datasets@data.retain111.datasets: TOFU_QA_retain
-  - override /data: probe
+  - /data/subdataset@data.forget: default_left
+  - /data/subdataset@data.neighbor: default_left
+  - /data/subdataset@data.retain: default_left
+  - override /data: null
   - override /data/datasets@data.forget.datasets: TOFU_QA_forget
   - override /data/datasets@data.neighbor.datasets: TOFU_QA_neighbor
   - override /data/datasets@data.retain.datasets: TOFU_QA_retain
-  
 
 mode: neighbor
-
 forget_split: forget10
 neighbor_split: neighbor10
 retain_split: retain90
@@ -30,10 +23,6 @@ data:
           hf_args:
             name: ${forget_split}
           predict_with_generate: true
-    collator:
-      args:
-        padding_side: left
-        metadata_keys: [index]
   neighbor:
     datasets:
       TOFU_QA_neighbor:
@@ -43,8 +32,9 @@ data:
           predict_with_generate: true
     collator:
       args:
-        padding_side: left
-        metadata_keys: [index, author_id, neighbor_id]
+        metadata_keys:
+          - author_id
+          - neighbor_id
   retain:
     datasets:
       TOFU_QA_retain:
@@ -52,10 +42,6 @@ data:
           hf_args:
             name: ${retain_split}
           predict_with_generate: true
-    collator:
-      args:
-        padding_side: left
-        metadata_keys: [index]
 
 generation_args:
   max_new_tokens: 128

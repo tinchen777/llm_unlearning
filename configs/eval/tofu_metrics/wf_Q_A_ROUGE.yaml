@@ -2,17 +2,13 @@
 
 defaults:
   - /data/datasets@datasets: TOFU_QA_wf
-  - /data/collators@collator: default_with_index
-  - ../../generation@generation_args: default
+  - /data/collators@collator: default_left
+  - /generation@generation_args: default
 
 datasets:
   TOFU_QA_wf:
     args:
       predict_with_generate: true
-
-collator:
-  args:
-    padding_side: left
 
 handler: rouge
 rouge_type: rougeL_recall

@@ -11,7 +11,7 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=Llama-3.2-3B-Instruct
+MODEL=Llama-3.2-1B-Instruct
 FORGET_SPLIT=forget10
 
 
