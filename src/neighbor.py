@@ -88,6 +88,8 @@ def main(config: DictConfig):
                 f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
             )
 
+    exit()
+
     if not probe_cfg.get("activations", True):
         return
 

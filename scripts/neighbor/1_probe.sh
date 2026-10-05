@@ -16,8 +16,8 @@ FORGET_SPLIT=forget01
 NEIGHBOR_SPLIT=neighbor01
 RETAIN_SPLIT=retain99
 HOLDOUT_SPLIT=holdout01
-SPLITS="forget_split=${FORGET_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} retain_split=${RETAIN_SPLIT} holdout_split=${HOLDOUT_SPLIT}"
-TASK_NAME=test/redirect_${MODEL}_${FORGET_SPLIT}
+
+RETAIN_MODEL_PATH=saves/retain/ep_5/tofu_${MODEL}_${RETAIN_SPLIT}
 
 # Step 1: probe the base / TOFU-full / TOFU-retain models on forget, neighbor, retain, holdout.
 # Hypothesis: on entities a model has never seen it answers confidently but wrongly (hallucination), not "I don't know".
@@ -28,16 +28,21 @@ TASK_NAME=test/redirect_${MODEL}_${FORGET_SPLIT}
 #   responses_<split>.json      generations + rouge + answer_logprob + refusal/degenerate flags
 #   responses_summary.json      per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
 #   activations_summary.json    per layer: norms, cosines, seen-vs-unseen separability AUC (step 2 diagnostics)
-for TARGET in base full retain; do
-  echo start probe ${MODEL} ${TARGET}
-  python src/neighbor.py \
-    experiment=generate/neighbor_probe \
-    model=${MODEL} \
-    target_model=${TARGET} \
-    ${SPLITS} \
-    task_name=test/probe_${MODEL}_${FORGET_SPLIT}_${TARGET} \
-    --cfg job --resolve
-    # probe.max_gen_samples=null \
-    # probe.activations=false \
-  echo end probe ${MODEL} ${TARGET}
-done
+# for TARGET in base full retain; do
+echo start probe ${RETAIN_MODEL_PATH}
+
+python src/neighbor.py \
+  experiment=generate/neighbor_probe \
+  model=${MODEL} \
+  model.pretrained.name_or_path=${RETAIN_MODEL_PATH} \
+  forget_split=${FORGET_SPLIT} \
+  neighbor_split=${NEIGHBOR_SPLIT} \
+  retain_split=${RETAIN_SPLIT} \
+  holdout_split=${HOLDOUT_SPLIT} \
+  task_name=test/probe_${RETAIN_MODEL_PATH} \
+  # --cfg job --resolve
+  # probe.max_gen_samples=null \
+  # probe.activations=false \
+
+echo end probe ${RETAIN_MODEL_PATH}
+# done
