@@ -18,7 +18,7 @@ FORGET_SPLIT=forget10
 
 echo start WGA
 python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
+  experiment=unlearn/muse/default \
   model=${MODEL} \
   trainer=WGA \
   trainer.method_args.gamma=1.0 \
@@ -29,5 +29,5 @@ python src/train.py --config-name=unlearn \
   holdout_split=holdout10 \
   retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
   task_name=test/WGA \
-  # --cfg job --resolve
+  --cfg job --resolve
 echo end WGA

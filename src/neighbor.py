@@ -58,9 +58,9 @@ def main(config: DictConfig):
     # 2. Data of every split (left padded, prompt only)
     with step_logging(logger, "[2/4]", "data", cfg["data"]):
         split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
-        missing = set(splits) - set(split_data)
-        if missing:
-            raise ValueError(f"probe.splits {sorted(missing)} are not in `data` ({sorted(split_data)}).")
+        # missing = set(splits) - set(split_data)
+        # if missing:
+        #     raise ValueError(f"probe.splits {sorted(missing)} are not in `data` ({sorted(split_data)}).")
 
     # 3. Model responses on a FIXED random subset of each split (the same subset for every model)
     with step_logging(logger, "[3/4]", "responses", probe_cfg):

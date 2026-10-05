@@ -4,8 +4,8 @@ defaults:
   - override /model: zephyr-7b-beta
   - override /trainer: RMU
   - override /data: unlearn
-  - override /data/datasets/WMDP@data.train.datasets.forget: WMDP_forget
-  - override /data/datasets/WMDP@data.train.datasets.retain: WMDP_retain
+  - override /data/datasets@data.train.datasets.forget: WMDP/WMDP_text
+  - override /data/datasets@data.train.datasets.retain: WMDP/WMDP_text
   - override /eval: lm_eval
 
 data_split: cyber
@@ -18,10 +18,12 @@ data:
   train:
     datasets:
       forget:
+        name: WMDP_forget
         args:
           hf_args:
             data_files: data/wmdp/wmdp-corpora/${data_split}-forget-corpus.jsonl
       retain:
+        name: WMDP_retain
         args:
           hf_args:
             data_files: data/wmdp/wmdp-corpora/${data_split}-retain-corpus.jsonl

@@ -36,7 +36,7 @@ for TARGET in base full retain; do
     target_model=${TARGET} \
     ${SPLITS} \
     task_name=test/probe_${MODEL}_${FORGET_SPLIT}_${TARGET} \
-    # --cfg job --resolve
+    --cfg job --resolve
     # probe.max_gen_samples=null \
     # probe.activations=false \
   echo end probe ${MODEL} ${TARGET}

@@ -1,11 +1,10 @@
 
 from __future__ import annotations
 import logging
-import json
 from pprint import pprint
 import torch
 from torch.utils.data import DataLoader, Subset
-from typing import Dict, Any, Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .datasets.pretraining import PretrainingDataset, CompletionDataset
@@ -43,6 +42,14 @@ def get_split_loaders(
     num_workers: int = 0,
     **data_kwargs
 ) -> Dict[str, Dict[str, DataLoader]]:
+    """
+    Returns
+    -------
+        {
+            `split_name`: {`loader_name`: `DataLoader`, ...},
+            ...
+        }
+    """
     split_data = get_split_data(data_cfg, **data_kwargs)
     return {
         split_name: get_loaders(
@@ -64,6 +71,11 @@ def get_loaders(
     num_workers: int = 0,
     **loader_kwargs
 ) -> Dict[str, DataLoader]:
+    """
+    Returns
+    -------
+        {`loader_name`: `DataLoader`, ...}
+    """
     return {
         name: DataLoader(
             dataset,
@@ -109,6 +121,14 @@ def get_split_data(
     data_cfg: TrackingConfig,
     **kwargs
 ) -> Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]]:
+    """
+    Returns
+    -------
+        {
+            `split_name`: ({`dataset_name`: `Dataset`, ...}, `collator`),
+            ...
+        }
+    """
     split_data = {
         split_name: (
             get_datasets(split_cfg["datasets"], **kwargs),
@@ -124,6 +144,11 @@ def get_split_data(
 # === Datasets ===
 
 def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
+    """
+    Returns
+    -------
+        {`dataset_name`: `Dataset`, ...}
+    """
     # combine
     combine_cfg = datasets_cfg.pop("COMBINE", None)
 

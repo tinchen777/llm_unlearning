@@ -36,23 +36,27 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 MODELS=(
   Qwen2.5-1.5B-Instruct
+  Qwen2.5-3B-Instruct
+  phi-1_5
+  Qwen2.5-7B-Instruct
 )
 
 # "forget_split holdout_split retain_split data_name"
-SPLITS=(
+RETAIN_SPLITS=(
   "forget10 holdout10 retain90 retain90"
   "forget05 holdout05 retain95 retain95"
   "forget01 holdout01 retain99 retain99"
-  "forget10 holdout10 retain90 full"
+  # "forget10 holdout10 retain90 full"
 )
 
 for MODEL in "${MODELS[@]}"; do
-  for split in "${SPLITS[@]}"; do
+  for split in "${RETAIN_SPLITS[@]}"; do
     read -r forget_split holdout_split retain_split data_name <<< "${split}"
     echo "========== [retain] model=${MODEL} train=${data_name} eval=${forget_split}/${holdout_split} =========="
 
     python src/train.py \
       experiment=finetune/tofu/default \
+      mode=retain \
       model=${MODEL} \
       data_name=${data_name} \
       forget_split=${forget_split} \
@@ -60,10 +64,24 @@ for MODEL in "${MODELS[@]}"; do
       retain_split=${retain_split} \
       trainer.args.eval_on_start=True \
       trainer.args.num_train_epochs=5 \
-      task_name=retain/tofu_${MODEL}_${data_name}
+      task_name=ep_5/tofu_${MODEL}_${data_name}
 
     echo "========== [retain] done: ${MODEL} ${data_name} =========="
   done
+
+  echo "========== [finetune] model=${MODEL} train=full eval=forget10/holdout10 =========="
+  python src/train.py \
+    experiment=finetune/tofu/default \
+    mode=full \
+    model=${MODEL} \
+    data_name=full \
+    forget_split=forget10 \
+    holdout_split=holdout10 \
+    retain_split=retain90 \
+    trainer.args.eval_on_start=True \
+    trainer.args.num_train_epochs=5 \
+    task_name=ep_5/tofu_${MODEL}_full
+
 done
 
 echo "all retain finetunes finished: ${MODELS[*]}"
