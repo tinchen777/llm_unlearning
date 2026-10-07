@@ -64,6 +64,7 @@ class ExperimentLoader:
         _run_dir = Path(run_dir)
         if not _run_dir.is_dir():
             raise NotADirectoryError(f"Run directory not a existing directory: {_run_dir.resolve()}")
+        logger.info(f"Loading run directory: {_run_dir.resolve()}")
         self.run_dir = _run_dir
         # label
         self.label = _run_dir.name
@@ -147,45 +148,57 @@ class ExperimentLoader:
         name_paths: List[tuple[str, Path]],
         step: int = -1
     ):
+        """Update the named step dictionary with data loaded from the given paths."""
         for name, path in name_paths:
             named_step_dict.setdefault(name, {})[step] = load_logs(path)
 
+    def __repr__(self) -> str:
+        return f"<Exp {self.run_dir}>"
+
     @property
     def trainer_state(self):
+        """Return the trainer state loaded from `trainer_state.json`."""
         if not hasattr(self, "_trainer_state"):
             self._load_trainer_state()
         return self._trainer_state
 
     @property
     def log_history_df(self):
+        """Return the training log history from `trainer_state.json` as a DataFrame."""
         if not hasattr(self, "_log_history_df"):
             self._load_trainer_state()
         return self._log_history_df
 
     @property
     def train_keys(self):
+        """Return the set of training keys available in the log history DataFrame."""
         return set(self.log_history_df.columns)
 
     @property
     def eval_summaries_dfs(self):
+        """Return a dictionary of evaluation summary DataFrames, keyed by evaluation name."""
         if not hasattr(self, "_eval_summaries_dfs"):
             self._load_summaries()
         return self._eval_summaries_dfs
 
     @property
     def eval_final_summaries(self):
+        """Return a dictionary of the final evaluation summaries, keyed by evaluation name."""
         return {name: df.iloc[-1].to_dict() for name, df in self.eval_summaries_dfs.items()}
 
     @property
     def named_metric_keys(self):
+        """Return a dictionary of metric keys for each evaluation summary DataFrame, keyed by evaluation name."""
         return {name: set(df.columns) for name, df in self.eval_summaries_dfs.items()}
 
     @property
     def eval_details_dfs(self):
+        """Return a dictionary of evaluation details DataFrames, keyed by evaluation name."""
         if not hasattr(self, "_eval_details_dfs"):
             self._load_details()
         return self._eval_details_dfs
 
     @property
     def named_all_metric_keys(self):
+        """Return a dictionary of all metric keys for each evaluation details DataFrame, keyed by evaluation name."""
         return {name: set(df.columns) for name, df in self.eval_details_dfs.items()}

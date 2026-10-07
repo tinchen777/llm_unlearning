@@ -26,15 +26,20 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-MODEL=Llama-3.2-3B-Instruct
-MODEL_PATH=saves/finetune/test/tofu_Llama-3.2-3B-Instruct_full
+MODEL=Llama-3.2-1B-Instruct
+MODEL_PATH=saves/retain/ep_5/tofu_Llama-3.2-1B-Instruct_retain99
 
 python src/eval.py \
   experiment=eval/tofu/default \
   model=${MODEL} \
-  model.model_args.pretrained_model_name_or_path=${MODEL_PATH} \
-  forget_split=forget10 \
-  holdout_split=holdout10 \
-  task_name=demo_eval_${MODEL} \
+  model.pretrained.name_or_path=${MODEL_PATH} \
+  forget_split=forget01 \
+  holdout_split=holdout01 \
+  task_name=check_${MODEL}_retain99 \
 
 # retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
+
+
+python src/eval.py experiment=eval/tofu/default model=Llama-3.2-1B-Instruct \
+  model.pretrained.name_or_path=saves/retain/ep_5/tofu_Llama-3.2-1B-Instruct_retain99 \
+  forget_split=forget01 holdout_split=holdout01 task_name=check_retain99

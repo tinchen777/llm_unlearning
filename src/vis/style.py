@@ -40,8 +40,10 @@ def apply_style():
         "figure.dpi": 150,
         "figure.facecolor": SURFACE,
         "figure.titlesize": 14,
+
         "savefig.facecolor": SURFACE,
         "savefig.bbox": "tight",
+
         "axes.facecolor": SURFACE,
         "axes.edgecolor": BASELINE,
         "axes.linewidth": 1.0,
@@ -53,16 +55,21 @@ def apply_style():
         "axes.labelcolor": INK_SECONDARY,
         "axes.spines.top": True,
         "axes.spines.right": True,
+
         "grid.color": GRIDLINE,
         "grid.linewidth": 0.6,
+
         "xtick.color": INK_MUTED,
         "ytick.color": INK_MUTED,
         "xtick.labelsize": 8,
         "ytick.labelsize": 8,
+
         "legend.frameon": False,
         "legend.fontsize": 8,
+
         "lines.linewidth": 2.0,
         "lines.markersize": 5,
+
         "font.family": "sans-serif",
         "text.color": INK_PRIMARY,
     })

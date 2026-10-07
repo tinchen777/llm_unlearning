@@ -91,7 +91,7 @@ def main(config: DictConfig):
     vis_cfg = cfg.get("vis", None)
     run_dir = trainer.args.output_dir
     if vis_cfg and run_dir is not None:
-        plot_figures((run_dir,), vis_cfg)
+        plot_figures(run_dir, vis_cfg=vis_cfg)
 
 
 if __name__ == "__main__":

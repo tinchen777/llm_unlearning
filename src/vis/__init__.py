@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 import logging
-from typing import Sequence, Dict, Optional, Union, TYPE_CHECKING
+from typing import Sequence, Dict, Optional, Union, Tuple, TYPE_CHECKING
 
 from .plotter import Plotter
 
@@ -24,12 +24,20 @@ PLOT_REGISTRY: Sequence[str] = [
 
 
 def plot_figures(
-    run_dirs: Sequence[Union[PathLike, str]],
+    *run_dirs: Union[PathLike, str],
     vis_cfg: TrackingConfig,
+    run_folders: Optional[Sequence[Tuple[Union[PathLike, str], str]]] = None,
     out_dir: Optional[Union[PathLike, str]] = _DEFAULT_OUT_DIR  # type: ignore
 ):
+    # run folders which have multiple runs
+    folder_run_dirs = [
+        p
+        for (folder, pattern) in run_folders
+        for p in Path(folder).glob(pattern)
+        if p.is_dir()
+    ] if run_folders else []
     # create plotter
-    plotter = Plotter(*run_dirs)
+    plotter = Plotter(*run_dirs, *folder_run_dirs)
     # determine output directory
     if out_dir is not None:
         # with save
@@ -48,7 +56,14 @@ def plot_figures(
             continue
         # plot
         plot_func = getattr(plotter, plot_cfg["handler"])
-        figs = plot_func(**plot_cfg.get("args", {}, check_none=True))
+        try:
+            figs = plot_func(
+                **plot_cfg.get("args", {}, check_none=True),
+                **plot_cfg.get("plot_args", {}, check_none=True)
+            )
+        except Exception as e:
+            logger.error(f"Failed to plot {plot_name}: {e}")
+            continue
         # save
         if _out_dir is not None:
             file_type = plot_cfg.get("file_type", "png", check_none=True)

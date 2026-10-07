@@ -11,7 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import logging
-from typing import Optional, Dict, Set, Sequence, Tuple, Union, TYPE_CHECKING
+from typing import Optional, Dict, Set, Any, Sequence, Tuple, Union, TYPE_CHECKING
 
 from .style import apply_style, series_color, legend_if_multi, INK_SECONDARY
 from .loader import ExperimentLoader
@@ -28,7 +28,7 @@ LOG_SCALE_METRICS = {"forget_quality"}
 def _grid_axes(
     n_panels: int,
     max_ncols: int = 3,
-    panel_size: Tuple[float, float] = (3.6, 2.6)
+    panel_size: Tuple[float, float] = (8, 6)
 ):
     ncols = min(max_ncols, max(n_panels, 1))
     nrows = math.ceil(n_panels / ncols)
@@ -64,7 +64,7 @@ class Plotter:
     def plot_training_curves(
         self,
         keys: Optional[Sequence[str]] = None,
-        max_ncols: int = 3
+        **plot_args: Any
     ):
         """
         Training curves from `trainer_state.json` log_history, one panel per key,
@@ -79,11 +79,13 @@ class Plotter:
             suptitle += f" ({self._run_labels[0]})"
         # training keys
         _keys = set.union(*[run.train_keys for run in self.runs])
+        if len(_keys) == 0:
+            raise ValueError(f"No intersecting training keys found under the given runs. {self.runs}")
         _keys = _keys.intersection(keys) if keys else _keys
         if len(_keys) == 0:
-            raise ValueError(f"No training keys found under the given runs: {self.runs}")
+            raise ValueError(f"No intersecting training keys ({keys}) found under the given runs. {self.runs}")
 
-        fig, axes = _grid_axes(len(_keys), max_ncols)
+        fig, axes = _grid_axes(len(_keys), **plot_args)
         for ax, key in zip(axes, sorted(_keys)):
             # for each axis
             for i, run in enumerate(self.runs):
@@ -105,7 +107,7 @@ class Plotter:
     def plot_metric_trajectories(
         self,
         metrics: Optional[Sequence[str]] = None,
-        max_ncols: int = 3
+        **plot_args: Any
     ):
         """
         Eval metric trajectories over checkpoints, from every
@@ -118,14 +120,14 @@ class Plotter:
                 metric_keys = metric_keys.intersection(metrics)
             if len(metric_keys) == 0:
                 raise ValueError(f"No available eval metrics found under the given runs for {name}: {self.runs}")
-            named_figs[name] = self.plot_named_metric_trajectories(name, metric_keys, max_ncols=max_ncols)
+            named_figs[name] = self.plot_named_metric_trajectories(name, metric_keys, **plot_args)
         return named_figs
 
     def plot_named_metric_trajectories(
         self,
         name: str,
         metric_keys: Set[str],
-        max_ncols: int = 3
+        **plot_args: Any
     ):
         """
         Eval metric trajectories over checkpoints, from every
@@ -139,7 +141,7 @@ class Plotter:
             # single-run plots don't need a legend, so we can name the run in the title
             suptitle += f" ({self._run_labels[0]})"
 
-        fig, axes = _grid_axes(len(metric_keys), max_ncols)
+        fig, axes = _grid_axes(len(metric_keys), **plot_args)
         for ax, metric in zip(axes, sorted(metric_keys)):
             for i, run in enumerate(self.runs):
                 if name not in run.eval_summaries_dfs:
@@ -165,7 +167,7 @@ class Plotter:
     def plot_method_comparison(
         self,
         metrics: Optional[Sequence[str]] = None,
-        max_ncols: int = 3
+        **plot_args: Any
     ):
         """
         Final eval metrics compared across runs, from each run's final summary
@@ -178,14 +180,14 @@ class Plotter:
                 metric_keys = metric_keys.intersection(metrics)
             if len(metric_keys) == 0:
                 raise ValueError(f"No available eval metrics found under the given runs for {name}: {self.runs}")
-            named_figs[name] = self.plot_named_method_comparison(name, metric_keys, max_ncols=max_ncols)
+            named_figs[name] = self.plot_named_method_comparison(name, metric_keys, **plot_args)
         return named_figs
 
     def plot_named_method_comparison(
         self,
         name: str,
         metric_keys: Set[str],
-        max_ncols: int = 3
+        **plot_args: Any
     ):
         """
         Final eval metrics compared across runs, from each run's final summary
@@ -197,7 +199,7 @@ class Plotter:
             # single-run plots don't need a legend, so we can name the run in the title
             suptitle += f" ({self._run_labels[0]})"
 
-        fig, axes = _grid_axes(len(metric_keys), max_ncols)
+        fig, axes = _grid_axes(len(metric_keys), **plot_args)
         for ax, metric in zip(axes, sorted(metric_keys)):
             values, colors, xticklabels = [], [], []
             for i, run in enumerate(self.runs):
@@ -230,6 +232,7 @@ class Plotter:
         self,
         x_metric: str = "model_utility",
         y_metric: str = "forget_quality",
+        **plot_args: Any
     ):
         """
         Final eval metrics compared across runs, from each run's final summary
@@ -238,7 +241,7 @@ class Plotter:
         named_figs: Dict[str, Figure] = {}
         for name, metric_keys in self.named_metric_keys.items():
             if x_metric in metric_keys and y_metric in metric_keys:
-                named_figs[name] = self.plot_named_tradeoff(name, x_metric=x_metric, y_metric=y_metric)
+                named_figs[name] = self.plot_named_tradeoff(name, x_metric=x_metric, y_metric=y_metric, **plot_args)
         return named_figs
 
     def plot_named_tradeoff(
@@ -246,6 +249,7 @@ class Plotter:
         name: str,
         x_metric: str = "model_utility",
         y_metric: str = "forget_quality",
+        **plot_args: Any
     ):
         """Forget/utility trade-off scatter: one labeled point per run, from each
         run's final summary. The usual reading: up and to the right is better."""
@@ -254,7 +258,7 @@ class Plotter:
         if len(self._run_labels) == 1:
             suptitle += f" ({self._run_labels[0]})"
 
-        fig, ax = plt.subplots(figsize=(4.6, 3.6))
+        fig, ax = plt.subplots(figsize=plot_args.get("panel_size", (8, 6)))
         drawn = 0
         for i, run in enumerate(self.runs):
             if name not in run.eval_final_summaries:

@@ -21,9 +21,14 @@ set -e
 cd $(dirname "$0")/../.. || exit 1
 
 
+# python src/plot.py \
+#   +vis.run_dirs='[saves/eval/tofu_Llama-2-7b-chat-hf_full/evals_forget01,saves/finetune/test_2/tofu_phi-1_5_retain90,saves/finetune/test_2/tofu_phi-1_5_retain95,saves/finetune/test_2/tofu_phi-1_5_full,saves/finetune/test/muse_Qwen2.5-3B-Instruct_full]' \
+#   +vis.out_dir=saves/plot_demo \
+#   --cfg job  --resolve
+
 python src/plot.py \
-  +vis.run_dirs='[saves/eval/tofu_Llama-2-7b-chat-hf_full/evals_forget01,saves/finetune/test_2/tofu_phi-1_5_retain90,saves/finetune/test_2/tofu_phi-1_5_retain95,saves/finetune/test_2/tofu_phi-1_5_full,saves/finetune/test/muse_Qwen2.5-3B-Instruct_full]' \
-  +vis.out_dir=saves/plot_demo \
+  +vis.run_folders='[[saves/eval, "tofu_*_retain*"]]' \
+  +vis.out_dir=saves/plots/eval \
   # --cfg job  --resolve
 
 # 单独画某张图的例子:

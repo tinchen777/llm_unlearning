@@ -22,7 +22,12 @@ def main(config: DictConfig):
     init_hydra_choices(HydraConfig.get().runtime.choices)
     vis_cfg = TrackingConfig(config)["vis"]
     # plot figures
-    plot_figures(vis_cfg["run_dirs"], vis_cfg, out_dir=vis_cfg["out_dir"])
+    plot_figures(
+        *vis_cfg.get("run_dirs", []),
+        run_folders=vis_cfg.get("run_folders", None),
+        vis_cfg=vis_cfg,
+        out_dir=vis_cfg["out_dir"]
+    )
 
 
 if __name__ == "__main__":

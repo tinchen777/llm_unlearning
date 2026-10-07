@@ -61,6 +61,8 @@ def main(config: DictConfig):
         # missing = set(splits) - set(split_data)
         # if missing:
         #     raise ValueError(f"probe.splits {sorted(missing)} are not in `data` ({sorted(split_data)}).")
+    
+    exit()
 
     # 3. Model responses on a FIXED random subset of each split (the same subset for every model)
     with step_logging(logger, "[3/4]", "responses", probe_cfg):
