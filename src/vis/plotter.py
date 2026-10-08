@@ -205,7 +205,10 @@ class Plotter:
             for i, run in enumerate(self.runs):
                 if name not in run.eval_final_summaries:
                     continue
-                values.append(run.eval_final_summaries[name].get(metric))
+                value = run.eval_final_summaries[name].get(metric)
+                if not isinstance(value, (int, float)) or math.isnan(value):
+                    continue  # run lacks this metric
+                values.append(value)
                 colors.append(series_color(i))
                 xticklabels.append(run.label)
 
