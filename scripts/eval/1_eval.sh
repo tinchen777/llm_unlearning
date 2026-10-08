@@ -39,7 +39,3 @@ python src/eval.py \
 
 # retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
 
-
-python src/eval.py experiment=eval/tofu/default model=Llama-3.2-1B-Instruct \
-  model.pretrained.name_or_path=saves/retain/ep_5/tofu_Llama-3.2-1B-Instruct_retain99 \
-  forget_split=forget01 holdout_split=holdout01 task_name=check_retain99

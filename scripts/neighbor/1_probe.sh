@@ -11,66 +11,66 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-# BASE_MODEL=Llama-3.2-1B-Instruct
-
 BASE_MODELS=(
   Llama-3.2-1B-Instruct
   Llama-3.2-3B-Instruct
   Llama-3.1-8B-Instruct
 )
 
-RETAIN_SPLITS=(
+# "forget_split holdout_split retain_split neighbor_split"
+SPLIT_SETS=(
   "forget10 holdout10 retain90 neighbor10"
   "forget05 holdout05 retain95 neighbor05"
   "forget01 holdout01 retain99 neighbor01"
-  # "forget10 holdout10 retain90 full"
 )
 
-# FORGET_SPLIT=forget01
-# NEIGHBOR_SPLIT=neighbor01
-# RETAIN_SPLIT=retain99
-# HOLDOUT_SPLIT=holdout01
+# which official checkpoints to probe: `retain` (saw the retain data only = the ideal result of unlearning) and
+# `full` (saw forget + retain). The activation AUCs of the SAME pair of the two are compared afterwards
+# (scripts/neighbor/1b_probe_compare.sh).
+KINDS=(retain full)
 
-# MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
-
-# RETAIN_MODEL_PATH=saves/retain/ep_5/tofu_${MODEL}_${RETAIN_SPLIT}
-
-# Step 1: probe the base / TOFU-full / TOFU-retain models on forget, neighbor, retain, holdout.
+# Step 1: ANALYSIS of the official models on forget, neighbor, retain, holdout. Nothing of steps 2-4 reads these outputs.
 # Hypothesis: on entities a model has never seen it answers confidently but wrongly (hallucination), not "I don't know".
-#   base   : never saw TOFU      -> all four splits should look alike (unseen)
-#   full   : saw forget + retain -> forget/retain answered correctly; neighbor/holdout hallucinated
-#   retain : saw retain only     -> forget should now look like neighbor/holdout (the target of the method)
-# per model -> saves/neighbor/test/probe_<MODEL>_<FORGET_SPLIT>_<target>/
+#   retain : saw retain only     -> forget / neighbor / holdout are all unseen: no refusals, hallucination; forget ~ holdout
+#   full   : saw forget + retain -> forget / retain answered correctly; neighbor / holdout hallucinated
+# (`model=<base>` = a base model that never saw TOFU is possible too, but the Llama-3.2-1B base checkpoint is broken in
+#  some environments, see configs/model/Llama-3.2-1B-Instruct.yaml.)
+# per model and forget split -> saves/neighbor/1_probe/<MODEL>_<FORGET_SPLIT>/
 #   responses_<split>.json      generations + rouge + answer_logprob + refusal/degenerate flags
 #   responses_summary.json      per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
-#   activations_summary.json    per layer: norms, cosines, seen-vs-unseen separability AUC (step 2 diagnostics)
+#   activations_summary.json    per layer: norms, r_UV size, AUCs of pairs of question sets (see its `note`: they measure
+#                               how different the QUESTIONS are; only forget | neighbor and full - retain mean knowledge)
 
 for BASE_MODEL in "${BASE_MODELS[@]}"; do
-  for split in "${RETAIN_SPLITS[@]}"; do
-    read -r forget_split holdout_split retain_split neighbor_split <<< "${split}"
-    FORGET_SPLIT=${forget_split}
-    HOLDOUT_SPLIT=${holdout_split}
-    RETAIN_SPLIT=${retain_split}
-    NEIGHBOR_SPLIT=${neighbor_split}
+  for split in "${SPLIT_SETS[@]}"; do
+    read -r FORGET_SPLIT HOLDOUT_SPLIT RETAIN_SPLIT NEIGHBOR_SPLIT <<< "${split}"
+    for KIND in "${KINDS[@]}"; do
+      if [ "${KIND}" = full ]; then
+        MODEL=tofu_${BASE_MODEL}_full
+        # the full model has seen forget and retain, not neighbor / holdout (the defaults of probe.seen / probe.unseen)
+        SEEN_ARGS=()
+      else
+        MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
+        # the retain model has seen the retain data only: forget is unseen for it
+        SEEN_ARGS=('probe.seen=[retain]' 'probe.unseen=[forget,neighbor,holdout]')
+      fi
+      echo start probe ${MODEL} ${FORGET_SPLIT}
 
-    MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
-    echo start probe ${MODEL}
+      python src/neighbor.py \
+        experiment=generate/neighbor_probe \
+        model=tofu/${MODEL} \
+        forget_split=${FORGET_SPLIT} \
+        neighbor_split=${NEIGHBOR_SPLIT} \
+        retain_split=${RETAIN_SPLIT} \
+        holdout_split=${HOLDOUT_SPLIT} \
+        "${SEEN_ARGS[@]}" \
+        task_name=1_probe/${MODEL}_${FORGET_SPLIT} \
+        # --cfg job --resolve
+        # probe.max_gen_samples=null \
+        # probe.responses=false \
+        # probe.activations=false \
 
-    python src/neighbor.py \
-      experiment=generate/neighbor_probe \
-      model=tofu/${MODEL} \
-      forget_split=${FORGET_SPLIT} \
-      neighbor_split=${NEIGHBOR_SPLIT} \
-      retain_split=${RETAIN_SPLIT} \
-      holdout_split=${HOLDOUT_SPLIT} \
-      task_name=1_probe/responses/${MODEL} \
-      # --cfg job --resolve
-      # probe.max_gen_samples=null \
-      # probe.activations=false \
-
-    echo end probe ${MODEL}
+      echo end probe ${MODEL} ${FORGET_SPLIT}
+    done
   done
 done
-
-
-# tofu_Llama-3.2-1B-Instruct_full

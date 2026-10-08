@@ -16,7 +16,8 @@ from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_out_proj
 from model.generation import generate_responses, summarize_responses
 from model.redirect import (
-    apply_w_down, build_shift, collect_mlp_tokens, forget_authors, train_w_down, w_down_mse,
+    apply_w_down, build_shift, collect_mlp_tokens, forget_authors, selection_file_name, solve_w_down_closed_form,
+    train_w_down, w_down_mse,
 )
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
@@ -31,7 +32,12 @@ def main(config: DictConfig):
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
     Needs the `r_uv.pt` written by src/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/select_layer.py
-    (layer_selection.json). Args:
+    (`layer_selection_k<K>_c<coeff>_<shift_mode>.json`, the one of the same K / coeff / shift mode).
+
+    `wdown.solver`: `adam` (AdamW + ExponentialLR, as LUNAR's code; needs lr / epochs) or `closed_form` (LUNAR Eq. 9,
+    ridge regression of the weight change, no lr / epochs; `wdown.ridge` shrinks the edit towards the original weights).
+    `wdown.shift_mode`: `eoi` (r_UV only on the end-of-instruction tokens) or `all` (the paper: the same vector on every
+    token of a forget prompt). Outputs are tagged `k<K>_l<layers>_c<coeff>_<shift_mode>[_cf]`. Args:
         config (DictConfig): `experiment=generate/neighbor_probe` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
@@ -42,14 +48,18 @@ def main(config: DictConfig):
     wd = cfg["wdown"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     k, coeff = int(wd["k"]), float(wd["coeff"])
+    shift_mode, ref_position = str(wd["shift_mode"]), int(wd["ref_position"])
+    solver = str(wd.get("solver", "adam"))
+    if solver not in ("adam", "closed_form"):
+        raise ValueError(f"wdown.solver must be `adam` or `closed_form`, got `{solver}`.")
     if wd["layers"] == "auto":
-        with open(str(wd["layer_selection_path"]), encoding="utf-8") as f:
+        selection_path = wd.get("layer_selection_path", None) or output_dir / selection_file_name(k, coeff, shift_mode)
+        with open(str(selection_path), encoding="utf-8") as f:
             train_layers = [int(json.load(f)["selected_layer"])]
-        logger.info(f"wdown.layers=auto -> layer {train_layers} from {wd['layer_selection_path']}")
+        logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
         train_layers = [int(l) for l in wd["layers"]]
-    shift_mode, ref_position = str(wd["shift_mode"]), int(wd["ref_position"])
-    tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}"
+    tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
 
     # 1. r_UV of the K-neighbour reference
     with step_logging(logger, "[1/6]", "r_UV", wd):
@@ -129,18 +139,26 @@ def main(config: DictConfig):
         for l in train_layers:
             w0 = get_out_proj(model, l).weight.detach()
             ft, rt = forget_tokens[l], retain_tokens[l]
-            logger.info(f"layer {l}: training W_down {tuple(w0.shape)}")
-            w, history = train_w_down(
-                w0, ft, rt, lr=float(wd["lr"]), epochs=int(wd["epochs"]), batch_size=int(wd["batch_size"]),
-                lr_gamma=float(wd["lr_gamma"]), weight_decay=float(wd["weight_decay"]),
-                forget_weight=float(wd["forget_weight"]), retain_weight=float(wd["retain_weight"]),
-                device=device, seed=seed,
-            )
-            w_round = w.to(w0.dtype).float()  # what the model will really use after the cast
+            logger.info(f"layer {l}: W_down {tuple(w0.shape)} ({solver})")
+            if solver == "closed_form":
+                w, history = solve_w_down_closed_form(
+                    w0, ft, rt, ridge=float(wd["ridge"]),
+                    forget_weight=float(wd["forget_weight"]), retain_weight=float(wd["retain_weight"]), device=device,
+                )
+            else:
+                w, history = train_w_down(
+                    w0, ft, rt, lr=float(wd["lr"]), epochs=int(wd["epochs"]), batch_size=int(wd["batch_size"]),
+                    lr_gamma=float(wd["lr_gamma"]), weight_decay=float(wd["weight_decay"]),
+                    forget_weight=float(wd["forget_weight"]), retain_weight=float(wd["retain_weight"]),
+                    device=device, seed=seed,
+                )
+            w_dev = w.to(device)  # the MSEs of the (large) token sets are evaluated on the device, not on the cpu
+            w_round = w_dev.to(w0.dtype).float()  # what the model will really use after the cast
+            w0_f = w0.float().to(device)
             per_layer[l] = {
-                "forget_mse_before": w_down_mse(w0.float(), *ft), "forget_mse_after": w_down_mse(w, *ft),
+                "forget_mse_before": w_down_mse(w0_f, *ft), "forget_mse_after": w_down_mse(w_dev, *ft),
                 "forget_mse_after_rounded": w_down_mse(w_round, *ft),
-                "retain_mse_before": w_down_mse(w0.float(), *rt), "retain_mse_after": w_down_mse(w, *rt),
+                "retain_mse_before": w_down_mse(w0_f, *rt), "retain_mse_after": w_down_mse(w_dev, *rt),
                 "retain_mse_after_rounded": w_down_mse(w_round, *rt),
                 "history": history,
             }
@@ -171,6 +189,7 @@ def main(config: DictConfig):
         responses_after = write_responses(f"after_{tag}")
         save_logs({
             "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
+            "solver": solver, "ridge": float(wd["ridge"]) if solver == "closed_form" else None,
             "num_tokens": num_tokens,
             "hyperparameters": {key: wd[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",

@@ -7,7 +7,7 @@ Part 1 - r_UV ablation over the number of neighbours (used by src/r_uv.py):
     FIRST K of that order, so the sets are nested (K=1 in K=5 in K=15) and the ablation is controlled.
         r_UV[K][a] = mean_{n in first K neighbours of a} mean(act | neighbour n)  -  mean(act | forget of a)
 
-Part 2 - training W_down, LUNAR style (used by src/w_down.py). For one decoder layer, with
+Part 2 - training W_down, LUNAR style (used by src/w_down.py; AdamW like LUNAR's code, or the closed form of Eq. 9). For one decoder layer, with
     x = input of the MLP output projection (down_proj), y = its ORIGINAL output, per token:
         forget tokens : target = y + coeff * shift      (shift built from r_UV of the sample's author)
         retain tokens : target = y                      (the layer must keep behaving the same)
@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------------------------
 # Part 1: r_UV ablation over the number of neighbours
 # ---------------------------------------------------------------------------------------------
+
+
+def selection_file_name(k: int, coeff: float, shift_mode: str) -> str:
+    """Name of the layer-selection file of src/select_layer.py: the selected layer depends on the reference size K,
+    the coefficient and the shift mode, so W_down training (src/w_down.py) must read the file of the SAME ones."""
+    return f"layer_selection_k{k}_c{coeff:g}_{shift_mode}.json"
 
 
 def forget_authors(indices: Iterable[Any], qa_per_author: int, author_offset: int = 0) -> List[int]:
@@ -265,6 +271,55 @@ def train_w_down(
                         "lr": scheduler.get_last_lr()[0]})
         scheduler.step()
         logger.info(f"epoch {epoch + 1}/{epochs}  forget_mse={sum_f / steps:.4g}  retain_mse={sum_r / steps:.4g}")
+    return w.detach().cpu(), history
+
+
+@torch.no_grad()
+def solve_w_down_closed_form(
+    w0: torch.Tensor,
+    forget: Tuple[torch.Tensor, torch.Tensor],
+    retain: Tuple[torch.Tensor, torch.Tensor],
+    ridge: float = 1e-3,
+    forget_weight: float = 1.0,
+    retain_weight: float = 1.0,
+    device: Any = "cpu",
+    chunk: int = 8192,
+) -> Tuple[torch.Tensor, List[Dict[str, float]]]:
+    """Closed-form W_down (LUNAR Eq. 9), no learning rate / epochs to tune.
+
+        min_W   forget_weight * mean_f ||W x - t||^2 + retain_weight * mean_r ||W x - t||^2 + lambda ||W - W0||^2
+
+    is a ridge regression on the residual targets R = t - W0 x (zero for retain tokens, `coeff * shift` for forget
+    tokens), solved for the CHANGE of the weights:  dW = R^T X (X^T X + lambda I)^-1.
+    Every token has weight `w_set / N_set`, so the two sets weigh like the two MSE terms of `train_w_down`
+    (mean over each set), not like their token counts.
+
+    Args:
+        ridge: lambda as a FRACTION of mean(diag(X^T X)), i.e. scale free; 0 gives plain least squares (needs more
+            tokens than input features, else the Gram matrix is singular). Shrinks the edit towards W0.
+    Returns:
+        (W [d, d_ff] float32 on CPU, one-entry history with the final per-set MSE)
+    """
+    (fx, ft), (rx, rt) = forget, retain
+    if len(fx) == 0 or len(rx) == 0:
+        raise ValueError(f"Need forget and retain tokens, got {len(fx)} and {len(rx)}.")
+    w0 = w0.detach().to(device=device, dtype=torch.float32)
+    p = w0.shape[1]
+    gram = torch.zeros(p, p, device=device, dtype=torch.float32)
+    xr = torch.zeros(p, w0.shape[0], device=device, dtype=torch.float32)
+    for (x, t), weight in (((fx, ft), forget_weight / len(fx)), ((rx, rt), retain_weight / len(rx))):
+        scale = weight ** 0.5
+        for s in range(0, len(x), chunk):
+            xb = x[s:s + chunk].to(device).float() * scale
+            rb = (t[s:s + chunk].to(device).float() - F.linear(x[s:s + chunk].to(device).float(), w0)) * scale
+            gram += xb.T @ xb
+            xr += xb.T @ rb
+    gram = gram.double()
+    gram += ridge * gram.diagonal().mean() * torch.eye(p, device=device, dtype=torch.float64)
+    delta = torch.linalg.solve(gram, xr.double()).T.float()  # [d, d_ff]
+    w = w0 + delta  # still on `device`: the MSE below is evaluated there
+    history = [{"epoch": 0, "forget_mse": w_down_mse(w, fx, ft), "retain_mse": w_down_mse(w, rx, rt), "lr": 0.0}]
+    logger.info(f"closed form (ridge={ridge:g}): forget_mse={history[0]['forget_mse']:.4g}  retain_mse={history[0]['retain_mse']:.4g}")
     return w.detach().cpu(), history
 
 

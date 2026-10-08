@@ -33,7 +33,7 @@ MODEL=Llama-3.2-1B-Instruct
 echo start SimNPO
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=SimNPO \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -54,7 +54,7 @@ echo end SimNPO
 echo start WGA
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=WGA \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -70,7 +70,7 @@ echo end WGA
 echo start UNDIAL
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=UNDIAL \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -87,7 +87,7 @@ echo end UNDIAL
 echo start SatImp
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=SatImp \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -103,7 +103,7 @@ echo end SatImp
 echo start RMU
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=RMU \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -119,7 +119,7 @@ echo end RMU
 echo start PDU
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=PDU \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \

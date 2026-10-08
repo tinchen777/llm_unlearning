@@ -15,12 +15,14 @@ import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 
 from model.activations import (
-    auc, capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj, mean_diff_auc,
+    _group_folds, auc, capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj,
+    mean_diff_auc,
 )
 from model.generation import answer_logprobs, is_degenerate, is_refusal, summarize_responses
 from model.redirect import (
     Steerer, apply_w_down, build_shift, check_neighbors, collect_mlp_tokens, compute_r_uv, forget_authors,
-    nested_neighbor_order, neighbors_by_author, summarize_r_uv, train_w_down, w_down_mse,
+    nested_neighbor_order, neighbors_by_author, selection_file_name, solve_w_down_closed_form, summarize_r_uv,
+    train_w_down, w_down_mse,
 )
 from utils.common import IGNORE_INDEX
 
@@ -390,6 +392,158 @@ def test_response_flags_and_summary():
     s = summarize_responses(recs, hallucination_rouge=0.3)
     assert s["n"] == 3 and abs(s["refusal_rate"] - 1 / 3) < 1e-9 and abs(s["hallucination_rate"] - 1 / 3) < 1e-9
     assert abs(s["answer_logprob"] - (-6.5 / 3)) < 1e-9
+
+
+# ---------------------------------------------------------------------------------------------
+# closed-form W_down (LUNAR Eq. 9), group-wise AUC, probe comparison
+
+
+def test_closed_form_equals_weighted_least_squares():
+    """ridge=0, more tokens than features: W is the (weighted) least-squares solution, whatever W0 is."""
+    g = torch.Generator().manual_seed(0)
+    p, d, nf, nr = 12, 5, 30, 50
+    fx, rx = torch.randn(nf, p, generator=g), torch.randn(nr, p, generator=g)
+    ft, rt = torch.randn(nf, d, generator=g), torch.randn(nr, d, generator=g)
+    w0 = torch.randn(d, p, generator=g)
+    wf, wr = 2.0, 0.5
+    w, hist = solve_w_down_closed_form(w0, (fx, ft), (rx, rt), ridge=0.0, forget_weight=wf, retain_weight=wr, chunk=7)
+    sf, sr = (wf / nf) ** 0.5, (wr / nr) ** 0.5  # every token weighs w_set / N_set
+    ref = torch.linalg.lstsq(torch.cat([fx * sf, rx * sr]).double(), torch.cat([ft * sf, rt * sr]).double()).solution.T
+    assert torch.allclose(w.double(), ref, atol=1e-3), (w.double() - ref).abs().max()
+    assert hist[0]["forget_mse"] == pytest.approx(w_down_mse(w, fx, ft), rel=1e-5)
+
+
+def test_closed_form_ridge_shrinks_towards_the_original_weights():
+    g = torch.Generator().manual_seed(1)
+    p, d = 16, 4
+    fx, rx = torch.randn(40, p, generator=g), torch.randn(60, p, generator=g)
+    w0 = torch.randn(d, p, generator=g)
+    ft = F_linear(fx, w0) + 1.0  # forget targets = original output + a shift
+    rt = F_linear(rx, w0)
+    moves = []
+    for ridge in (0.0, 1e-2, 1.0, 100.0):
+        w, _ = solve_w_down_closed_form(w0, (fx, ft), (rx, rt), ridge=ridge)
+        moves.append((w - w0).norm().item())
+    assert moves == sorted(moves, reverse=True) and moves[-1] < 0.5 * moves[0], moves
+    w_inf, _ = solve_w_down_closed_form(w0, (fx, ft), (rx, rt), ridge=1e9)
+    assert torch.allclose(w_inf, w0, atol=1e-3), "huge ridge = no edit"
+
+
+def F_linear(x, w):
+    return torch.nn.functional.linear(x, w)
+
+
+def test_closed_form_end_to_end_effect_on_the_model():
+    """Same experiment as the Adam one: the edited model moves the forget block_out by ~ coeff * r_UV, the retain one
+    hardly, and the closed form fits at least as well as Adam without any lr / epochs."""
+    torch.manual_seed(0)
+    cfg = LlamaConfig(vocab_size=64, hidden_size=HIDDEN, intermediate_size=2048, num_hidden_layers=N_LAYERS,
+                      num_attention_heads=4, num_key_value_heads=2, max_position_embeddings=128)
+    model = LlamaForCausalLM(cfg).eval()
+    layer, coeff = 1, 1.0
+    f_prompts, f_meta = make_prompts(8, seed=10), {"author": [i // 4 for i in range(8)]}
+    n_prompts = make_prompts(12, seed=11)
+    n_meta = {"key": [(i // 6, (i // 3) % 2) for i in range(12)]}
+    retain = make_prompts(24, seed=12)
+    fb, nb, rb = make_batches(f_prompts, f_meta, 4), make_batches(n_prompts, n_meta, 4), make_batches(retain, {}, 8)
+    f_means, _, _ = collect_group_means(model, fb, lambda b: b["author"], POSITIONS, [layer])
+    n_means, _, _ = collect_group_means(model, nb, lambda b: b["key"], POSITIONS, [layer])
+    r_uv = compute_r_uv(f_means, n_means, nested_neighbor_order({0: [0, 1], 1: [0, 1]}, seed=0), ks=[2])[2]
+    r_layer = {a: r_uv[a][:, 0, :] for a in r_uv}
+    shift_fn = lambda b, l, am: coeff * build_shift(torch.stack([r_layer[a] for a in b["author"]]), am, POSITIONS, "eoi")
+    f_tok = collect_mlp_tokens(model, fb, [layer], shift_fn=shift_fn)[layer]
+    r_tok = collect_mlp_tokens(model, rb, [layer])[layer]
+
+    w0 = get_out_proj(model, layer).weight.detach().clone()
+    f_before = w_down_mse(w0, *f_tok)
+    w, _ = solve_w_down_closed_form(w0, f_tok, r_tok, ridge=1e-6)
+    w_adam, _ = train_w_down(w0, f_tok, r_tok, lr=3e-3, epochs=150, batch_size=32, lr_gamma=0.98, seed=0)
+    assert w_down_mse(w, *f_tok) < 1e-3 * f_before and w_down_mse(w, *r_tok) < 1e-3 * f_before
+    assert w_down_mse(w, *f_tok) <= w_down_mse(w_adam, *f_tok) + 1e-9, "closed form is the optimum Adam only approaches"
+
+    retain_before = collect_group_means(model, rb, lambda b: [0] * len(b["input_ids"]), POSITIONS, [layer])[0][0]
+    apply_w_down(model, layer, w)
+    f_after, _, _ = collect_group_means(model, fb, lambda b: b["author"], POSITIONS, [layer])
+    retain_after = collect_group_means(model, rb, lambda b: [0] * len(b["input_ids"]), POSITIONS, [layer])[0][0]
+    for a in (0, 1):
+        achieved, intended = (f_after[a] - f_means[a]).flatten(), (coeff * r_uv[a]).flatten()
+        cos = torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item()
+        ratio = (achieved.norm() / intended.norm()).item()
+        assert cos > 0.99 and 0.9 < ratio < 1.1, f"author {a}: cos={cos:.3f} norm ratio={ratio:.3f}"
+    assert ((retain_after - retain_before).norm() / retain_before.norm()).item() < 0.01
+
+
+def test_selection_file_name_encodes_k_coeff_and_mode():
+    assert selection_file_name(5, 1.0, "eoi") == "layer_selection_k5_c1_eoi.json"
+    assert selection_file_name(15, 2.5, "all") == "layer_selection_k15_c2.5_all.json"
+    assert selection_file_name(5, 1.0, "eoi") != selection_file_name(5, 1.0, "all")
+
+
+def test_group_folds_keep_groups_together_and_share_common_groups():
+    g = torch.Generator().manual_seed(0)
+    ga = [f"author:{i // 20}" for i in range(60)]  # 3 forget authors
+    gb = [f"author:{i // 30}" for i in range(90)] + [f"holdout:{i // 20}" for i in range(40)]  # their neighbours + 2 others
+    fa, fb = _group_folds(ga, gb, 2, g)
+    for groups, folds in ((ga, fa), (gb, fb)):
+        for key in set(groups):
+            assert len({int(f) for k, f in zip(groups, folds) if k == key}) == 1, f"{key} split over folds"
+    shared = set(ga) & set(gb)
+    assert all(int(fa[ga.index(k)]) == int(fb[gb.index(k)]) for k in shared), "a shared group must share its fold"
+    assert {int(x) for x in fa} == {0, 1} and {int(x) for x in fb} == {0, 1}
+    with pytest.raises(ValueError):
+        _group_folds(["x"] * 5, ["y"] * 5, 2, g)  # one group per class cannot fill 2 folds
+
+
+def test_group_wise_auc_removes_the_author_leak():
+    """Classes with NO difference except that every author has his own offset: splitting by question lets the same
+    author sit on both sides and the AUC is high; splitting by author brings it down."""
+    torch.manual_seed(1)
+    d = 64
+    a = torch.randn(30, d).repeat_interleave(10, 0) + 0.3 * torch.randn(300, d)
+    b = torch.randn(30, d).repeat_interleave(10, 0) + 0.3 * torch.randn(300, d)
+    ga, gb = [i // 10 for i in range(300)], [1000 + i // 10 for i in range(300)]
+    by_question, by_author = mean_diff_auc(a, b), mean_diff_auc(a, b, groups_a=ga, groups_b=gb)
+    assert by_question > 0.9 and by_author < by_question - 0.2, (by_question, by_author)
+    with pytest.raises(ValueError, match="both classes"):
+        mean_diff_auc(a, b, groups_a=ga)
+    with pytest.raises(ValueError, match="at least 4 groups"):  # 2 authors: the number would be ~0 or ~1 by chance
+        mean_diff_auc(a[:40], b[:40], groups_a=[i // 20 for i in range(40)], groups_b=[100 + i // 20 for i in range(40)])
+    assert 0.0 <= mean_diff_auc(a[:40], b[:40], groups_a=[i // 20 for i in range(40)],
+                                groups_b=[100 + i // 20 for i in range(40)], min_groups=2) <= 1.0
+
+
+def test_collect_activations_returns_requested_metadata(model):
+    prompts = make_prompts(5, seed=20)
+    batches = make_batches(prompts, {"index": list(range(5)), "author_id": [10, 10, 11, 11, 12]}, 2)
+    acts, layers, meta = collect_activations(model, batches, POSITIONS, reduce="none", meta_keys=("author_id", "nope"))
+    assert sorted(acts) == list(range(5)) and meta[2] == {"author_id": 11} and meta[4] == {"author_id": 12}
+    assert len(collect_activations(model, batches, POSITIONS, reduce="none")) == 2, "unchanged without meta_keys"
+
+
+def test_neighbor_sample_groups():
+    from neighbor import sample_group
+    assert sample_group("neighbor", 7, {"author_id": 3, "neighbor_id": 1}, "forget", 20, 0) == "author:3"
+    assert sample_group("forget", 45, {}, "forget", 20, 0) == "author:2"
+    assert sample_group("forget", 45, {}, "forget", 20, 198) == "author:200"  # aligned with the csv numbering
+    assert sample_group("holdout", 45, {}, "forget", 20, 198) == "holdout:2"
+    assert sample_group("retain", 45, {}, "forget", 20, 0) != sample_group("holdout", 45, {}, "forget", 20, 0)
+
+
+def test_neighbor_compare_difference_of_two_probes():
+    from neighbor_compare import compare, format_table
+    layers = lambda fg, rg: {
+        str(l): {"auc[forget | neighbor]": 0.5 + f, "auc_group[forget | neighbor]": g, "r_uv_rel_norm": 0.05 * (l + 1)}
+        for l, (f, g) in enumerate(zip(fg, rg))
+    }
+    full = {int(k): v for k, v in layers([0.3, 0.2], [0.8, 0.6]).items()}
+    retain = {int(k): v for k, v in layers([0.0, 0.1], [0.5, None]).items()}
+    rows = compare(full, retain, "forget | neighbor")
+    assert [r["layer"] for r in rows] == [0, 1]
+    assert rows[0]["auc_delta"] == pytest.approx(0.3) and rows[0]["auc_group_delta"] == pytest.approx(0.3)
+    assert rows[1]["auc_delta"] == pytest.approx(0.1) and rows[1]["auc_group_delta"] is None  # skipped group AUC
+    assert "top 1 layers by auc_group_delta: 0" in format_table(rows, "forget | neighbor")
+    with pytest.raises(KeyError):
+        compare(full, retain, "forget | holdout")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,14 @@
 # @package _global_
 # Neighbour-redirection experiment (LUNAR-style, the redirection target is attribute-matched unseen neighbours).
-#   step 1  src/neighbor.py      probe base / full / retain models on forget, neighbor, retain, holdout (+ per-layer diagnostics)
-#   step 2  src/r_uv.py          r_UV per forget author, for K neighbours           -> r_uv.pt
-#           src/select_layer.py  LUNAR-style layer selection by inference-time steering -> layer_selection.json
-#   step 3  src/w_down.py        train W_down of the selected layer                  -> model_<tag>/
+#   step 1  src/neighbor.py      ANALYSIS of one model: responses of base / full / retain on forget, neighbor, retain,
+#                                holdout + per-layer activation diagnostics. Nothing below reads its outputs.
+#           src/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
+#   step 2  src/r_uv.py          r_UV per forget author, for K neighbours (on the FULL model)      -> r_uv.pt
+#           src/select_layer.py  LUNAR-style layer selection by inference-time steering
+#                                -> layer_selection_k<K>_c<coeff>_<shift_mode>.json
+#   step 3  src/w_down.py        train W_down of the selected layer (AdamW or closed form) -> model_<tag>/
 #   step 4  src/eval.py (TOFU metrics) + src/neighbor.py on the edited model (scripts/neighbor/6_eval.sh)
+# The chain 2 -> 3 -> 4 needs the same K / coeff / shift_mode (and task_name) in every script.
 
 defaults:
   - /generation@generation_args: default
@@ -21,13 +25,10 @@ neighbor_split: neighbor10
 retain_split: retain90
 holdout_split: holdout10
 
-# which checkpoint is loaded: base (never saw TOFU) | full (saw forget + retain) | retain (saw retain only).
-# Override `model.pretrained.name_or_path=<path>` directly for any other model (e.g. the edited one).
-# target_model: full
-# model_paths:
-#   base: ${model.tokenizer.name_or_path} # the tokenizer config always points to the base checkpoint
-#   full: open-unlearning/tofu_${model.base_name}_full
-#   retain: open-unlearning/tofu_${model.base_name}_${retain_split}
+# Which checkpoint is loaded is the `model` group: `model=tofu/tofu_<base>_full` (saw forget + retain),
+# `model=tofu/tofu_<base>_retain90|95|99` (saw retain only), `model=<base>` (never saw TOFU; NOTE the Llama-3.2-1B
+# base checkpoint is broken in some environments, see configs/model/Llama-3.2-1B-Instruct.yaml), or
+# `model.pretrained.name_or_path=<path>` for any other model (e.g. the edited one).
 
 # model:
 #   pretrained:
@@ -77,8 +78,11 @@ generation_args:
 # ---- src/neighbor.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
 probe:
   splits: [forget, neighbor, retain, holdout]
-  seen: [forget, retain] # seen by the TOFU full model
-  unseen: [neighbor, holdout] # never seen by any of the three models
+  # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
+  # probe.seen=[retain] 'probe.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
+  seen: [forget, retain]
+  unseen: [neighbor, holdout]
+  responses: true # step 1: generate and summarise the responses (false -> only the activations)
   batch_size: 16
   max_gen_samples: 100 # FIXED random subset per split (same for every model, seed=${seed}); null -> all
   hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
@@ -113,7 +117,8 @@ select:
   coeff: ${wdown.coeff}
   shift_mode: ${wdown.shift_mode}
   ref_position: ${wdown.ref_position}
-  layers: null # candidate layers (null -> every layer of r_uv.pt)
+  layers: null # candidate layers (null -> `layer_fraction`, else every layer of r_uv.pt)
+  layer_fraction: null # window of relative depths, e.g. [0.4, 0.8]; LUNAR's selected layers are at 50-75 % of the depth
   unseen_splits: [neighbor, holdout] # the behaviour the steered forget answers should match
   criterion: unseen_gap # unseen_gap (look like a stranger) | rougeL_recall | answer_logprob (max knowledge removal)
   max_degenerate: 0.1 # layers whose steered answers are degenerate more often are not selected
@@ -123,14 +128,15 @@ select:
 # ---- src/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
 wdown:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/r_uv.py
-  layer_selection_path: ${paths.output_dir}/layer_selection.json # written by src/select_layer.py
+  layer_selection_path: null # null -> <output_dir>/layer_selection_k<K>_c<coeff>_<shift_mode>.json of src/select_layer.py
   k: 5 # which K of the ablation to train with (must be in ruv.ks)
   layers: auto # auto -> the layer selected by src/select_layer.py; or explicit, e.g. [10]
   coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
-  # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output.
-  # all: every token of a forget prompt gets r_UV[ref_position] (LUNAR's released code: position -1, all tokens) - but
-  #      the shared prompt prefix (system prompt, ...) has IDENTICAL inputs in forget and retain prompts with
-  #      contradicting targets, so `eoi` is the safer default.
+  # all: every token of a forget prompt gets the SAME r_UV[ref_position] - this is the paper (Eq. 4: "across all token
+  #      positions"; position -1) and LUNAR's released code. The shared prompt prefix (system prompt, ...) has IDENTICAL
+  #      inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
+  # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
+  # Run both (scripts/neighbor/5_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
   shift_mode: eoi
   ref_position: -1 # only for shift_mode=all: which saved position is used
   # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
@@ -139,9 +145,14 @@ wdown:
   retain_max_samples: 512 # random subset of each retain split (all tokens of a sample are used)
   forget_weight: 1.0
   retain_weight: 1.0
-  lr: 1.0e-3 # a guess, NOT tuned (LUNAR: 1e-2)
+  # solver: adam = AdamW + ExponentialLR (as LUNAR's code, needs lr / epochs); closed_form = LUNAR Eq. 9, ridge
+  # regression of the weight change, no lr / epochs (checked against lstsq and against `adam` in tests/test_redirect.py).
+  solver: adam
+  ridge: 1.0e-3 # closed_form only: lambda as a FRACTION of mean(diag(X^T X)); 0 = plain least squares; shrinks the edit
+  # lr of LUNAR (appendix C.3, Table 5, TOFU): Llama2-7B 1e-2, Gemma-7B 1e-3, Qwen2-7B 1e-2, Llama3-8B 5e-3, Qwen2.5-7B 5e-3
+  lr: 5.0e-3
   lr_gamma: 0.9 # ExponentialLR per epoch (as LUNAR)
-  epochs: 10 # (LUNAR: 20 in config/forget.yaml)
+  epochs: 20 # LUNAR: 20 (config/forget.yaml; appendix B cost analysis)
   batch_size: 64 # forget tokens per step, plus the same number of random retain tokens (LUNAR: 64)
   weight_decay: 0.0 # LUNAR uses AdamW's default 0.01
   responses_splits: [forget, neighbor, retain, holdout] # splits whose responses are written before / after the edit

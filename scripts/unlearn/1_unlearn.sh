@@ -33,7 +33,7 @@ MODEL=Llama-3.2-1B-Instruct
 echo start BoundedGradDiff
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=BoundedGradDiff \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -53,7 +53,7 @@ echo end BoundedGradDiff
 echo start CEU
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=CEU \
   forget_split=forget10 \
   retain_split=retain90 \
@@ -66,7 +66,7 @@ echo end CEU
 echo start DPO
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/idk \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=DPO \
   trainer.args.eval_on_start=False \
   forget_split=forget10 \
@@ -79,7 +79,7 @@ echo end DPO
 echo start GradAscent
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=GradAscent \
   forget_split=forget10 \
   retain_split=retain90 \
@@ -93,7 +93,7 @@ echo end GradAscent
 echo start NPO
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=NPO \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
@@ -109,7 +109,7 @@ echo end NPO
 echo start GradDiff
 python src/train.py --config-name=unlearn \
   experiment=unlearn/tofu/default \
-  model=${MODEL} \
+  model=tofu/tofu_${MODEL}_full \
   trainer=GradDiff \
   trainer.method_args.gamma=1.0 \
   trainer.method_args.alpha=1.0 \
