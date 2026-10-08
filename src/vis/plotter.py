@@ -228,6 +228,75 @@ class Plotter:
         fig.suptitle(suptitle)
         return fig
 
+    def plot_metric_bars(
+        self,
+        metrics: Optional[Sequence[str]] = None,
+        **plot_args: Any
+    ):
+        """
+        Grouped bar chart of final eval metrics: one figure per eval name, x-axis = metrics,
+        one bar per run within each group. A run's value comes from its single run-root
+        `*_SUMMARY.json`, or from its last checkpoint when it only has `checkpoint-*` folders.
+        """
+        named_figs: Dict[str, Figure] = {}
+        for name, metric_keys in self.named_metric_keys.items():
+            if metrics:
+                metric_keys = metric_keys.intersection(metrics)
+            if len(metric_keys) == 0:
+                raise ValueError(f"No available eval metrics found under the given runs for {name}: {self.runs}")
+            named_figs[name] = self.plot_named_metric_bars(name, metric_keys, metrics, **plot_args)
+        return named_figs
+
+    def plot_named_metric_bars(
+        self,
+        name: str,
+        metric_keys: Set[str],
+        order: Optional[Sequence[str]] = None,
+        panel_size: Tuple[float, float] = (8, 6),
+        **plot_args: Any
+    ):
+        """Grouped bars (metrics on x, runs as series) of the final summaries for eval `name`.
+        `order` fixes the metric order (default: sorted); non-numeric / missing values are skipped."""
+        suptitle = f"{name} Metric Comparison"
+        logger.info(f"Plotting {suptitle} ...")
+        if len(self._run_labels) == 1:
+            suptitle += f" ({self._run_labels[0]})"
+
+        metric_list = [m for m in order if m in metric_keys] if order else sorted(metric_keys)
+        runs = [(i, run) for i, run in enumerate(self.runs) if name in run.eval_final_summaries]
+        if not runs:
+            raise ValueError(f"No run provides a final {name} summary: {self.runs}")
+
+        group_w = 0.8
+        bar_w = group_w / len(runs)
+        fig, ax = plt.subplots(
+            figsize=(max(panel_size[0], 1.2 * len(metric_list) * len(runs) / 2), panel_size[1])
+        )
+        for j, (i, run) in enumerate(runs):
+            summary = run.eval_final_summaries[name]
+            xs, vals = [], []
+            for k, metric in enumerate(metric_list):
+                v = summary.get(metric)
+                if isinstance(v, (int, float)) and not math.isnan(v):
+                    xs.append(k - group_w / 2 + bar_w * (j + 0.5))
+                    vals.append(v)
+            ax.bar(xs, vals, width=bar_w * 0.92, color=series_color(i), label=run.label)
+            for x, v in zip(xs, vals):
+                ax.annotate(
+                    f"{v:.3g}", (x, v), xytext=(0, 2 if v >= 0 else -2), textcoords="offset points",
+                    ha="center", va="bottom" if v >= 0 else "top",
+                    fontsize=6, color=INK_SECONDARY,
+                )
+        ax.axhline(0, color=INK_SECONDARY, linewidth=0.6)
+        ax.set_xticks(range(len(metric_list)))
+        ax.set_xticklabels(metric_list, rotation=20, ha="right", fontsize=8)
+        ax.grid(axis="x", visible=False)
+        ax.set_title(f"{name}")
+        legend_if_multi(ax, len(runs))
+        fig.tight_layout(rect=(0, 0, 1, 0.93))
+        fig.suptitle(suptitle)
+        return fig
+
     def plot_tradeoff(
         self,
         x_metric: str = "model_utility",

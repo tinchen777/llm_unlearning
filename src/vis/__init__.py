@@ -19,6 +19,7 @@ PLOT_REGISTRY: Sequence[str] = [
     "training_curves",
     "metric_trajectories",
     "method_comparison",
+    "metric_bars",
     "tradeoff",
 ]
 
