@@ -2,12 +2,17 @@
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)
+import sys
+from pathlib import Path
+
+# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
+# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import json
 import logging
 import torch
-from pathlib import Path
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
@@ -26,19 +31,19 @@ from utils.config import TrackingConfig, init_hydra_choices
 logger = logging.getLogger("main(w_down)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="generate")
+@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
 def main(config: DictConfig):
     """Train W_down (the MLP output projection) of chosen layers so that forget prompts are redirected by
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
-    Needs the `r_uv.pt` written by src/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/select_layer.py
+    Needs the `r_uv.pt` written by src/METHOD/NEAR/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/METHOD/NEAR/select_layer.py
     (`layer_selection_k<K>_c<coeff>_<shift_mode>.json`, the one of the same K / coeff / shift mode).
 
     `wdown.solver`: `adam` (AdamW + ExponentialLR, as LUNAR's code; needs lr / epochs) or `closed_form` (LUNAR Eq. 9,
     ridge regression of the weight change, no lr / epochs; `wdown.ridge` shrinks the edit towards the original weights).
     `wdown.shift_mode`: `eoi` (r_UV only on the end-of-instruction tokens) or `all` (the paper: the same vector on every
     token of a forget prompt). Outputs are tagged `k<K>_l<layers>_c<coeff>_<shift_mode>[_cf]`. Args:
-        config (DictConfig): `experiment=generate/neighbor_probe` (uses `data.*`, `wdown`)
+        config (DictConfig): `experiment=generate/NEAR` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)

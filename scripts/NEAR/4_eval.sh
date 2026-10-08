@@ -13,19 +13,19 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-# Step 4: evaluate the edited models of 5_w_down.sh
+# Step 4: evaluate the edited models of 3_w_down.sh
 #   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/<task>/TOFU_EVAL.json
 #       RETAIN_LOGS: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (forget quality / privleak reference)
 #   (b) the step-1 probe on the edited model: compare its responses_summary.json / activations_summary.json with
-#       the `full` and `retain` probes of 1_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
+#       the `full` and `retain` probes of 0_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
 RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
-    SELECTION=saves/neighbor/${TASK_NAME}/$(selection_name ${K} ${MODE})
+    SELECTION=saves/NEAR/${TASK_NAME}/$(selection_name ${K} ${MODE})
     LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
     TAG=$(w_down_tag ${K} ${LAYER} ${MODE})
-    EDITED=saves/neighbor/${TASK_NAME}/model_${TAG}
+    EDITED=saves/NEAR/${TASK_NAME}/model_${TAG}
     echo start eval ${EDITED}
     python src/eval.py \
       experiment=eval/tofu/default \
@@ -37,8 +37,8 @@ for MODE in "${SHIFT_MODES[@]}"; do
       task_name=test/redirect_${MODEL}_${FORGET_SPLIT}_${TAG}
 
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
-    python src/neighbor.py \
-      experiment=generate/neighbor_probe \
+    python src/METHOD/NEAR/probe.py \
+      experiment=generate/NEAR \
       model=${FULL_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \

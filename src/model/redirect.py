@@ -1,20 +1,20 @@
 """Building blocks of the neighbour-redirection experiment (no hydra, no Trainer).
 
-Part 1 - r_UV ablation over the number of neighbours (used by src/r_uv.py):
+Part 1 - r_UV ablation over the number of neighbours (used by src/METHOD/NEAR/r_uv.py):
     forget question  -> author          (`forget_authors`)
     neighbour rows   -> (author, neighbour)
     per author a fixed random order of its neighbours; the K-neighbour reference of author a is the
     FIRST K of that order, so the sets are nested (K=1 in K=5 in K=15) and the ablation is controlled.
         r_UV[K][a] = mean_{n in first K neighbours of a} mean(act | neighbour n)  -  mean(act | forget of a)
 
-Part 2 - training W_down, LUNAR style (used by src/w_down.py; AdamW like LUNAR's code, or the closed form of Eq. 9). For one decoder layer, with
+Part 2 - training W_down, LUNAR style (used by src/METHOD/NEAR/w_down.py; AdamW like LUNAR's code, or the closed form of Eq. 9). For one decoder layer, with
     x = input of the MLP output projection (down_proj), y = its ORIGINAL output, per token:
         forget tokens : target = y + coeff * shift      (shift built from r_UV of the sample's author)
         retain tokens : target = y                      (the layer must keep behaving the same)
     and `W_down` is trained (MSE) to map x -> target, starting from the original weights.
     Inputs/targets are recorded ONCE from the original model; training itself runs no model forward.
 
-Part 3 - inference-time steering (`Steerer`, used by src/select_layer.py): add coeff * r_UV to the residual
+Part 3 - inference-time steering (`Steerer`, used by src/METHOD/NEAR/select_layer.py): add coeff * r_UV to the residual
     stream after one layer, i.e. the effect a perfect W_down edit of that layer would have.
 
 Reference: LUNAR (arXiv:2502.07218), https://github.com/facebookresearch/LUNAR
@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 
 def selection_file_name(k: int, coeff: float, shift_mode: str) -> str:
-    """Name of the layer-selection file of src/select_layer.py: the selected layer depends on the reference size K,
-    the coefficient and the shift mode, so W_down training (src/w_down.py) must read the file of the SAME ones."""
+    """Name of the layer-selection file of src/METHOD/NEAR/select_layer.py: the selected layer depends on the reference size K,
+    the coefficient and the shift mode, so W_down training (src/METHOD/NEAR/w_down.py) must read the file of the SAME ones."""
     return f"layer_selection_k{k}_c{coeff:g}_{shift_mode}.json"
 
 

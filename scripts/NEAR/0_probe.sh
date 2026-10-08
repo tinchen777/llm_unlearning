@@ -26,7 +26,7 @@ SPLIT_SETS=(
 
 # which official checkpoints to probe: `retain` (saw the retain data only = the ideal result of unlearning) and
 # `full` (saw forget + retain). The activation AUCs of the SAME pair of the two are compared afterwards
-# (scripts/neighbor/1b_probe_compare.sh).
+# (scripts/NEAR/0_probe_compare.sh).
 KINDS=(retain full)
 
 # Step 1: ANALYSIS of the official models on forget, neighbor, retain, holdout. Nothing of steps 2-4 reads these outputs.
@@ -35,7 +35,7 @@ KINDS=(retain full)
 #   full   : saw forget + retain -> forget / retain answered correctly; neighbor / holdout hallucinated
 # (`model=<base>` = a base model that never saw TOFU is possible too, but the Llama-3.2-1B base checkpoint is broken in
 #  some environments, see configs/model/Llama-3.2-1B-Instruct.yaml.)
-# per model and forget split -> saves/neighbor/1_probe/<MODEL>_<FORGET_SPLIT>/
+# per model and forget split -> saves/NEAR/1_probe/<MODEL>_<FORGET_SPLIT>/
 #   responses_<split>.json      generations + rouge + answer_logprob + refusal/degenerate flags
 #   responses_summary.json      per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
 #   activations_summary.json    per layer: norms, r_UV size, AUCs of pairs of question sets (see its `note`: they measure

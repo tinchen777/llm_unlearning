@@ -1,11 +1,16 @@
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)
+import sys
+from pathlib import Path
+
+# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
+# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import logging
 import torch
-from pathlib import Path
 from omegaconf import DictConfig
 
 from data import get_split_data, split_loader
@@ -38,7 +43,7 @@ def unseen_gap(steered: dict, original: dict, unseen: dict, keys=("rougeL_recall
     return sum(gaps) / len(gaps) + abs(steered["refusal_rate"] - unseen["refusal_rate"])
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="generate")
+@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
 def main(config: DictConfig):
     """Step 2b: LUNAR-style layer selection, adapted to the neighbour target.
 
@@ -56,7 +61,7 @@ def main(config: DictConfig):
     Candidates: `select.layers` (explicit), else `select.layer_fraction` (window of relative depths), else all layers.
 
     Args:
-        config (DictConfig): `experiment=generate/neighbor_probe` (uses `data.*`, `select`); needs r_uv.pt of src/r_uv.py.
+        config (DictConfig): `experiment=generate/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)

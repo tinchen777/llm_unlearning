@@ -1,13 +1,18 @@
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)
+import sys
+from pathlib import Path
+
+# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
+# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import itertools
 import logging
 import torch
 import torch.nn.functional as F
-from pathlib import Path
 from omegaconf import DictConfig
 from typing import Any, Dict, Hashable
 
@@ -41,7 +46,7 @@ def sample_group(split: str, index: int, meta: Dict[str, Any], forget_split: str
     return f"{split}:{author}"
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="generate")
+@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
 def main(config: DictConfig):
     """Step 1 (+ step 2 diagnostics) of the neighbour experiment: probe ONE model (no Trainer) on the
     forget / neighbor / retain / holdout question sets.
@@ -54,16 +59,16 @@ def main(config: DictConfig):
        (reference - forget, as LUNAR) and linear separability of pairs of question sets at every layer
        -> activations.pt, activations_summary.json.
 
-    This step is an ANALYSIS of one model. The r_UV / layer selection / W_down chain (src/r_uv.py,
-    src/select_layer.py, src/w_down.py) does not read its outputs.
+    This step is an ANALYSIS of one model. The r_UV / layer selection / W_down chain (src/METHOD/NEAR/r_uv.py,
+    src/METHOD/NEAR/select_layer.py, src/METHOD/NEAR/w_down.py) does not read its outputs.
 
     Reading the AUCs (see the `note` of activations_summary.json): they measure how well two question sets can be
     told apart, which is dominated by WHAT the questions are about (other authors, other templates, other length),
     not by whether the model knows them. Only compare pairs whose questions are matched (forget | neighbour), and
-    compare the SAME pair across models (full - retain, `src/neighbor_compare.py`).
+    compare the SAME pair across models (full - retain, `src/METHOD/NEAR/neighbor_compare.py`).
 
     Args:
-        config (DictConfig): `experiment=generate/neighbor_probe`
+        config (DictConfig): `experiment=generate/NEAR`
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
@@ -202,7 +207,7 @@ def main(config: DictConfig):
                     "where no knowledge can be encoded), NOT whether the model knows them. Do not expect 0.5 for "
                     "sets about different authors, whatever the model. Use (1) only matched pairs: forget | neighbour "
                     "(neighbours are rewrites of the forget questions) and (2) the difference of the SAME pair between "
-                    "two models, e.g. full - retain (src/neighbor_compare.py): content effects cancel, knowledge "
+                    "two models, e.g. full - retain (src/METHOD/NEAR/neighbor_compare.py): content effects cancel, knowledge "
                     "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||.",
             "layers": layer_summary,
         }, output_dir / "activations_summary.json")  # type: ignore

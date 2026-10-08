@@ -1,13 +1,13 @@
-"""Compare the `activations_summary.json` of two probes of the SAME splits (src/neighbor.py), no model needed.
+"""Compare the `activations_summary.json` of two probes of the SAME splits (src/METHOD/NEAR/probe.py), no model needed.
 
-    python src/neighbor_compare.py --full <full>/activations_summary.json --retain <retain>/activations_summary.json
+    python src/METHOD/NEAR/neighbor_compare.py --full <full>/activations_summary.json --retain <retain>/activations_summary.json
 
 Why: the AUC of a pair of question sets mostly reflects how different the QUESTIONS are, which is identical for the
 two models. The difference `full - retain` of the same pair cancels that content effect; what remains is the part of
 the separation that exists only because the full model has SEEN the forget data (the retain model has not).
 The pair to read is the matched one: `forget | neighbor` (neighbours are rewrites of the forget questions); layers
 with a large positive difference are where "seen vs unseen" is linearly visible, a candidate window for the layer
-selection (src/select_layer.py decides, this only narrows it down).
+selection (src/METHOD/NEAR/select_layer.py decides, this only narrows it down).
 """
 
 from __future__ import annotations

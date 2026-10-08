@@ -14,19 +14,19 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
 # Step 3: train W_down (MLP output projection) of the selected layer (wdown.layers=auto -> the layer of the selection file
-# of the SAME K / coeff / shift mode written by 4_select_layer.sh) with the r_UV of each K (needs 3_r_uv.sh):
-#   -> model_<tag>/                     edited model (tag = k<K>_l<layer>_c<coeff>_<mode>[_cf]), evaluated by 6_eval.sh
+# of the SAME K / coeff / shift mode written by 2_select_layer.sh) with the r_UV of each K (needs 1_r_uv.sh):
+#   -> model_<tag>/                     edited model (tag = k<K>_l<layer>_c<coeff>_<mode>[_cf]), evaluated by 4_eval.sh
 #   -> w_down_<tag>.pt                  edited weights {layer: W_down}
 #   -> w_down_<tag>_summary.json        losses, achieved-vs-intended shift, response statistics before / after
 #   -> responses_before_<split>.json / responses_after_<tag>_<split>.json   same fixed samples, to read
 # Shift modes: `all` = the paper (the same r_UV on every token of a forget prompt), `eoi` = end-of-instruction tokens only.
 # SOLVER (in _common.sh): adam (AdamW, lr / epochs from the config) or closed_form (LUNAR Eq. 9, no lr / epochs).
-# (settings: `wdown` in configs/experiment/generate/neighbor_probe.yaml)
+# (settings: `wdown` in configs/experiment/generate/NEAR.yaml)
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     echo start w_down K=${K} mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
-    python src/w_down.py \
-      experiment=generate/neighbor_probe \
+    python src/METHOD/NEAR/w_down.py \
+      experiment=generate/NEAR \
       model=${FULL_MODEL} \
       ${SPLITS} \
       wdown.k=${K} \

@@ -2,11 +2,16 @@
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)
+import sys
+from pathlib import Path
+
+# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
+# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import hydra
 from hydra.core.hydra_config import HydraConfig
 import logging
 import torch
-from pathlib import Path
 from omegaconf import DictConfig
 
 from data import get_split_loaders, one_loader
@@ -22,14 +27,14 @@ from utils.config import TrackingConfig, init_hydra_choices
 logger = logging.getLogger("main(r_uv)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="generate")
+@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
 def main(config: DictConfig):
     """r_UV per forget author, ablated over the number K of neighbours used as reference (no Trainer).
 
         r_UV[K][author] = mean act over the first K neighbours of the author - mean act of the author's forget questions
 
     Args:
-        config (DictConfig): `experiment=generate/neighbor_probe` (uses its `data.forget`, `data.neighbor`, `ruv`)
+        config (DictConfig): `experiment=generate/NEAR` (uses its `data.forget`, `data.neighbor`, `ruv`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)

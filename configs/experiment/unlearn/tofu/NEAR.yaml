@@ -1,13 +1,13 @@
 # @package _global_
 # Neighbour-redirection experiment (LUNAR-style, the redirection target is attribute-matched unseen neighbours).
-#   step 1  src/neighbor.py      ANALYSIS of one model: responses of base / full / retain on forget, neighbor, retain,
+#   step 1  src/METHOD/NEAR/probe.py      ANALYSIS of one model: responses of base / full / retain on forget, neighbor, retain,
 #                                holdout + per-layer activation diagnostics. Nothing below reads its outputs.
-#           src/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
-#   step 2  src/r_uv.py          r_UV per forget author, for K neighbours (on the FULL model)      -> r_uv.pt
-#           src/select_layer.py  LUNAR-style layer selection by inference-time steering
+#           src/METHOD/NEAR/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
+#   step 2  src/METHOD/NEAR/r_uv.py          r_UV per forget author, for K neighbours (on the FULL model)      -> r_uv.pt
+#           src/METHOD/NEAR/select_layer.py  LUNAR-style layer selection by inference-time steering
 #                                -> layer_selection_k<K>_c<coeff>_<shift_mode>.json
-#   step 3  src/w_down.py        train W_down of the selected layer (AdamW or closed form) -> model_<tag>/
-#   step 4  src/eval.py (TOFU metrics) + src/neighbor.py on the edited model (scripts/neighbor/6_eval.sh)
+#   step 3  src/METHOD/NEAR/w_down.py        train W_down of the selected layer (AdamW or closed form) -> model_<tag>/
+#   step 4  src/eval.py (TOFU metrics) + src/METHOD/NEAR/probe.py on the edited model (scripts/NEAR/4_eval.sh)
 # The chain 2 -> 3 -> 4 needs the same K / coeff / shift_mode (and task_name) in every script.
 
 defaults:
@@ -66,7 +66,7 @@ data:
 generation_args:
   max_new_tokens: 128
 
-# ---- src/neighbor.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
+# ---- src/METHOD/NEAR/probe.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
 probe:
   splits: [forget, neighbor, retain, holdout]
   # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
@@ -89,7 +89,7 @@ probe:
   # positions: [-1]  # default (omitted): end-of-instruction template tokens, as in LUNAR
   # layers: [10, 11] # default (omitted): all decoder layers
 
-# ---- src/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
+# ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
   batch_size: 32
   ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
@@ -101,9 +101,9 @@ ruv:
   # positions: [-1]  # default (omitted): end-of-instruction template tokens
   # layers: [10, 11] # default (omitted): all decoder layers
 
-# ---- src/select_layer.py : LUNAR-style layer selection by inference-time steering ---------------
+# ---- src/METHOD/NEAR/select_layer.py : LUNAR-style layer selection by inference-time steering ---------------
 select:
-  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/r_uv.py
+  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/NEAR/r_uv.py
   k: ${wdown.k}
   coeff: ${wdown.coeff}
   shift_mode: ${wdown.shift_mode}
@@ -116,18 +116,18 @@ select:
   max_samples: 64 # fixed random subset of forget prompts
   batch_size: 16
 
-# ---- src/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
+# ---- src/METHOD/NEAR/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
 wdown:
-  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/r_uv.py
-  layer_selection_path: null # null -> <output_dir>/layer_selection_k<K>_c<coeff>_<shift_mode>.json of src/select_layer.py
+  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/NEAR/r_uv.py
+  layer_selection_path: null # null -> <output_dir>/layer_selection_k<K>_c<coeff>_<shift_mode>.json of src/METHOD/NEAR/select_layer.py
   k: 5 # which K of the ablation to train with (must be in ruv.ks)
-  layers: auto # auto -> the layer selected by src/select_layer.py; or explicit, e.g. [10]
+  layers: auto # auto -> the layer selected by src/METHOD/NEAR/select_layer.py; or explicit, e.g. [10]
   coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
   # all: every token of a forget prompt gets the SAME r_UV[ref_position] - this is the paper (Eq. 4: "across all token
   #      positions"; position -1) and LUNAR's released code. The shared prompt prefix (system prompt, ...) has IDENTICAL
   #      inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
   # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
-  # Run both (scripts/neighbor/5_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
+  # Run both (scripts/NEAR/3_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
   shift_mode: eoi
   ref_position: -1 # only for shift_mode=all: which saved position is used
   # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
