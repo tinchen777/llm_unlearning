@@ -1,17 +1,17 @@
-# file size: 2.49 GB
+# file size: 6.44 GB
 # verified
-base_name: Llama-3.2-1B-Instruct
+base_name: Llama-3.2-3B-Instruct
 
 pretrained:
   handler: AutoModelForCausalLM
-  name_or_path: unsloth/Llama-3.2-1B-Instruct # BUG 似乎是模型加载错误
+  name_or_path: open-unlearning/tofu_Llama-3.2-3B-Instruct_retain95
   dtype: bfloat16
   args:
     attn_implementation: sdpa
 
 tokenizer:
   handler: AutoTokenizer
-  name_or_path: unsloth/Llama-3.2-1B-Instruct
+  name_or_path: open-unlearning/tofu_Llama-3.2-3B-Instruct_retain95
   args: {}
 
 template_args:

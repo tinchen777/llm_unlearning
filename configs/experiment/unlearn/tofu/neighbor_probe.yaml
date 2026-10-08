@@ -23,15 +23,15 @@ holdout_split: holdout10
 
 # which checkpoint is loaded: base (never saw TOFU) | full (saw forget + retain) | retain (saw retain only).
 # Override `model.pretrained.name_or_path=<path>` directly for any other model (e.g. the edited one).
-target_model: full
-model_paths:
-  base: ${model.tokenizer.name_or_path} # the tokenizer config always points to the base checkpoint
-  full: open-unlearning/tofu_${model.base_name}_full
-  retain: open-unlearning/tofu_${model.base_name}_${retain_split}
+# target_model: full
+# model_paths:
+#   base: ${model.tokenizer.name_or_path} # the tokenizer config always points to the base checkpoint
+#   full: open-unlearning/tofu_${model.base_name}_full
+#   retain: open-unlearning/tofu_${model.base_name}_${retain_split}
 
-model:
-  pretrained:
-    name_or_path: ${model_paths.${target_model}}
+# model:
+#   pretrained:
+#     name_or_path: ${model_paths.${target_model}}
 
 data:
   forget:

@@ -61,36 +61,35 @@ def main(config: DictConfig):
         # missing = set(splits) - set(split_data)
         # if missing:
         #     raise ValueError(f"probe.splits {sorted(missing)} are not in `data` ({sorted(split_data)}).")
-    
-    exit()
+
 
     # 3. Model responses on a FIXED random subset of each split (the same subset for every model)
-    with step_logging(logger, "[3/4]", "responses", probe_cfg):
-        summary = {}
-        for split in splits:
-            records = generate_responses(
-                model, tokenizer,
-                split_loader(split_data, split, probe_cfg["batch_size"], probe_cfg.get("max_gen_samples", None), seed),
-                cfg["generation_args"], desc=split,
-                refusal_patterns=list(probe_cfg["refusal_patterns"]),
-            )
-            save_logs(records, output_dir / f"responses_{split}.json")  # type: ignore
-            summary[split] = summarize_responses(records, float(probe_cfg["hallucination_rouge"]))
-            for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
-                logger.info(
-                    f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
-                    f"        GT: {record['ground_truth']!r}\n"
-                    f"        A : {record['generation']!r}"
-                )
-        save_logs({"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summary},
-                  output_dir / "responses_summary.json")  # type: ignore
-        for split, s in summary.items():
-            logger.info(
-                f"[{split:>8}] rougeL_recall={s['rougeL_recall']:.3f}  answer_prob={s.get('answer_prob', float('nan')):.3f}  "
-                f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
-            )
+    # with step_logging(logger, "[3/4]", "responses", probe_cfg):
+    #     summary = {}
+    #     for split in splits:
+    #         records = generate_responses(
+    #             model, tokenizer,
+    #             split_loader(split_data, split, probe_cfg["batch_size"], probe_cfg.get("max_gen_samples", None), seed),
+    #             cfg["generation_args"], desc=split,
+    #             refusal_patterns=list(probe_cfg["refusal_patterns"]),
+    #         )
+    #         save_logs(records, output_dir / f"responses_{split}.json")  # type: ignore
+    #         summary[split] = summarize_responses(records, float(probe_cfg["hallucination_rouge"]))
+    #         for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
+    #             logger.info(
+    #                 f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
+    #                 f"        GT: {record['ground_truth']!r}\n"
+    #                 f"        A : {record['generation']!r}"
+    #             )
+    #     save_logs({"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summary},
+    #               output_dir / "responses_summary.json")  # type: ignore
+    #     for split, s in summary.items():
+    #         logger.info(
+    #             f"[{split:>8}] rougeL_recall={s['rougeL_recall']:.3f}  answer_prob={s.get('answer_prob', float('nan')):.3f}  "
+    #             f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
+    #         )
 
-    exit()
+    # exit()
 
     if not probe_cfg.get("activations", True):
         return
