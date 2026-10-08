@@ -27,8 +27,8 @@ cd $(dirname "$0")/../.. || exit 1
 #   --cfg job  --resolve
 
 python src/plot.py \
-  +vis.run_folders='[[saves/unlearn/test_2, "*"]]' \
-  +vis.out_dir=saves/plots/eval_test_2 \
+  +vis.run_folders='[[saves/eval/test, "*"]]' \
+  +vis.out_dir=saves/plots/eval_redirect_Llama-3.2-1B-Instruct_forget01 \
   # --cfg job  --resolve
 
 # 单独画某张图的例子:

@@ -25,7 +25,7 @@ python src/METHOD/NEAR/r_uv.py \
   model=${FULL_MODEL} \
   ${SPLITS} \
   "ruv.ks=[$(IFS=,; echo "${KS[*]}")]" \
-  task_name=${TASK_NAME}
-  # ruv.author_offset=0 \
+  task_name=${TASK_NAME} \
+  ruv.author_offset=199 \
   # ruv.point=block_out \
 echo end r_uv ${FULL_MODEL}
