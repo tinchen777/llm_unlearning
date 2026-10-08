@@ -521,7 +521,7 @@ def test_collect_activations_returns_requested_metadata(model):
 
 
 def test_neighbor_sample_groups():
-    from neighbor import sample_group
+    from METHOD.NEAR.probe import sample_group
     assert sample_group("neighbor", 7, {"author_id": 3, "neighbor_id": 1}, "forget", 20, 0) == "author:3"
     assert sample_group("forget", 45, {}, "forget", 20, 0) == "author:2"
     assert sample_group("forget", 45, {}, "forget", 20, 198) == "author:200"  # aligned with the csv numbering
@@ -530,7 +530,7 @@ def test_neighbor_sample_groups():
 
 
 def test_neighbor_compare_difference_of_two_probes():
-    from neighbor_compare import compare, format_table
+    from METHOD.NEAR.neighbor_compare import compare, format_table
     layers = lambda fg, rg: {
         str(l): {"auc[forget | neighbor]": 0.5 + f, "auc_group[forget | neighbor]": g, "r_uv_rel_norm": 0.05 * (l + 1)}
         for l, (f, g) in enumerate(zip(fg, rg))

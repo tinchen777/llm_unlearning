@@ -41,36 +41,46 @@ KINDS=(retain full)
 #   activations_summary.json    per layer: norms, r_UV size, AUCs of pairs of question sets (see its `note`: they measure
 #                               how different the QUESTIONS are; only forget | neighbor and full - retain mean knowledge)
 
+
 for BASE_MODEL in "${BASE_MODELS[@]}"; do
   for split in "${SPLIT_SETS[@]}"; do
     read -r FORGET_SPLIT HOLDOUT_SPLIT RETAIN_SPLIT NEIGHBOR_SPLIT <<< "${split}"
-    for KIND in "${KINDS[@]}"; do
-      if [ "${KIND}" = full ]; then
-        MODEL=tofu_${BASE_MODEL}_full
-        # the full model has seen forget and retain, not neighbor / holdout (the defaults of probe.seen / probe.unseen)
-        SEEN_ARGS=()
-      else
-        MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
-        # the retain model has seen the retain data only: forget is unseen for it
-        SEEN_ARGS=('probe.seen=[retain]' 'probe.unseen=[forget,neighbor,holdout]')
-      fi
-      echo start probe ${MODEL} ${FORGET_SPLIT}
 
-      python src/neighbor.py \
-        experiment=generate/neighbor_probe \
+    # RETAIN MODEL
+    MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
+    # the retain model has seen the retain data only: forget is unseen for it
+    SEEN_ARGS=('probe.seen=[retain]' 'probe.unseen=[forget,neighbor,holdout]')
+    echo start probe ${MODEL}
+    python src/METHOD/NEAR/probe.py \
+        experiment=generate/NEAR \
         model=tofu/${MODEL} \
         forget_split=${FORGET_SPLIT} \
         neighbor_split=${NEIGHBOR_SPLIT} \
         retain_split=${RETAIN_SPLIT} \
         holdout_split=${HOLDOUT_SPLIT} \
         "${SEEN_ARGS[@]}" \
-        task_name=1_probe/${MODEL}_${FORGET_SPLIT} \
+        task_name=0_probe/${MODEL} \
         # --cfg job --resolve
         # probe.max_gen_samples=null \
         # probe.responses=false \
         # probe.activations=false \
+    echo end probe ${MODEL}
 
-      echo end probe ${MODEL} ${FORGET_SPLIT}
-    done
+    # FULL MODEL
+    MODEL=tofu_${BASE_MODEL}_full
+    echo start probe ${MODEL} ${FORGET_SPLIT}
+    python src/METHOD/NEAR/probe.py \
+        experiment=generate/NEAR \
+        model=tofu/${MODEL} \
+        forget_split=${FORGET_SPLIT} \
+        neighbor_split=${NEIGHBOR_SPLIT} \
+        retain_split=${RETAIN_SPLIT} \
+        holdout_split=${HOLDOUT_SPLIT} \
+        task_name=0_probe/${MODEL}/${FORGET_SPLIT} \
+        # --cfg job --resolve
+        # probe.max_gen_samples=null \
+        # probe.responses=false \
+        # probe.activations=false \
+    echo end probe ${MODEL} ${FORGET_SPLIT}
   done
 done
