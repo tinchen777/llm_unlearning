@@ -2,14 +2,14 @@
 from __future__ import annotations
 import logging
 from pprint import pprint
-import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .datasets.pretraining import PretrainingDataset, CompletionDataset
 from .collators.nested_data import DataCollatorForNestedData
 from .combined_dataset import BalancedUnlearnDataset
+from .utils import get_subloader
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
@@ -40,6 +40,8 @@ def get_split_loaders(
     batch_size: int,
     shuffle: bool = False,
     num_workers: int = 0,
+    max_samples: Optional[int] = None,
+    seed: int = 42,
     **data_kwargs
 ) -> Dict[str, Dict[str, DataLoader]]:
     """
@@ -55,9 +57,11 @@ def get_split_loaders(
         split_name: get_loaders(
             datasets,
             batch_size=batch_size,
+            collator=collator,
+            max_samples=max_samples,
+            seed=seed,
             shuffle=shuffle,
-            num_workers=num_workers,
-            collator=collator
+            num_workers=num_workers
         )
         for split_name, (datasets, collator) in split_data.items()
     }
@@ -67,8 +71,8 @@ def get_loaders(
     datasets: Dict[str, Dataset],
     batch_size: int,
     collator: Optional[Any] = None,
-    shuffle: bool = False,
-    num_workers: int = 0,
+    max_samples: Optional[int] = None,
+    seed: int = 42,
     **loader_kwargs
 ) -> Dict[str, DataLoader]:
     """
@@ -77,45 +81,18 @@ def get_loaders(
         {`loader_name`: `DataLoader`, ...}
     """
     return {
-        name: DataLoader(
+        name: get_subloader(
             dataset,
             batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            collate_fn=collator,
+            collator=collator,
+            max_samples=max_samples,
+            seed=seed,
             **loader_kwargs
         )
         for name, dataset in datasets.items()
     }
 
-
-def fixed_subset(dataset: Dataset, max_samples: Optional[int] = None, seed: int = 0) -> Dataset:
-    """A FIXED random subset of `max_samples` samples (sorted indices; the same for every call / model given `seed`),
-    or the dataset itself when `max_samples` is None or not smaller than the dataset."""
-    if max_samples is None or int(max_samples) >= len(dataset):  # type: ignore
-        return dataset
-    idx = torch.randperm(len(dataset), generator=torch.Generator().manual_seed(seed))[:int(max_samples)]  # type: ignore
-    return Subset(dataset, sorted(idx.tolist()))
-
-
-def split_loader(
-    split_data: Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]],
-    split: str,
-    batch_size: int,
-    max_samples: Optional[int] = None,
-    seed: int = 0,
-) -> DataLoader:
-    """Unshuffled loader of the single dataset of `split` (output of `get_split_data`), on a fixed subset."""
-    datasets, collator = split_data[split]
-    dataset = fixed_subset(one_dataset(datasets), max_samples, seed)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collator)
-
-
-def one_loader(loaders: Dict[str, DataLoader]) -> DataLoader:
-    if len(loaders) != 1:
-        raise ValueError(f"Expected exactly one loader, but got {len(loaders)}.")
-    return next(iter(loaders.values()))
-
+# === Split Data ===
 
 def get_split_data(
     data_cfg: TrackingConfig,
@@ -176,12 +153,6 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
 def _load_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
     dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
     return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
-
-
-def one_dataset(datasets: Dict[str, Dataset]) -> Dataset:
-    if len(datasets) != 1:
-        raise ValueError(f"Expected exactly one dataset for `dataloader`, but got {len(datasets)}.")
-    return next(iter(datasets.values()))
 
 # === Collator ===
 

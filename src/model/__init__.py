@@ -63,38 +63,6 @@ def _get_model(pretrained_cfg: TrackingConfig, base_name: str = "???"):
 
     return model
 
-
-# def _get_peft_lora_model(model, peft_args: TrackingConfig):
-#     """Wrap a base causal LM with a LoRA adapter using the `peft` library.
-
-#     Args:
-#         model: a freshly loaded base model (e.g. AutoModelForCausalLM).
-#         peft_args (TrackingConfig): LoRA hyper-parameters. Recognised keys mirror
-#             `peft.LoraConfig` (r, lora_alpha, lora_dropout, target_modules,
-#             bias, task_type, ...). An optional `path` key can point to an
-#             existing adapter checkpoint to resume/evaluate instead of creating
-#             a fresh adapter.
-#     """
-#     try:
-#         from peft import LoraConfig, get_peft_model, PeftModel  # type: ignore
-#     except ImportError as e:
-#         raise ImportError(
-#             "LoRA finetuning requires the `peft` library. Install it with "
-#             "`pip install peft`."
-#         ) from e
-
-#     adapter_path = peft_args.pop("path", None)
-
-#     if adapter_path is not None:
-#         # Load a previously trained LoRA adapter on top of the base model.
-#         model = PeftModel.from_pretrained(model, adapter_path, is_trainable=True)
-#         logger.info(f"Loaded existing LoRA adapter from {adapter_path}")
-#     else:
-#         model = get_peft_model(model, LoraConfig(**peft_args))
-#         logger.info("Created a new LoRA adapter on top of the base model.")
-#     model.print_trainable_parameters()
-#     return model
-
 # === Tokenizer ===
 
 def _get_tokenizer(tokenizer_cfg: TrackingConfig, base_name: str = "???"):

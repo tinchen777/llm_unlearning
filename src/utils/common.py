@@ -23,6 +23,7 @@ def randidx(high: int) -> int:
 
 
 def set_seed(seed=42):
+    seed = int(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -42,14 +43,14 @@ def get_cuda_visible_devices():
     return devices
 
 
-def load_logs(file_path: Union[PathLike, str]) -> Dict[str, Any]:
+def load_logs(file_path: Union[PathLike, str]) -> Any:
     """Returns the cache of existing results"""
     file_path = Path(file_path)
     with file_path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_logs(logs: Dict[str, Any], file_path: Union[PathLike, str]):
+def save_logs(logs: Any, file_path: Union[PathLike, str]):
     """Save the logs in a json file"""
     file_path = Path(file_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)

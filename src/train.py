@@ -53,7 +53,7 @@ def main(config: DictConfig):
         )
         train_datasets, collator = data["train"]
 
-    # 4. Get Evaluators
+    # 3. Get Evaluators
     eval_cfgs = cfg.get("eval", None)
     if eval_cfgs:
         with step_logging(logger, "[3/4]", "evaluators", eval_cfgs):
@@ -66,7 +66,7 @@ def main(config: DictConfig):
         with step_logging(logger, "[3/4]", "evaluators", is_skip=True):
             evaluators = None
 
-    # 5. Get Trainer
+    # 4. Get Trainer
     trainer_cfg = cfg["trainer"]
     with step_logging(logger, "[4/4]", "trainer", trainer_cfg):
         trainer = load_trainer(
@@ -78,7 +78,8 @@ def main(config: DictConfig):
             data_collator=collator
         )
 
-    # START TRAINING & EVALUATION
+    # ==========
+    # TRAINING & EVALUATION
     if trainer.args.do_train:
         trainer.train()
         trainer.save_state()

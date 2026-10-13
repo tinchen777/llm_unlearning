@@ -16,7 +16,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from data import get_split_data, split_loader
+from data import get_split_data, get_subloader
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_out_proj
 from model.generation import generate_responses, summarize_responses
@@ -96,7 +96,7 @@ def main(config: DictConfig):
 
     def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        return split_loader(split_data, split, batch_size, max_samples, seed)
+        return get_subloader(split_data, split, batch_size, max_samples, seed)
 
     gen_splits = list(wd["responses_splits"])
 

@@ -83,7 +83,12 @@ _ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
 
 
 @batch_to_model_device
-def eval_text_similarity(model: Any, batch: Mapping[str, torch.Tensor], tokenizer: Any, generation_args: TrackingConfig):
+def eval_text_similarity(
+    model: Any,
+    batch: Mapping[str, torch.Tensor],
+    tokenizer: Any,
+    generation_args: TrackingConfig
+):
     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
 
     def _cut_off_at_stopwords(s: str, seps: List[str]) -> str:

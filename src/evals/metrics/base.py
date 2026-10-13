@@ -7,7 +7,8 @@ from functools import wraps
 from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
 from .utils import SUBDATA_SUFFIX
-from data import get_datasets, get_collator, get_loaders, one_loader
+from data import get_datasets, get_collator, get_loaders
+from data.utils import one_loader
 from utils.common import load_logs
 from utils.config import reprlib
 

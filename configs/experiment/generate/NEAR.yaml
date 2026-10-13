@@ -68,26 +68,23 @@ generation_args:
 
 # ---- src/METHOD/NEAR/probe.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
 probe:
-  splits: [forget, neighbor, retain, holdout]
-  # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
-  # probe.seen=[retain] 'probe.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
-  seen: [forget, retain]
-  unseen: [neighbor, holdout]
-  responses: true # step 1: generate and summarise the responses (false -> only the activations)
   batch_size: 16
-  max_gen_samples: 100 # FIXED random subset per split (same for every model, seed=${seed}); null -> all
-  hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
-  refusal_patterns: [ "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware",
-    "i am not aware", "not familiar with", "no information", "i cannot", "i can't", "i'm not able", "i am not able",
-    "i'm unable", "i am unable", "unable to provide", "i couldn't find", "i could not find", "i'm sorry",
-    "i apologize", "not publicly available", "doesn't exist", "does not exist" ]
-  activations: true # step 2 diagnostics: per-layer means, global r_UV, seen/unseen separability
-  max_act_samples: 200 # fixed random subset per split for the activations; null -> all
-  forget: forget # split name of the data to forget
-  reference: neighbor # split name of the redirection target
-  point: block_out # block_out | mlp_out | down_proj_in | resid_mid
-  # positions: [-1]  # default (omitted): end-of-instruction template tokens, as in LUNAR
-  # layers: [10, 11] # default (omitted): all decoder layers
+
+  responses:
+    max_gen_samples: 100 # FIXED random subset per split (same for every model, seed=${seed}); null -> all
+    hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
+
+  activations:
+    # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
+    # probe.seen=[retain] 'probe.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
+    seen: [forget, retain]
+    unseen: [neighbor, holdout]
+    max_act_samples: 200 # fixed random subset per split for the activations; null -> all
+    forget: forget # split name of the data to forget
+    reference: neighbor # split name of the redirection target
+    point: block_out # block_out | mlp_out | down_proj_in | resid_mid
+    # positions: [-1]  # default (omitted): end-of-instruction template tokens, as in LUNAR
+    # layers: [10, 11] # default (omitted): all decoder layers
 
 # ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
@@ -128,7 +125,7 @@ wdown:
   #      inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
   # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
   # Run both (scripts/NEAR/3_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
-  shift_mode: eoi
+  shift_mode: eoi  # all | eoi
   ref_position: -1 # only for shift_mode=all: which saved position is used
   # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
   # holdout is kept out of training as the clean "never seen" control of the evaluation.
