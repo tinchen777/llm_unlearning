@@ -14,7 +14,8 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_loaders, one_loader
+from data import get_split_loaders
+from data.utils import one_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_eoi_positions
 from model.redirect import (

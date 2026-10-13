@@ -14,6 +14,7 @@ import torch
 from omegaconf import DictConfig
 
 from data import get_split_data, get_subloader
+from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
 from model.generation import generate_responses, summarize_responses
@@ -72,8 +73,7 @@ def main(config: DictConfig):
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     k, coeff = int(sel["k"]), float(sel["coeff"])
     mode, ref_position = str(sel["shift_mode"]), int(sel["ref_position"])
-    refusal_patterns = list(cfg["probe"]["refusal_patterns"])
-    hallucination_rouge = float(cfg["probe"]["hallucination_rouge"])
+    hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
 
     # 1. r_UV of the K-neighbour reference
     with step_logging(logger, "[1/4]", "r_UV", sel):
@@ -109,11 +109,13 @@ def main(config: DictConfig):
         split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
 
     def loader(split):
-        return get_subloader(split_data, split, sel["batch_size"], sel.get("max_samples", None), seed)
+        datasets, collator = split_data[split]
+        return get_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
+                             max_samples=sel.get("max_samples", None), seed=seed)
 
     def run(split, desc, before_batch=None):
         records = generate_responses(model, tokenizer, loader(split), cfg["generation_args"], desc=desc,
-                                     refusal_patterns=refusal_patterns, before_batch=before_batch)
+                                     before_batch=before_batch)
         return records, summarize_responses(records, hallucination_rouge)
 
     # 3. Reference behaviour of the unsteered model: forget (seen) vs the unseen splits

@@ -189,7 +189,7 @@ def main(config: DictConfig):
         seen = [s for s in activations_cfg["seen"] if s in pooled]
         unseen = [s for s in activations_cfg["unseen"] if s in pooled]
         pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
-        pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(splits, 2)]
+        pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data), 2)]
 
         def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
             try:

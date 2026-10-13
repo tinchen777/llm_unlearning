@@ -16,7 +16,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # Step 4: evaluate the edited models of 3_w_down.sh
 #   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/<task>/TOFU_EVAL.json
 #       RETAIN_LOGS: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (forget quality / privleak reference)
-#   (b) the step-1 probe on the edited model: compare its responses_summary.json / activations_summary.json with
+#   (b) the step-1 probe on the edited model: compare its responses/responses_summary.json / activations_summary.json with
 #       the `full` and `retain` probes of 0_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
 RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 

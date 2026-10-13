@@ -17,6 +17,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
 from data import get_split_data, get_subloader
+from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_out_proj
 from model.generation import generate_responses, summarize_responses
@@ -96,11 +97,12 @@ def main(config: DictConfig):
 
     def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        return get_subloader(split_data, split, batch_size, max_samples, seed)
+        datasets, collator = split_data[split]
+        return get_subloader(one_dataset(datasets), batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
     gen_splits = list(wd["responses_splits"])
 
-    probe_cfg = cfg["probe"]
+    hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
 
     def write_responses(prefix: str):
         summary = {}
@@ -108,10 +110,9 @@ def main(config: DictConfig):
             records = generate_responses(
                 model, tokenizer, make_loader(split, wd["gen_batch_size"], wd["max_gen_samples"]),
                 cfg["generation_args"], desc=f"{prefix} / {split}",
-                refusal_patterns=list(probe_cfg["refusal_patterns"]),
             )
             save_logs(records, output_dir / f"responses_{prefix}_{split}.json")  # type: ignore
-            summary[split] = summarize_responses(records, float(probe_cfg["hallucination_rouge"]))
+            summary[split] = summarize_responses(records, hallucination_rouge)
         save_logs(summary, output_dir / f"responses_{prefix}_summary.json")  # type: ignore
         return summary
 

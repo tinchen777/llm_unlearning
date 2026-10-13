@@ -76,7 +76,7 @@ probe:
 
   activations:
     # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
-    # probe.seen=[retain] 'probe.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
+    # probe.activations.seen=[retain] 'probe.activations.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
     seen: [forget, retain]
     unseen: [neighbor, holdout]
     max_act_samples: 200 # fixed random subset per split for the activations; null -> all

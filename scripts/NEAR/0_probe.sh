@@ -36,8 +36,8 @@ KINDS=(retain full)
 # (`model=<base>` = a base model that never saw TOFU is possible too, but the Llama-3.2-1B base checkpoint is broken in
 #  some environments, see configs/model/Llama-3.2-1B-Instruct.yaml.)
 # per model and forget split -> saves/NEAR/1_probe/<MODEL>_<FORGET_SPLIT>/
-#   responses_<split>.json      generations + rouge + answer_logprob + refusal/degenerate flags
-#   responses_summary.json      per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
+#   responses/responses_<split>.json    generations + rouge + answer_logprob + refusal/degenerate flags
+#   responses/responses_summary.json    per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
 #   activations_summary.json    per layer: norms, r_UV size, AUCs of pairs of question sets (see its `note`: they measure
 #                               how different the QUESTIONS are; only forget | neighbor and full - retain mean knowledge)
 
@@ -49,7 +49,7 @@ for BASE_MODEL in "${BASE_MODELS[@]}"; do
     # RETAIN MODEL
     MODEL=tofu_${BASE_MODEL}_${RETAIN_SPLIT}
     # the retain model has seen the retain data only: forget is unseen for it
-    SEEN_ARGS=('probe.seen=[retain]' 'probe.unseen=[forget,neighbor,holdout]')
+    SEEN_ARGS=('probe.activations.seen=[retain]' 'probe.activations.unseen=[forget,neighbor,holdout]')
     echo start probe ${MODEL}
     python src/METHOD/NEAR/probe.py \
         experiment=generate/NEAR \
@@ -61,9 +61,9 @@ for BASE_MODEL in "${BASE_MODELS[@]}"; do
         "${SEEN_ARGS[@]}" \
         task_name=0_probe/${MODEL} \
         # --cfg job --resolve
-        # probe.max_gen_samples=null \
-        # probe.responses=false \
-        # probe.activations=false \
+        # probe.responses.max_gen_samples=null \
+        # probe.responses=null \
+        # probe.activations=null \
     echo end probe ${MODEL}
 
     # FULL MODEL
@@ -78,9 +78,9 @@ for BASE_MODEL in "${BASE_MODELS[@]}"; do
         holdout_split=${HOLDOUT_SPLIT} \
         task_name=0_probe/${MODEL}/${FORGET_SPLIT} \
         # --cfg job --resolve
-        # probe.max_gen_samples=null \
-        # probe.responses=false \
-        # probe.activations=false \
+        # probe.responses.max_gen_samples=null \
+        # probe.responses=null \
+        # probe.activations=null \
     echo end probe ${MODEL} ${FORGET_SPLIT}
   done
 done
