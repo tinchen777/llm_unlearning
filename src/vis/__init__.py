@@ -64,6 +64,8 @@ def plot_figures(
         except Exception as e:
             logger.error(f"Failed to plot {plot_name}: {e}")
             continue
+        if not figs:
+            logger.warning(f"{plot_name}: nothing to plot, none of the runs has the data it needs.")
         # save
         if _out_dir is not None:
             file_type = plot_cfg.get("file_type", "png", check_none=True)
