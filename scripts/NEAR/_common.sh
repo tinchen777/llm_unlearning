@@ -1,12 +1,18 @@
 # Shared settings of scripts/NEAR/1_r_uv.sh .. 4_eval.sh. Source it, do not run it.
 # The chain r_UV -> layer selection -> W_down -> eval must use the SAME values in every script, so they live here.
 
-MODEL=Llama-3.2-1B-Instruct       # base model name of the checkpoints in configs/model/tofu/
+# Every value below can be overridden from the environment (run_all.sh does that to loop over models / splits), e.g.
+#   MODEL=Llama-3.2-3B-Instruct FORGET_SPLIT=forget05 ... bash scripts/NEAR/1_r_uv.sh
+MODEL=${MODEL:-Llama-3.2-1B-Instruct}       # base model name of the checkpoints in configs/model/tofu/
 # Start small: LUNAR's TOFU experiments unlearn ONE author (20 QAs); forget01 = 2 authors, forget10 = 20 authors.
-FORGET_SPLIT=forget01
-NEIGHBOR_SPLIT=neighbor01
-RETAIN_SPLIT=retain99
-HOLDOUT_SPLIT=holdout01
+FORGET_SPLIT=${FORGET_SPLIT:-forget01}
+NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-neighbor01}
+RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
+HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
+# ruv.author_offset: makes the author numbering of the forget rows (row // 20) equal to `author_id` of the neighbour csv.
+# forget01 = authors 199-200 -> 199. (forget05 / forget10: 191 / 181 if the csv follows the same 1..200 numbering; checked
+# against the csv before any forward pass, r_uv.py stops with the numbers it found otherwise.)
+AUTHOR_OFFSET=${AUTHOR_OFFSET:-199}
 SPLITS="forget_split=${FORGET_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} retain_split=${RETAIN_SPLIT} holdout_split=${HOLDOUT_SPLIT}"
 
 # The model r_UV, the layer selection and W_down work on: the one that KNOWS the forget data (the official TOFU full model).
@@ -14,9 +20,9 @@ FULL_MODEL=tofu/tofu_${MODEL}_full
 TASK_NAME=redirect_${MODEL}_${FORGET_SPLIT}     # output: saves/NEAR/${TASK_NAME}/
 
 KS=(1 5 15)                       # number of neighbours per author used as the reference (must be in ruv.ks)
-COEFF=1.0                         # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
+COEFF=${COEFF:-1.0}                         # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
 SHIFT_MODES=(eoi all)             # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
-SOLVER=adam                       # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
+SOLVER=${SOLVER:-adam}                       # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
 
 # file name of the layer selection of (K, MODE); same rule as selection_file_name() in src/model/redirect.py
 selection_name() { printf "layer_selection_k%s_c%g_%s.json" "$1" "${COEFF}" "$2"; }
