@@ -50,6 +50,7 @@ def plot_figures(
     save_args = vis_cfg.get("save_args", {}, check_none=True)
     # plot each figure
     plot_figs: Dict[str, Dict[str, Figure]] = {}
+    logger.info(f"Starting to plots {list(vis_cfg['plots'].keys())}")
     for plot_name, plot_cfg in vis_cfg["plots"].items():
         if plot_name not in PLOT_REGISTRY:
             logger.warning(f"Unknown plot name: {plot_name}, skipped.")
