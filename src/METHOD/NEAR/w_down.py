@@ -98,7 +98,7 @@ def main(config: DictConfig):
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
         return split_loader(split_data, split, batch_size, max_samples, seed)
 
-    gen_splits = list(wd["responses_splits"])
+    gen_splits = list(wd.get("responses_splits", None) or split_data)  # null -> every split of `data`
 
     probe_cfg = cfg["probe"]
 

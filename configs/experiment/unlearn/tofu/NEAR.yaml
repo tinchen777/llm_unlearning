@@ -68,7 +68,7 @@ generation_args:
 
 # ---- src/METHOD/NEAR/probe.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
 probe:
-  splits: [forget, neighbor, retain, holdout]
+  splits: null # null -> every split defined under `data:` (above); or an explicit subset, e.g. [forget, neighbor]
   # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
   # probe.seen=[retain] 'probe.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
   seen: [forget, retain]
@@ -146,7 +146,7 @@ wdown:
   epochs: 20 # LUNAR: 20 (config/forget.yaml; appendix B cost analysis)
   batch_size: 64 # forget tokens per step, plus the same number of random retain tokens (LUNAR: 64)
   weight_decay: 0.0 # LUNAR uses AdamW's default 0.01
-  responses_splits: [forget, neighbor, retain, holdout] # splits whose responses are written before / after the edit
+  responses_splits: null # splits whose responses are written before / after the edit; null -> every split under `data:`
   max_gen_samples: 32 # fixed random subset per split
   gen_batch_size: 16
   save_model: true # save the edited model to <output_dir>/model_<tag> (needed by step 4)
