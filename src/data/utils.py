@@ -1,4 +1,6 @@
-
+"""
+Utility functions for `data` module.
+"""
 from __future__ import annotations
 import torch
 from torch.utils.data import DataLoader, Subset
@@ -6,6 +8,8 @@ from typing import Any, Optional, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
+
+IGNORE_INDEX = -100
 
 
 def fixed_subset(
@@ -53,3 +57,8 @@ def one_loader(loaders: Dict[str, DataLoader]) -> DataLoader:
     if len(loaders) != 1:
         raise ValueError(f"Expected exactly one loader, but got {len(loaders)}.")
     return next(iter(loaders.values()))
+
+
+def randidx(high: int) -> int:
+    """Returns a random integer in the range [0, high)."""
+    return int(torch.randint(high, ()).item())

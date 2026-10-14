@@ -1,11 +1,13 @@
-
+"""
+Utility functions for `data.datasets` module.
+"""
 from __future__ import annotations
 import datasets
 import numpy as np
 import os
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 
-from utils.common import IGNORE_INDEX
+from ..utils import IGNORE_INDEX
 
 if TYPE_CHECKING:
     from datasets import Dataset as HFDataset

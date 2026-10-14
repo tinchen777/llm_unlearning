@@ -1,8 +1,9 @@
 
+from __future__ import annotations
 from torch.utils.data import Dataset
 from typing import Literal
 
-from utils.common import randidx
+from .utils import randidx
 
 
 class BalancedUnlearnDataset(Dataset):

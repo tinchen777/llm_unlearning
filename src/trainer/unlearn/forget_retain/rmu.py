@@ -7,7 +7,8 @@ from torch.nn import functional as F
 import deepspeed
 from typing import List, Any, Optional, Mapping
 
-from utils.common import forward_batch, IGNORE_INDEX
+from model.utils import forward_batch
+from data.utils import IGNORE_INDEX
 from .base import ForgetRetainTrainer
 
 MODULE_REGEX = r"model\.layers\.7"

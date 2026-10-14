@@ -7,7 +7,8 @@ from hydra.core.hydra_config import HydraConfig
 import logging
 from typing import TYPE_CHECKING
 
-from data import get_split_data, one_dataset
+from data import get_split_data
+from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from trainer import load_trainer
 from evals import get_evaluators

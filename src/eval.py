@@ -46,7 +46,8 @@ def main(config: DictConfig):
             template_args=template_args
         )
 
-    # START EVALUATION
+    # ==========
+    # EVALUATION
     vis_cfg = cfg.get("vis", None)
     for evaluator in evaluators.values():
         evaluator.evaluate(model)

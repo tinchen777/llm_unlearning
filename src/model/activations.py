@@ -29,7 +29,7 @@ from contextlib import contextmanager
 from tqdm import tqdm
 from typing import Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from utils.common import to_device
+from .utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ def collect_activations(
             if "input_ids" not in batch:
                 raise ValueError(f"Expected a flat batch with `input_ids`, got keys {list(batch)}.")
             indices = batch.get("index")
-            inputs = to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
+            inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
             model(**inputs)
             # [bsz, n_pos, n_layers, d]
             acts = torch.stack(
@@ -224,7 +224,7 @@ def collect_group_means(
     with capture_activations(model, layers, point) as cache:
         for batch in tqdm(dataloader, desc=f"Collecting `{point}` group means [{desc}]", unit="batch(es)", colour="blue"):
             keys = list(group_fn(batch))
-            inputs = to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
+            inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
             if len(keys) != inputs["input_ids"].shape[0]:
                 raise ValueError(f"group_fn returned {len(keys)} keys for a batch of {inputs['input_ids'].shape[0]} rows.")
             model(**inputs)
@@ -258,7 +258,7 @@ def get_eoi_positions(tokenizer: Any, template_args: Any, chat_header: Any = Non
     Found as the prompt tokens whose decoded text lies entirely after the question, so it
     follows the same templating (system prompt, date string, tags) as the dataset.
     """
-    from data.datasets.utils import prepare_chat_header, tok_chat_sample
+    from data.datasets.datasets_utils import prepare_chat_header, tok_chat_sample
 
     if chat_header is None:
         chat_header = prepare_chat_header(template_args)

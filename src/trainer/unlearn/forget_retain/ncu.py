@@ -38,8 +38,8 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from typing import Any, Dict, Mapping, Optional, Tuple
 
+from data.utils import IGNORE_INDEX
 from .base import ForgetRetainTrainer
-from utils.common import IGNORE_INDEX
 
 logger = logging.getLogger(__name__)
 

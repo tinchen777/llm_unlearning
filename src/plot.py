@@ -20,6 +20,7 @@ def main(config: DictConfig):
     """
     # config
     init_hydra_choices(HydraConfig.get().runtime.choices)
+
     vis_cfg = TrackingConfig(config)["vis"]
     # plot figures
     plot_figures(

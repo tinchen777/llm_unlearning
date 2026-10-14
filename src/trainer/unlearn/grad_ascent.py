@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any, Mapping, Optional, TYPE_CHECKING
 
-from utils.common import forward_batch
+from model.utils import forward_batch
 from .base import UnlearnTrainer
 
 if TYPE_CHECKING:

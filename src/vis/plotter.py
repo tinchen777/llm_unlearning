@@ -80,10 +80,10 @@ class Plotter:
         # training keys
         _keys = set.union(*[run.train_keys for run in self.runs])
         if len(_keys) == 0:
-            raise ValueError(f"No intersecting training keys found under the given runs. {self.runs}")
+            raise ValueError(f"No intersecting training keys found under the given runs.")
         _keys = _keys.intersection(keys) if keys else _keys
         if len(_keys) == 0:
-            raise ValueError(f"No intersecting training keys ({keys}) found under the given runs. {self.runs}")
+            raise ValueError(f"No intersecting training keys ({keys}) found under the given runs.")
 
         fig, axes = _grid_axes(len(_keys), **plot_args)
         for ax, key in zip(axes, sorted(_keys)):

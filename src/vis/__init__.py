@@ -52,30 +52,31 @@ def plot_figures(
     plot_figs: Dict[str, Dict[str, Figure]] = {}
     logger.info(f"Starting to plots {list(vis_cfg['plots'].keys())}")
     for plot_name, plot_cfg in vis_cfg["plots"].items():
-        if plot_name not in PLOT_REGISTRY:
-            logger.warning(f"Unknown plot name: {plot_name}, skipped.")
-            continue
-        # plot
-        plot_func = getattr(plotter, plot_cfg["handler"])
+        print("=" * 20)
         try:
+            plot_func = getattr(plotter, plot_cfg["handler"])
+            # plot
             figs = plot_func(
                 **plot_cfg.get("args", {}, check_none=True),
                 **plot_cfg.get("plot_args", {}, check_none=True)
             )
+        except (AttributeError, KeyError):
+            logger.error(f"Unknown plot `{plot_name}`, skipped.")
         except Exception as e:
-            logger.error(f"Failed to plot {plot_name}: {e}")
-            continue
-        if not figs:
-            logger.warning(f"{plot_name}: nothing to plot, none of the runs has the data it needs.")
-        # save
-        if _out_dir is not None:
-            file_type = plot_cfg.get("file_type", "png", check_none=True)
-            for name, fig in figs.items():
-                file_name = f"{name}-{plot_name}" if name else plot_name
-                save_path = _out_dir / f"{file_name}.{file_type}"
-                fig.savefig(save_path, **save_args)
-                logger.info(f"Saved plot '{file_name}' to {save_path}")
-        # update dict
-        plot_figs[plot_name] = figs
+            logger.error(f"Failed to plot `{plot_name}`, skipped: {e}")
+        else:
+            if not figs:
+                logger.warning(f"Nothing to plot for `{plot_name}`.")
+                continue
+            # save
+            if _out_dir is not None:
+                file_type = plot_cfg.get("file_type", "png", check_none=True)
+                for name, fig in figs.items():
+                    file_name = f"{name}-{plot_name}" if name else plot_name
+                    save_path = _out_dir / f"{file_name}.{file_type}"
+                    fig.savefig(save_path, **save_args)
+                    logger.info(f"Saved plot '{file_name}' to {save_path}")
+            # update dict
+            plot_figs[plot_name] = figs
 
     return plot_figs

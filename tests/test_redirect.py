@@ -24,7 +24,7 @@ from model.redirect import (
     nested_neighbor_order, neighbors_by_author, selection_file_name, solve_w_down_closed_form, summarize_r_uv,
     train_w_down, w_down_mse,
 )
-from utils.common import IGNORE_INDEX
+from data.utils import IGNORE_INDEX
 
 N_LAYERS, HIDDEN, FF = 4, 32, 64
 POSITIONS = [-3, -2, -1]

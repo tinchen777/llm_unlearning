@@ -20,8 +20,8 @@ import torch
 from tqdm import tqdm
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from data.utils import IGNORE_INDEX
 from evals.metrics.metric_utils import eval_text_similarity
-from utils.common import IGNORE_INDEX
 
 # keys the model / eval function consume; everything else in a batch is per-sample metadata
 MODEL_INPUT_KEYS = ("input_ids", "attention_mask", "labels")

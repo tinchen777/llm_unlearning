@@ -3,7 +3,7 @@ from __future__ import annotations
 from transformers import DataCollatorForSeq2Seq
 from typing import Dict, Sequence, Optional, Any, Union, TYPE_CHECKING
 
-from utils.common import IGNORE_INDEX
+from ..utils import IGNORE_INDEX
 
 if TYPE_CHECKING:
     from transformers import BatchEncoding

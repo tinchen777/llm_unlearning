@@ -1,12 +1,15 @@
-
+"""
+Evaluation functions for `evals.metrics` module.
+"""
 from __future__ import annotations
-from torch import nn
 import torch
 from rouge_score import rouge_scorer
 import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
-from utils.common import IGNORE_INDEX, forward_batch, per_token_CE
+from data.utils import IGNORE_INDEX
+from model.utils import forward_batch
+from model.ops import per_token_CE
 from .utils import batch_to_model_device, to_np
 
 if TYPE_CHECKING:
@@ -21,7 +24,7 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
     # forward
     logits, _ = forward_batch(model, batch, ignore_labels=True, grad=False)
 
-    losses, shift_labels_mask = per_token_CE(logits, batch["labels"])
+    losses, shift_labels_mask = per_token_CE(logits, batch["labels"], ignore_index=IGNORE_INDEX)
 
     avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1)#.clamp(min=1)
     normalized_probs = (-avg_losses).exp()  # Convert average loss to probability

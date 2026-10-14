@@ -29,7 +29,7 @@ from tqdm import tqdm
 from typing import Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from model.activations import capture_activations, get_out_proj, unlearning_vector
-from utils.common import to_device
+from .utils import batch_to_device
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ def collect_mlp_tokens(
     with capture_activations(model, layers, "down_proj_in") as cache_in, \
             capture_activations(model, layers, "mlp_out") as cache_out:
         for batch in tqdm(loader, desc=f"Recording MLP inputs/outputs [{desc}]", unit="batch(es)", colour="blue"):
-            inputs = to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
+            inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
             model(**inputs)
             mask = inputs["attention_mask"].bool()
             for l in layers:

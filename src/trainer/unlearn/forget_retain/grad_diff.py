@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from utils.common import forward_batch
+from model.utils import forward_batch
 from .base import ForgetRetainTrainer
 
 

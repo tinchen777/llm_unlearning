@@ -3,7 +3,7 @@ from __future__ import annotations
 from torch.utils.data import Dataset
 from typing import List, Sequence, Dict, Any, Optional, Callable, TYPE_CHECKING
 
-from .utils import load_hf_dataset, get_map_kwargs
+from .datasets_utils import load_hf_dataset, get_map_kwargs
 
 if TYPE_CHECKING:
     from datasets import Dataset as HFDataset

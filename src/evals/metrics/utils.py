@@ -1,4 +1,6 @@
-
+"""
+Utility functions for `evals.metrics` module.
+"""
 from __future__ import annotations
 import numpy as np
 import torch
@@ -7,7 +9,7 @@ from tqdm.auto import tqdm
 import logging
 from typing import List, Any, Dict, Callable, Mapping
 
-from utils.common import to_device
+from model.utils import batch_to_device
 
 SUBDATA_SUFFIX = "_dl"
 
@@ -72,7 +74,7 @@ def run_batchwise_evals(
 def batch_to_model_device(func):
     @wraps(func)
     def wrapper(model: Any, batch: Mapping[str, torch.Tensor], **kwargs):
-        batch = to_device(batch, model.device)
+        batch = batch_to_device(batch, model.device)
         return func(model=model, batch=batch, **kwargs)
     return wrapper
 

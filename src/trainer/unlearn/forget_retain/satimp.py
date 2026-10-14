@@ -1,7 +1,9 @@
 
 from __future__ import annotations
 
-from utils.common import forward_batch, per_token_CE
+from model.utils import forward_batch
+from model.ops import per_token_CE
+from data.utils import IGNORE_INDEX
 from .base import ForgetRetainTrainer
 
 
@@ -23,7 +25,7 @@ class SatImp(ForgetRetainTrainer):
     def compute_forget_loss(self, model, forget_inputs, **kwargs):
         logits, outputs = forward_batch(model, forget_inputs, ignore_labels=True)
 
-        losses, shift_mask = per_token_CE(logits, forget_inputs["labels"])
+        losses, shift_mask = per_token_CE(logits, forget_inputs["labels"], ignore_index=IGNORE_INDEX)
         losses = losses.view(-1)
 
         neg_losses_exp = (-losses).exp().detach()

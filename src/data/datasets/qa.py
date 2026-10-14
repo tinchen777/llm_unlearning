@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any, Optional, Sequence, TYPE_CHECKING
 
 from .base import BaseDataset
-from .utils import prepare_chat_header, tok_chat_sample
-from utils.common import randidx
+from .datasets_utils import prepare_chat_header, tok_chat_sample
+from ..utils import randidx
 
 if TYPE_CHECKING:
     from datasets import Dataset as HFDataset

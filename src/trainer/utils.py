@@ -3,7 +3,9 @@ from __future__ import annotations
 from torch.nn import functional as F
 from typing import Any, Mapping, TYPE_CHECKING
 
-from utils.common import forward_batch, per_token_CE
+from model.utils import forward_batch
+from model.ops import per_token_CE
+from data.utils import IGNORE_INDEX
 
 if TYPE_CHECKING:
     import torch
@@ -32,7 +34,7 @@ def compute_batch_nll(model: Any, inputs: Mapping[str, torch.Tensor], grad: bool
     # NOTE: not same as `model(**inputs).loss` but has sum loss for each seq in a batch
     logits, outputs = forward_batch(model, inputs, ignore_labels=True, grad=grad)
 
-    losses, shift_labels_mask = per_token_CE(logits, inputs["labels"])
+    losses, shift_labels_mask = per_token_CE(logits, inputs["labels"], ignore_index=IGNORE_INDEX)
     losses = losses.sum(dim=-1)  # sum loss for each sequence in a batch
 
     return losses, outputs, shift_labels_mask
