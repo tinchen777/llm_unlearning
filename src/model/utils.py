@@ -4,7 +4,7 @@ Utility functions for `model` module.
 from __future__ import annotations
 import torch
 from transformers import BatchEncoding
-from typing import Any, Mapping, Literal, overload, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Mapping, Literal, overload, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from transformers.modeling_outputs import CausalLMOutputWithPast
@@ -74,3 +74,44 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
         if loss is None:
             raise ValueError("Model output `loss` is `None`. Ensure the batch contains `labels` and the model returns loss.")
         return loss, logits, outputs
+
+
+def append_answers(
+    batch: Mapping[str, Any],
+    pad_token_id: int,
+    ignore_index: int = -100
+) -> Tuple[Dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+    """
+    Turn a LEFT padded prompt-only batch (generation layout, `predict_with_generate`) into full sequences by appending the
+    answer tokens (the non-`ignore_index` part of `labels`) after the prompt columns.
+
+    The prompt keeps exactly its columns of the generation pass, so a hook set up for generation (e.g. a `Steerer`)
+    acts on the same tokens; the answers are RIGHT padded after it.
+
+    Returns
+    -------
+    inputs : dict
+        `input_ids`, `attention_mask`, `position_ids` of shape `[batch_size, n_prompt + n_answer]`. The positions are
+        counted from the first real token (left padding shifts the columns, plain `model(...)` would use the column).
+    answer_ids : torch.Tensor
+        `[batch_size, n_answer]`, right padded with `pad_token_id`.
+    answer_mask : torch.Tensor
+        `[batch_size, n_answer]`, 1 at the real answer tokens.
+    """
+    ids, am, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
+    if not bool(am[:, -1].all()):
+        raise ValueError("append_answers needs LEFT padded prompt-only batches (collator padding_side: left).")
+    answers = [label[label != ignore_index] for label in labels]
+    bsz, n_ans = ids.shape[0], max(len(a) for a in answers)
+    answer_ids = torch.full((bsz, n_ans), pad_token_id, dtype=ids.dtype)
+    answer_mask = torch.zeros((bsz, n_ans), dtype=am.dtype)
+    for i, a in enumerate(answers):
+        answer_ids[i, :len(a)] = a
+        answer_mask[i, :len(a)] = 1
+    full_mask = torch.cat([am, answer_mask], dim=1)
+    inputs = {
+        "input_ids": torch.cat([ids, answer_ids], dim=1),
+        "attention_mask": full_mask,
+        "position_ids": (full_mask.long().cumsum(-1) - 1).clamp(min=0),
+    }
+    return inputs, answer_ids, answer_mask

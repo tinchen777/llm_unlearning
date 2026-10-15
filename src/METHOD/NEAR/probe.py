@@ -23,8 +23,8 @@ from model.activations import collect_activations, mean_diff_auc, unlearning_vec
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from ._utils.responses import generate_responses, summarize_responses
-from ._utils.template import get_eoi_positions
+from METHOD.NEAR._utils.responses import generate_responses, summarize_responses
+from METHOD.NEAR._utils.template import get_eoi_positions
 
 logger = logging.getLogger("main(probe)")
 

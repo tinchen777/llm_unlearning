@@ -24,7 +24,7 @@ COEFF=${COEFF:-1.0}                         # forget target = original MLP outpu
 SHIFT_MODES=(eoi all)             # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
 SOLVER=${SOLVER:-adam}                       # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
 
-# file name of the layer selection of (K, MODE); same rule as selection_file_name() in src/model/redirect.py
+# file name of the layer selection of (K, MODE); same rule as selection_file_name() in src/METHOD/NEAR/_utils/neighbors.py
 selection_name() { printf "layer_selection_k%s_c%g_%s.json" "$1" "${COEFF}" "$2"; }
 # tag of the W_down outputs of (K, LAYER, MODE); same rule as `tag` in src/METHOD/NEAR/w_down.py
 w_down_tag() { printf "k%s_l%s_c%g_%s%s" "$1" "$2" "${COEFF}" "$3" "$([ "${SOLVER}" = closed_form ] && echo _cf)"; }

@@ -14,6 +14,9 @@ from __future__ import annotations
 import torch
 from typing import Any, List, Mapping, TYPE_CHECKING
 
+from .ops import mean_answer_logprob
+from .utils import append_answers, batch_to_device
+
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
@@ -66,25 +69,9 @@ def answer_logprobs(model: Any, batch: Mapping[str, Any], pad_token_id: int, ign
     """Mean per-token log-prob of the ground-truth answer of every row, given its prompt (teacher forcing).
 
     `batch` is a LEFT padded prompt-only batch (`predict_with_generate`); the answer tokens are read from
-    `labels` and appended after the prompt columns, so the prompt keeps the same columns as in generation
-    (a `Steerer` hooked on the model therefore redirects exactly the same tokens).
+    `labels` and appended after the prompt columns (`append_answers`), so the prompt keeps the same columns as in
+    generation (a `Steerer` hooked on the model therefore redirects exactly the same tokens).
     """
-    ids, am, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
-    if not bool(am[:, -1].all()):
-        raise ValueError("answer_logprobs needs LEFT padded prompt-only batches (collator padding_side: left).")
-    answers = [label[label != ignore_index] for label in labels]
-    bsz, n_prompt, n_ans = ids.shape[0], ids.shape[1], max(len(a) for a in answers)
-    ans = torch.full((bsz, n_ans), pad_token_id, dtype=ids.dtype)
-    ans_mask = torch.zeros((bsz, n_ans), dtype=am.dtype)
-    for i, a in enumerate(answers):
-        ans[i, :len(a)] = a
-        ans_mask[i, :len(a)] = 1
-    full_ids = torch.cat([ids, ans], dim=1).to(model.device)
-    full_mask = torch.cat([am, ans_mask], dim=1).to(model.device)
-    position_ids = (full_mask.long().cumsum(-1) - 1).clamp(min=0)
-    logits = model(input_ids=full_ids, attention_mask=full_mask, position_ids=position_ids).logits
-    # the token at column n_prompt + j is predicted by column n_prompt + j - 1
-    logp = logits[:, n_prompt - 1:n_prompt + n_ans - 1].float().log_softmax(-1)
-    ans, ans_mask = ans.to(model.device), ans_mask.to(model.device).float()
-    token_lp = logp.gather(-1, ans.unsqueeze(-1)).squeeze(-1) * ans_mask
-    return (token_lp.sum(-1) / ans_mask.sum(-1).clamp(min=1)).tolist()
+    inputs, answer_ids, answer_mask = append_answers(batch, pad_token_id, ignore_index)
+    logits = model(**batch_to_device(inputs, model.device)).logits
+    return mean_answer_logprob(logits, answer_ids, answer_mask).tolist()

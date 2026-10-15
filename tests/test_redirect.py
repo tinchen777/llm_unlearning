@@ -1,4 +1,4 @@
-"""CPU tests of the neighbour-redirection building blocks (src/model/redirect.py, activations.py).
+"""CPU tests of the neighbour-redirection building blocks (src/model/edit.py, steer.py, activations.py and src/METHOD/NEAR/_utils/).
 
 Tiny random Llama, synthetic prompts, no network / GPU / hydra:
     python tests/test_redirect.py          # or: python -m pytest tests/test_redirect.py -q
@@ -19,11 +19,14 @@ from model.activations import (
     mean_diff_auc,
 )
 from model.generation import answer_logprobs
-from METHOD.NEAR.responses import is_degenerate, is_refusal, summarize_responses
-from model.redirect import (
-    Steerer, apply_w_down, build_shift, check_neighbors, collect_mlp_tokens, compute_r_uv, forget_authors,
-    nested_neighbor_order, neighbors_by_author, selection_file_name, solve_w_down_closed_form, summarize_r_uv,
-    train_w_down, w_down_mse,
+from METHOD.NEAR._utils.responses import is_degenerate, is_refusal, summarize_responses
+from model.edit import (
+    apply_w_down, build_shift, collect_mlp_tokens, solve_w_down_closed_form, train_w_down, w_down_mse,
+)
+from model.steer import Steerer
+from METHOD.NEAR._utils.neighbors import (
+    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, selection_file_name,
+    summarize_r_uv,
 )
 from data.utils import IGNORE_INDEX
 

@@ -20,14 +20,14 @@ from data import get_split_data, get_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means, get_out_proj
-from model.redirect import (
-    apply_w_down, build_shift, collect_mlp_tokens, forget_authors, selection_file_name, solve_w_down_closed_form,
-    train_w_down, w_down_mse,
+from model.edit import (
+    apply_w_down, build_shift, collect_mlp_tokens, solve_w_down_closed_form, train_w_down, w_down_mse,
 )
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from ._utils.responses import generate_responses, summarize_responses
+from METHOD.NEAR._utils.neighbors import forget_authors, selection_file_name
+from METHOD.NEAR._utils.responses import generate_responses, summarize_responses
 
 logger = logging.getLogger("main(w_down)")
 

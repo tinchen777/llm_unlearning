@@ -80,3 +80,36 @@ def test_eval_text_similarity_uses_generate_texts(setup):
     texts = generate_texts(model, tokenizer, batch["input_ids"], batch["attention_mask"], args)
     assert [r["generation"] for r in records] == texts
     assert all({"input", "ground_truth", "rougeL_recall", "rouge1_recall", "rougeL_f1"} <= set(r) for r in records)
+
+
+def test_append_answers_keeps_prompt_columns_and_counts_positions_from_first_real_token(setup):
+    from model.utils import append_answers
+
+    tokenizer, _ = setup
+    left = _batch(tokenizer, True)
+    inputs, ans, ans_mask = append_answers(left, tokenizer.pad_token_id)
+    n_prompt = left["input_ids"].shape[1]
+    assert torch.equal(inputs["input_ids"][:, :n_prompt], left["input_ids"])  # prompt columns untouched
+    assert torch.equal(inputs["input_ids"][:, n_prompt:], ans)
+    assert inputs["attention_mask"].shape == inputs["input_ids"].shape == inputs["position_ids"].shape
+    for row in range(len(QA)):
+        first = int(left["attention_mask"][row].argmax())
+        assert int(inputs["position_ids"][row, first]) == 0  # left padding does not shift the positions
+        assert int(inputs["position_ids"][row, -1]) == int(inputs["attention_mask"][row].sum()) - 1 or ans_mask[row, -1] == 0
+    with pytest.raises(ValueError):
+        append_answers(_batch(tokenizer, False), tokenizer.pad_token_id)  # right padded batches are rejected
+
+
+def test_mean_answer_logprob_is_the_masked_mean_of_the_answer_token_log_probs():
+    from model.ops import mean_answer_logprob
+
+    torch.manual_seed(0)
+    logits = torch.randn(2, 7, 11)  # 4 context columns + 3 answer columns
+    ans = torch.randint(0, 11, (2, 3))
+    mask = torch.tensor([[1, 1, 1], [1, 1, 0]])
+    got = mean_answer_logprob(logits, ans, mask)
+    lp = logits.log_softmax(-1)
+    want = torch.stack([
+        sum(lp[b, 3 + j, ans[b, j]] for j in range(int(mask[b].sum()))) / int(mask[b].sum()) for b in range(2)
+    ])
+    torch.testing.assert_close(got, want)

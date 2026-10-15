@@ -18,13 +18,13 @@ from data import get_split_loaders
 from data.utils import one_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_group_means
-from model.redirect import (
-    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
-)
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from ._utils.template import get_eoi_positions
+from METHOD.NEAR._utils.neighbors import (
+    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
+)
+from METHOD.NEAR._utils.template import get_eoi_positions
 
 logger = logging.getLogger("main(r_uv)")
 
