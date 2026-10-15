@@ -9,6 +9,7 @@ from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
 from data.utils import IGNORE_INDEX
 from model.utils import forward_batch
+from model.generation import generate_texts
 from model.ops import per_token_CE
 from .utils import batch_to_model_device, to_np
 
@@ -94,16 +95,6 @@ def eval_text_similarity(
 ):
     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
 
-    def _cut_off_at_stopwords(s: str, seps: List[str]) -> str:
-        """Cut off the string `s` at the earliest occurrence of any of the stopwords in `seps`."""
-        end = len(s)
-        for sep in seps:
-            idx = s.find(sep)
-            if idx != -1:
-                end = min(end, idx)
-        return s[:end].strip()
-
-
     def _eval_rouge_recall(gen_text: str, ground_truth: str):
         rouge_scores = _ROUGE_SCORER.score(ground_truth, gen_text)
         return {
@@ -115,8 +106,6 @@ def eval_text_similarity(
 
     input_ids = batch["input_ids"]
     labels = batch["labels"]
-    # batch_size = input_ids.shape[0]
-    initial_input_length = input_ids.shape[1]
     input_texts = tokenizer.batch_decode(
         input_ids,
         skip_special_tokens=True
@@ -125,29 +114,11 @@ def eval_text_similarity(
         [label[label != IGNORE_INDEX] for label in labels],
         skip_special_tokens=True
     )
-    attention_mask = batch["attention_mask"]
 
-    generation_kwargs = generation_args.to_dict()
-    assert not generation_kwargs.get("return_dict_in_generate")
-    stopwords = list(generation_kwargs.pop("stopwords", []))
-    if stopwords:
-        generation_kwargs["stop_strings"] = stopwords
-        generation_kwargs["tokenizer"] = tokenizer
-
-    # generate outputs
-    outputs = model.generate(
-        input_ids,
-        attention_mask=attention_mask,
-        **generation_kwargs,
-        pad_token_id=tokenizer.eos_token_id,
+    # generate outputs (model module), then score them
+    gen_texts = generate_texts(
+        model, tokenizer, input_ids, batch["attention_mask"], generation_args
     )
-    gen_texts = tokenizer.batch_decode(
-        outputs[:, initial_input_length:],
-        skip_special_tokens=True
-    )
-
-    # cut off at stopwords and strip
-    gen_texts = [_cut_off_at_stopwords(text, stopwords) for text in gen_texts]
 
     return [
         {

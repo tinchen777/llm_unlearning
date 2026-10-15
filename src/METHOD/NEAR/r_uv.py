@@ -17,7 +17,8 @@ from omegaconf import DictConfig
 from data import get_split_loaders
 from data.utils import one_loader
 from model import get_model_and_tokenizer
-from model.activations import collect_group_means, get_eoi_positions
+from model.activations import collect_group_means
+from METHOD.NEAR.template import get_eoi_positions
 from model.redirect import (
     check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
 )

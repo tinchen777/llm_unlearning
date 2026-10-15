@@ -19,8 +19,9 @@ from typing import Any, Dict, Hashable
 from data import get_split_data
 from data.utils import one_dataset, get_subloader
 from model import get_model_and_tokenizer
-from model.activations import collect_activations, get_eoi_positions, mean_diff_auc, unlearning_vector
-from model.generation import generate_responses, summarize_responses
+from model.activations import collect_activations, mean_diff_auc, unlearning_vector
+from METHOD.NEAR.responses import generate_responses, summarize_responses
+from METHOD.NEAR.template import get_eoi_positions
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices

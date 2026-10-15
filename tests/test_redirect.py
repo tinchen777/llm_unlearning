@@ -18,7 +18,8 @@ from model.activations import (
     _group_folds, auc, capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj,
     mean_diff_auc,
 )
-from model.generation import answer_logprobs, is_degenerate, is_refusal, summarize_responses
+from model.generation import answer_logprobs
+from METHOD.NEAR.responses import is_degenerate, is_refusal, summarize_responses
 from model.redirect import (
     Steerer, apply_w_down, build_shift, check_neighbors, collect_mlp_tokens, compute_r_uv, forget_authors,
     nested_neighbor_order, neighbors_by_author, selection_file_name, solve_w_down_closed_form, summarize_r_uv,

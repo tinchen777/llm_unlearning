@@ -17,7 +17,7 @@ from data import get_split_data, get_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
-from model.generation import generate_responses, summarize_responses
+from METHOD.NEAR.responses import generate_responses, summarize_responses
 from model.redirect import Steerer, forget_authors, selection_file_name
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
