@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set, Tuple
 
-from model.activations import unlearning_vector
+from METHOD._common.activations import unlearning_vector
 
 logger = logging.getLogger(__name__)
 

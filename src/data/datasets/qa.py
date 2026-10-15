@@ -11,6 +11,11 @@ if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
 
+def tok_chat_prompt(q: str, idx: int, /, **kwargs):
+    """`tok_chat_sample` of a prompt-only sample (no answer column): the answer is empty."""
+    return tok_chat_sample(q, "", idx, **kwargs)
+
+
 class QADataset(BaseDataset):
     def __init__(
         self,
@@ -18,7 +23,7 @@ class QADataset(BaseDataset):
         template_args: TrackingConfig,
         tokenizer: Any,
         question_key: str = "question",
-        answer_key: str = "answer",
+        answer_key: Optional[str] = "answer",
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
         predict_with_generate: bool = False,
@@ -46,6 +51,9 @@ class QADataset(BaseDataset):
         )
 
     def prepare_data(self):
+        if self.answer_key is None:  # prompt-only data, e.g. the LUNAR reference prompts (configs/data/datasets/LUNAR/)
+            self.tok_fn = tok_chat_prompt
+            return self.map_raw_data(input_columns=[self.question_key], name="QA data (prompt only)")
         return self.map_raw_data(
             input_columns=[self.question_key, self.answer_key],
             name="QA data"

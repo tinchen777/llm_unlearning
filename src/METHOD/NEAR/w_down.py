@@ -19,15 +19,14 @@ from torch.utils.data import DataLoader
 from data import get_split_data, get_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
-from model.activations import collect_group_means, get_out_proj
-from model.edit import (
-    apply_w_down, build_shift, collect_mlp_tokens, solve_w_down_closed_form, train_w_down, w_down_mse,
-)
+from model.activations import get_out_proj
+from model.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD.NEAR._utils.neighbors import forget_authors, selection_file_name
-from METHOD.NEAR._utils.responses import generate_responses, summarize_responses
+from METHOD._common.editing import make_response_writer, train_w_down_layers
+from METHOD.NEAR._utils.activations import collect_group_means
 
 logger = logging.getLogger("main(w_down)")
 
@@ -100,21 +99,11 @@ def main(config: DictConfig):
         datasets, collator = split_data[split]
         return get_subloader(one_dataset(datasets), batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
-    gen_splits = list(wd["responses_splits"])
-
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
-
-    def write_responses(prefix: str):
-        summary = {}
-        for split in gen_splits:
-            records = generate_responses(
-                model, tokenizer, make_loader(split, wd["gen_batch_size"], wd["max_gen_samples"]),
-                cfg["generation_args"], desc=f"{prefix} / {split}",
-            )
-            save_logs(records, output_dir / f"responses_{prefix}_{split}.json")  # type: ignore
-            summary[split] = summarize_responses(records, hallucination_rouge)
-        save_logs(summary, output_dir / f"responses_{prefix}_summary.json")  # type: ignore
-        return summary
+    write_responses = make_response_writer(
+        model, tokenizer, make_loader, list(wd["responses_splits"]), wd["gen_batch_size"], wd["max_gen_samples"],
+        cfg["generation_args"], hallucination_rouge, output_dir,
+    )
 
     # 3. Responses of the ORIGINAL model (same fixed subset as after the edit)
     with step_logging(logger, "[3/6]", "responses before the edit", wd):
@@ -141,34 +130,9 @@ def main(config: DictConfig):
     # 5. Train every layer on the recorded data (independent of each other), then write the weights
     with step_logging(logger, "[5/6]", "W_down training", wd):
         device = wd.get("device", None) or model.device
-        per_layer, new_weights = {}, {}
-        for l in train_layers:
-            w0 = get_out_proj(model, l).weight.detach()
-            ft, rt = forget_tokens[l], retain_tokens[l]
-            logger.info(f"layer {l}: W_down {tuple(w0.shape)} ({solver})")
-            if solver == "closed_form":
-                w, history = solve_w_down_closed_form(
-                    w0, ft, rt, ridge=float(wd["ridge"]),
-                    forget_weight=float(wd["forget_weight"]), retain_weight=float(wd["retain_weight"]), device=device,
-                )
-            else:
-                w, history = train_w_down(
-                    w0, ft, rt, lr=float(wd["lr"]), epochs=int(wd["epochs"]), batch_size=int(wd["batch_size"]),
-                    lr_gamma=float(wd["lr_gamma"]), weight_decay=float(wd["weight_decay"]),
-                    forget_weight=float(wd["forget_weight"]), retain_weight=float(wd["retain_weight"]),
-                    device=device, seed=seed,
-                )
-            w_dev = w.to(device)  # the MSEs of the (large) token sets are evaluated on the device, not on the cpu
-            w_round = w_dev.to(w0.dtype).float()  # what the model will really use after the cast
-            w0_f = w0.float().to(device)
-            per_layer[l] = {
-                "forget_mse_before": w_down_mse(w0_f, *ft), "forget_mse_after": w_down_mse(w_dev, *ft),
-                "forget_mse_after_rounded": w_down_mse(w_round, *ft),
-                "retain_mse_before": w_down_mse(w0_f, *rt), "retain_mse_after": w_down_mse(w_dev, *rt),
-                "retain_mse_after_rounded": w_down_mse(w_round, *rt),
-                "history": history,
-            }
-            new_weights[l] = w
+        per_layer, new_weights = train_w_down_layers(
+            model, train_layers, forget_tokens, retain_tokens, wd, seed, solver=solver, device=device
+        )
         for l, w in new_weights.items():
             apply_w_down(model, l, w)
         torch.save({"layers": train_layers, "k": k, "coeff": coeff,

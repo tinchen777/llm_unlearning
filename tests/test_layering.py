@@ -29,6 +29,15 @@ def _imports(path: Path):
                 yield alias.name.split(".")[0], node.lineno
 
 
+def test_no_package_imports_the_methods():
+    """src/METHOD/ (LUNAR, NEAR, shared _common) sits on top of everything: the packages must not depend on it."""
+    violations = []
+    for package in ALLOWED:
+        for path in sorted((SRC / package).rglob("*.py")):
+            violations += [f"{path.relative_to(SRC)}:{lineno}" for target, lineno in _imports(path) if target == "METHOD"]
+    assert not violations, "\n".join(violations)
+
+
 def test_package_dependencies_point_downwards():
     violations = []
     for package, allowed in ALLOWED.items():

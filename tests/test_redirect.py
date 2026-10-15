@@ -14,12 +14,10 @@ import pytest
 import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 
-from model.activations import (
-    _group_folds, auc, capture_activations, collect_activations, collect_group_means, gather_positions, get_out_proj,
-    mean_diff_auc,
-)
+from model.activations import capture_activations, collect_activations, gather_positions, get_out_proj
+from METHOD.NEAR._utils.activations import _group_folds, auc, collect_group_means, mean_diff_auc
 from model.generation import answer_logprobs
-from METHOD.NEAR._utils.responses import is_degenerate, is_refusal, summarize_responses
+from METHOD._common.responses import is_degenerate, is_refusal, summarize_responses
 from model.edit import (
     apply_w_down, build_shift, collect_mlp_tokens, solve_w_down_closed_form, train_w_down, w_down_mse,
 )

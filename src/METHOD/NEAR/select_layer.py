@@ -22,7 +22,8 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD.NEAR._utils.neighbors import forget_authors, selection_file_name
-from METHOD.NEAR._utils.responses import generate_responses, summarize_responses
+from METHOD._common.editing import resolve_candidate_layers
+from METHOD._common.responses import generate_responses, summarize_responses
 
 logger = logging.getLogger("main(select_layer)")
 
@@ -85,17 +86,7 @@ def main(config: DictConfig):
             raise ValueError(f"r_UV was computed at `{saved['point']}`; steering needs the residual stream "
                              "(`block_out` / `mlp_out`).")
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
-        candidates = sel.get("layers", None)
-        if candidates is None and sel.get("layer_fraction", None) is not None:
-            # a window of relative depths, e.g. [0.4, 0.8]: LUNAR picks layers at 50-75 % of the depth (appendix E)
-            lo, hi = (float(x) for x in sel["layer_fraction"])
-            n_total = max(saved["layers"]) + 1
-            candidates = [l for l in saved["layers"] if lo * n_total <= l <= hi * n_total]
-            if not candidates:
-                raise ValueError(f"select.layer_fraction={[lo, hi]} selects no layer of {saved['layers']}.")
-        candidates = list(saved["layers"]) if candidates is None else [int(l) for l in candidates]
-        if not set(candidates) <= set(saved["layers"]):
-            raise ValueError(f"select.layers={candidates} not in the layers of r_uv.pt: {saved['layers']}.")
+        candidates = resolve_candidate_layers(sel, saved["layers"])
         logger.info(f"K={k}, coeff={coeff}, mode={mode}, positions={positions}, candidate layers={candidates}")
 
     model_cfg = cfg["model"]

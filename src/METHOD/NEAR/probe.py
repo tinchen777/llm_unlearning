@@ -19,12 +19,14 @@ from typing import Any, Dict, Hashable
 from data import get_split_data
 from data.utils import one_dataset, get_subloader
 from model import get_model_and_tokenizer
-from model.activations import collect_activations, mean_diff_auc, unlearning_vector
+from model.activations import collect_activations
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from METHOD.NEAR._utils.responses import generate_responses, summarize_responses
-from METHOD.NEAR._utils.template import get_eoi_positions
+from METHOD._common.activations import unlearning_vector
+from METHOD._common.responses import generate_responses, summarize_responses
+from METHOD._common.template import get_eoi_positions
+from METHOD.NEAR._utils.activations import mean_diff_auc
 
 logger = logging.getLogger("main(probe)")
 
