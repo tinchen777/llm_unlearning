@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 def per_token_CE(
     logits: torch.Tensor,
     labels: torch.Tensor,
-    ignore_index: int = 100
+    ignore_index: int = -100
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Compute per-token cross-entropy loss.
