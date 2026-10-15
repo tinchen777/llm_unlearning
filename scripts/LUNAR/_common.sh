@@ -14,7 +14,7 @@ SPLITS="forget_split=${FORGET_SPLIT} retain_split=${RETAIN_SPLIT} holdout_split=
 
 # The model r_UV, the layer selection and W_down work on: the one that KNOWS the forget data (the official TOFU full model).
 FULL_MODEL=tofu/tofu_${MODEL}_full
-TASK_NAME=lunar_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")     # output: saves/LUNAR/${TASK_NAME}/
+TASK_NAME=lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")     # output: saves/LUNAR/${TASK_NAME}/
 
 COEFF=${COEFF:-1.0}               # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
 SHIFT_MODES=(all eoi)             # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only

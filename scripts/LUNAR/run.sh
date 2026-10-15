@@ -20,15 +20,15 @@ STAGES=${2:-"1 2 3 4"}
 
 BASE_MODELS=(
   Llama-3.2-1B-Instruct
-  # Llama-3.2-3B-Instruct
-  # Llama-3.1-8B-Instruct
+  Llama-3.2-3B-Instruct
+  Llama-3.1-8B-Instruct
 )
 
 # "forget_split holdout_split retain_split"
 SPLIT_SETS=(
   "forget01 holdout01 retain99"
-  # "forget05 holdout05 retain95"
-  # "forget10 holdout10 retain90"
+  "forget05 holdout05 retain95"
+  "forget10 holdout10 retain90"
 )
 
 declare -A STAGE_SCRIPT=(

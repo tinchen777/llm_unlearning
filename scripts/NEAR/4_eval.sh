@@ -34,7 +34,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       forget_split=${FORGET_SPLIT} \
       holdout_split=${HOLDOUT_SPLIT} \
       retain_logs_path=${RETAIN_LOGS} \
-      task_name=test/redirect_${MODEL}_${FORGET_SPLIT}_${TAG}
+      task_name=NEAR/eval_near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
 
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
     python src/METHOD/NEAR/probe.py \
@@ -42,7 +42,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       model=${FULL_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \
-      task_name=test/probe_${MODEL}_${FORGET_SPLIT}_redirect_${TAG}
+      task_name=probe/probe_near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
     echo end eval ${EDITED}
   done
 done
