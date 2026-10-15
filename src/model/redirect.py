@@ -26,7 +26,7 @@ import random
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-from typing import Any, Callable, Dict, Hashable, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from model.activations import capture_activations, get_out_proj, unlearning_vector
 from .utils import batch_to_device
