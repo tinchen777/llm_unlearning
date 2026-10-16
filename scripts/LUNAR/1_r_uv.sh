@@ -20,7 +20,7 @@ echo start r_uv ${FULL_MODEL} ${REF_DATASET}
 python src/METHOD/LUNAR/r_uv.py \
   experiment=generate/LUNAR \
   model=${FULL_MODEL} \
-  ${SPLITS} \
+  "${SPLIT_ARGS[@]}" \
   "data/datasets@data.ref.datasets=${REF_DATASET}" \
   task_name=${TASK_NAME}
 echo end r_uv ${FULL_MODEL}

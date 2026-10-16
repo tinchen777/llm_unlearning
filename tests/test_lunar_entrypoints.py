@@ -31,3 +31,17 @@ def test_scripts_call_existing_files():
             assert (ROOT / path).exists(), f"{sh.name}: {path} does not exist"
         for exp in re.findall(r"experiment=(generate/\S+)", text):
             assert (ROOT / "configs" / "experiment" / f"{exp}.yaml").exists(), f"{sh.name}: experiment {exp} does not exist"
+
+
+@pytest.mark.parametrize("script", ["r_uv", "select_layer", "w_down"])
+def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
+    """The shell scripts pass "${SPLIT_ARGS[@]}" of _common.sh: `forget_hf_split=train[:20]` UNQUOTED is rejected by Hydra
+    ("mismatched input '[' expecting <EOF>"), so the value must reach the script quoted. Run the same call as the scripts."""
+    cmd = (
+        f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=generate/LUNAR '
+        'model=${FULL_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.datasets=${REF_DATASET}" '
+        'task_name=${TASK_NAME} --cfg job'
+    )
+    proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
+    assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-1500:]
+    assert "forget_hf_split: train[:20]" in proc.stdout

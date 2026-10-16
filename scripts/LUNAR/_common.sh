@@ -10,7 +10,13 @@ HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
 FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train[:20]}
 # reference set D_ref: LUNAR/LUNAR_harmful (fine-tuned models) | LUNAR/LUNAR_unverified (fictitious entities)
 REF_DATASET=${REF_DATASET:-LUNAR/LUNAR_harmful}
-SPLITS="forget_split=${FORGET_SPLIT} retain_split=${RETAIN_SPLIT} holdout_split=${HOLDOUT_SPLIT} forget_hf_split=${FORGET_HF_SPLIT}"
+# Hydra overrides of the splits. An ARRAY, used as "${SPLIT_ARGS[@]}": the value of forget_hf_split contains `[` / `:`,
+# which Hydra's override grammar only accepts QUOTED (forget_hf_split='train[:20]'); a plain string variable would lose
+# the quotes when the shell word-splits it ("mismatched input '[' expecting <EOF>").
+SPLIT_ARGS=(
+  "forget_split=${FORGET_SPLIT}" "retain_split=${RETAIN_SPLIT}" "holdout_split=${HOLDOUT_SPLIT}"
+  "forget_hf_split='${FORGET_HF_SPLIT}'"
+)
 
 # The model r_UV, the layer selection and W_down work on: the one that KNOWS the forget data (the official TOFU full model).
 FULL_MODEL=tofu/tofu_${MODEL}_full

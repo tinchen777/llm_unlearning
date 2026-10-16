@@ -25,7 +25,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
   python src/METHOD/LUNAR/w_down.py \
     experiment=generate/LUNAR \
     model=${FULL_MODEL} \
-    ${SPLITS} \
+    "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
     wdown.coeff=${COEFF} \
     wdown.shift_mode=${MODE} \
