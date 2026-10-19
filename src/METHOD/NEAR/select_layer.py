@@ -1,3 +1,24 @@
+# ==== OUTPUT FILES of this script ====================================================
+# output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
+#   root_dir  : "."
+#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
+#                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
+# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
+# config) and, depending on the job_logging config, `<script name>.log` there.
+# To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
+# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+#
+# Files written below output_dir:
+#   layer_selection_k<K>_c<coeff>_<shift_mode>.json   per layer: rougeL_recall, answer_logprob, refusal / degenerate rates, unseen_gap;
+#                                                      `selected_layer`, `ranking`   (file name: selection_file_name() in METHOD/NEAR/_utils/neighbors.py,
+#                                                      mirrored by selection_name() in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1)
+#   responses_steer_k<K>_c<coeff>_<shift_mode>_l<layer>.json   steered forget answers of every candidate layer
+#
+# Read by / reads:
+#   reads `<output_dir>/r_uv.pt` (select.r_uv_path)
+#   w_down.py (wdown.layers=auto, or wdown.layer_selection_path) and scripts/NEAR/4_eval.sh read the selection file
+# ==============================================================================
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)

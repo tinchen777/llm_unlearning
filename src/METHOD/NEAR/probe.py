@@ -1,3 +1,28 @@
+# ==== OUTPUT FILES of this script ====================================================
+# output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
+#   root_dir  : "."
+#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/0_probe.sh : 0_probe/<MODEL>                   (retain model;  MODEL = tofu_<BASE>_<retain split>)
+#                  scripts/NEAR/0_probe.sh : 0_probe/<MODEL>/<FORGET_SPLIT>    (full model;   MODEL = tofu_<BASE>_full)
+#                  scripts/NEAR/4_eval.sh  : probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>   (edited model)
+#                  ->  saves/NEAR/0_probe/tofu_Llama-3.2-1B-Instruct_retain90/  or  saves/NEAR/probe/probe_near_tofu_...
+# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
+# config) and, depending on the job_logging config, `<script name>.log` there.
+# To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
+# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+#
+# Files written below output_dir:
+#   responses/responses_<split>.json   generations + ROUGE + answer_logprob + refusal/degenerate flags, one file per split
+#                                       (probe.responses; splits = probe.splits, default: every split defined under `data:`)
+#   responses/responses_summary.json   per split: rougeL_recall, answer_prob, refusal / hallucination / degenerate rates
+#   activations.pt                     per-split mean activations, r_UV (reference - forget), positions, layers   (probe.activations)
+#   activations_summary.json           per layer: norms, r_UV size, cosines, AUCs of pairs of question sets
+#
+# Read by / reads:
+#   neighbor_compare.py takes two of these `activations_summary.json` (full model / retain model) via --full / --retain
+#
+# NOTE: the responses live in the sub-folder `responses/` (variable `responses_dir`), the activation files directly in output_dir.
+# ==============================================================================
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)

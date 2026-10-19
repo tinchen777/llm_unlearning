@@ -1,3 +1,31 @@
+# ==== OUTPUT FILES of this script ====================================================
+# output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
+#   root_dir  : "."
+#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
+#                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
+# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
+# config) and, depending on the job_logging config, `<script name>.log` there.
+# To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
+# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+#
+# Files written below output_dir:
+#   w_down_<tag>.pt                       the edited W_down per layer
+#   w_down_<tag>_summary.json             MSE before / after, achieved-vs-intended shift, response statistics before / after
+#   model_<tag>/                          the edited model + tokenizer (only if wdown.save_model)
+#   responses_before_<split>.json         responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
+#   responses_before_summary.json
+#   responses_after_<tag>_<split>.json    the same samples after the edit
+#   responses_after_<tag>_summary.json
+#      tag = k<K>_l<layers joined by '-'>_c<coeff>_<shift_mode>[_cf]     (variable `tag`; scripts/NEAR/_common.sh `w_down_tag` mirrors it)
+#      (the responses are written directly in output_dir, not in a `responses/` sub-folder as in probe.py)
+#
+# Read by / reads:
+#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, the selection file of select_layer.py
+#   scripts/NEAR/4_eval.sh then evaluates `saves/NEAR/<task_name>/model_<tag>`:
+#       src/eval.py   task_name=NEAR/eval_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>  ->  saves/eval/NEAR/eval_near_tofu_...   (mode `eval`)
+#       probe.py      task_name=probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG> ->  saves/NEAR/probe/probe_near_tofu_...
+# ==============================================================================
 
 from __future__ import annotations
 # from rich.traceback import install

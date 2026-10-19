@@ -1,3 +1,8 @@
+# ==== OUTPUT of this script ============================================================================
+# No fixed output location: the table is printed. With `--out <path>` the rows are written as json to exactly that path
+# (parent folders are created). Inputs are the `activations_summary.json` files of two probe runs (--full / --retain),
+# e.g. saves/NEAR/0_probe/<MODEL>/<FORGET_SPLIT>/activations_summary.json   (see the header of probe.py).
+# ==================================================================================================
 """Compare the `activations_summary.json` of two probes of the SAME splits (src/METHOD/NEAR/probe.py), no model needed.
 
     python src/METHOD/NEAR/neighbor_compare.py --full <full>/activations_summary.json --retain <retain>/activations_summary.json

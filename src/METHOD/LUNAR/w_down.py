@@ -1,3 +1,30 @@
+# ==== OUTPUT FILES of this script ====================================================
+# output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
+#   root_dir  : "."
+#   mode      : "LUNAR"      (set by `experiment=generate/LUNAR`; the "generate" of configs/generate.yaml is overridden)
+#   task_name : the `task_name=...` override of the shell script  ->  scripts/LUNAR/_common.sh: lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>
+#                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
+#                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
+# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
+# config) and, depending on the job_logging config, `<script name>.log` there.
+# To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
+# configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+#
+# Files written below output_dir:
+#   w_down_<tag>.pt                       the edited W_down per layer
+#   w_down_<tag>_summary.json             MSE before / after, achieved-vs-intended shift, response statistics before / after
+#   model_<tag>/                          the edited model + tokenizer (only if wdown.save_model)
+#   responses_before_<split>.json         responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
+#   responses_before_summary.json
+#   responses_after_<tag>_<split>.json    the same samples after the edit
+#   responses_after_<tag>_summary.json
+#      tag = c<coeff>_l<layers joined by '-'>_<shift_mode>[_cf]     (variable `tag`; scripts/LUNAR/_common.sh `w_down_tag` mirrors it)
+#
+# Read by / reads:
+#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, the selection file of select_layer.py
+#   scripts/LUNAR/4_eval.sh then evaluates `saves/LUNAR/<task_name>/model_<tag>`:
+#       src/eval.py   task_name=test/<TASK_NAME>_<TAG>  ->  saves/eval/test/<TASK_NAME>_<TAG>   (mode `eval`)
+# ==============================================================================
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)

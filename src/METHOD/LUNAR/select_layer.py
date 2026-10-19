@@ -1,3 +1,25 @@
+# ==== OUTPUT FILES of this script ====================================================
+# output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
+#   root_dir  : "."
+#   mode      : "LUNAR"      (set by `experiment=generate/LUNAR`; the "generate" of configs/generate.yaml is overridden)
+#   task_name : the `task_name=...` override of the shell script  ->  scripts/LUNAR/_common.sh: lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>
+#                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
+#                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
+# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
+# config) and, depending on the job_logging config, `<script name>.log` there.
+# To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
+# configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+#
+# Files written below output_dir:
+#   layer_selection_c<coeff>_<shift_mode>.json   per layer: s1, s2, s1-s2, response statistics; `selected_layer`, `ranking`
+#                                                (file name: selection_file_name() in METHOD/LUNAR/_utils/selection.py, mirrored by
+#                                                selection_name() in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1)
+#   responses_steer_c<coeff>_<shift_mode>_l<layer>.json   steered forget answers of every candidate layer
+#
+# Read by / reads:
+#   reads `<output_dir>/r_uv.pt` (select.r_uv_path)
+#   w_down.py (wdown.layers=auto, or wdown.layer_selection_path) and scripts/LUNAR/4_eval.sh read the selection file
+# ==============================================================================
 from __future__ import annotations
 # from rich.traceback import install
 # install(show_locals=False, width=100)
