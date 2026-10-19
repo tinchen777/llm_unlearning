@@ -26,7 +26,10 @@ COEFF=${COEFF:-1.0}               # forget target = original MLP output + COEFF 
 SHIFT_MODES=(all eoi)             # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
 SOLVER=${SOLVER:-adam}            # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
 
-# file name of the layer selection of MODE; same rule as selection_file_name() in src/METHOD/LUNAR/_utils/selection.py
-selection_name() { printf "layer_selection_c%g_%s.json" "${COEFF}" "$1"; }
-# tag of the W_down outputs of (LAYER, MODE); same rule as `tag` in src/METHOD/LUNAR/w_down.py
+# folder of one setting (MODE) below saves/LUNAR/${TASK_NAME}/ and the W_down run folder of (LAYER) inside it; same rules
+# as config_dir() / run_dir() in src/METHOD/LUNAR/_utils/selection.py (the layer selection is <config_dir>/layer_selection.json,
+# the edited model <config_dir>/<run_dir>/model)
+config_dir() { printf "c%g_%s" "${COEFF}" "$1"; }
+run_dir() { printf "l%s%s" "$1" "$([ "${SOLVER}" = closed_form ] && echo _cf)"; }
+# tag of the W_down run (only used to name the eval outputs); same rule as `tag` in src/METHOD/LUNAR/w_down.py
 w_down_tag() { printf "c%g_l%s_%s%s" "${COEFF}" "$1" "$2" "$([ "${SOLVER}" = closed_form ] && echo _cf)"; }

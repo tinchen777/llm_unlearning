@@ -22,10 +22,11 @@ RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
-    SELECTION=saves/NEAR/${TASK_NAME}/$(selection_name ${K} ${MODE})
+    CONFIG_DIR=saves/NEAR/${TASK_NAME}/$(config_dir ${K} ${MODE})
+    SELECTION=${CONFIG_DIR}/layer_selection.json
     LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
     TAG=$(w_down_tag ${K} ${LAYER} ${MODE})
-    EDITED=saves/NEAR/${TASK_NAME}/model_${TAG}
+    EDITED=${CONFIG_DIR}/$(run_dir ${LAYER})/model
     echo start eval ${EDITED}
     python src/eval.py \
       experiment=eval/tofu/default \

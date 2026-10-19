@@ -16,10 +16,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # Step 2b: LUNAR-style layer selection (needs 1_r_uv.sh), once per (K, shift mode). For every candidate layer the forget
 # prompts are redirected at inference time (block_out += coeff * r_UV[K][author], what a perfect W_down edit of that layer
 # does) and compared with the unsteered model on unseen questions (neighbor / holdout):
-#   -> layer_selection_k<K>_c<coeff>_<mode>.json
+#   -> <K,coeff,mode folder>/layer_selection.json
 #        per layer: rougeL_recall, answer_logprob, refusal / degenerate rates, unseen_gap; `selected_layer` (min
 #        unseen_gap among non-degenerate layers) and `ranking` (best first; LUNAR also edits the top-3). READ IT.
-#   -> responses_steer_k<K>_c<coeff>_<mode>_l<l>.json   steered forget answers of every layer
+#   -> <K,coeff,mode folder>/responses_steer_l<l>.json   steered forget answers of every layer
+#   folder = saves/NEAR/<TASK_NAME>/k<K>_c<coeff>_<mode>/   (config_dir in _common.sh)
 # Candidates: select.layer_fraction=[0.4, 0.8] -> layers at 40-80 % of the depth (LUNAR's selected layers are at 50-75 %,
 # appendix E); use 'select.layers=[4,5,6]' for an explicit list or select.layer_fraction=null for all layers.
 # (settings: `select` in configs/experiment/generate/NEAR.yaml; k / coeff / shift_mode follow `wdown`)

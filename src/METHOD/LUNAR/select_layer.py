@@ -6,15 +6,21 @@
 #                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
 #                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
 # Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and, depending on the job_logging config, `<script name>.log` there.
+# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
 # configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
-# Files written below output_dir:
-#   layer_selection_c<coeff>_<shift_mode>.json   per layer: s1, s2, s1-s2, response statistics; `selected_layer`, `ranking`
-#                                                (file name: selection_file_name() in METHOD/LUNAR/_utils/selection.py, mirrored by
-#                                                selection_name() in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1)
-#   responses_steer_c<coeff>_<shift_mode>_l<layer>.json   steered forget answers of every candidate layer
+# Layout below output_dir (config_dir / run_dir in METHOD/LUNAR/_utils/selection.py, mirrored by `config_dir` / `run_dir`
+# in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
+#   r_uv.pt, r_uv_summary.json              shared by every setting (r_uv.py)
+#   c<coeff>_<shift_mode>/                  one folder per setting
+#       layer_selection.json, responses_steer_l<layer>.json              (select_layer.py)
+#       l<layers>[_cf]/                     one folder per W_down run (`_cf` = closed form)
+#           model/, w_down.pt, w_down_summary.json, responses_before_*, responses_after_*       (w_down.py)
+#
+# Files written by THIS script (inside <output_dir>/c<coeff>_<shift_mode>/):
+#   layer_selection.json         per layer: s1, s2, s1-s2, response statistics; `selected_layer`, `ranking`
+#   responses_steer_l<layer>.json   steered forget answers of every candidate layer
 #
 # Read by / reads:
 #   reads `<output_dir>/r_uv.pt` (select.r_uv_path)
@@ -46,7 +52,7 @@ from utils.config import TrackingConfig, init_hydra_choices
 from METHOD._common.editing import resolve_candidate_layers
 from METHOD._common.responses import generate_responses, summarize_responses
 from METHOD.LUNAR._utils.embedding import SentenceEmbedder, layer_score, rank_layers
-from METHOD.LUNAR._utils.selection import selection_file_name
+from METHOD.LUNAR._utils.selection import config_dir, selection_path
 
 logger = logging.getLogger("main(select_layer)")
 
@@ -60,8 +66,8 @@ def main(config: DictConfig):
     layer that maximises s1 - s2 is selected: s1 = similarity to the desired responses (the model states that it cannot
     answer), s2 = similarity to responses unrelated to unlearning (harmfulness, danger, unethicality).
 
-    Writes `layer_selection_c<coeff>_<shift_mode>.json` (s1, s2, score and the response statistics of every layer, and the
-    ranking; read it before trusting the automatic choice) and `responses_steer_c<coeff>_<mode>_l<l>.json`.
+    Writes `c<coeff>_<shift_mode>/layer_selection.json` (s1, s2, score and the response statistics of every layer, and the
+    ranking; read it before trusting the automatic choice) and `responses_steer_l<l>.json` (same folder).
 
     Args:
         config (DictConfig): `experiment=generate/LUNAR` (uses `data.forget`, `select`); needs r_uv.pt of r_uv.py.
@@ -113,7 +119,7 @@ def main(config: DictConfig):
                                 prompt_len=batch["input_ids"].shape[1])
                 records = generate_responses(model, tokenizer, forget_loader, cfg["generation_args"],
                                              desc=f"forget / steer layer {layer}", before_batch=before_batch)
-            save_logs(records, output_dir / f"responses_steer_c{coeff:g}_{mode}_l{layer}.json")  # type: ignore
+            save_logs(records, config_dir(output_dir, coeff, mode) / f"responses_steer_l{layer}.json")  # type: ignore
             stats = summarize_responses(records, hallucination_rouge)
             scores = layer_score(embedder([r_["generation"] for r_ in records]), desired, unrelated,
                                  str(sel["aggregate"]))
@@ -126,7 +132,7 @@ def main(config: DictConfig):
 
         ranking = rank_layers(per_layer, float(sel["max_degenerate"]))
         selected = ranking[0]
-        path = output_dir / selection_file_name(coeff, mode)
+        path = selection_path(output_dir, coeff, mode)
         save_logs({
             "selected_layer": selected,
             "ranking": ranking,  # best first; LUNAR also edits the top layers

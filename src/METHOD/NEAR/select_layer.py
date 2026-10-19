@@ -5,15 +5,22 @@
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
 # Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and, depending on the job_logging config, `<script name>.log` there.
+# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
-# Files written below output_dir:
-#   layer_selection_k<K>_c<coeff>_<shift_mode>.json   per layer: rougeL_recall, answer_logprob, refusal / degenerate rates, unseen_gap;
-#                                                      `selected_layer`, `ranking`   (file name: selection_file_name() in METHOD/NEAR/_utils/neighbors.py,
-#                                                      mirrored by selection_name() in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1)
-#   responses_steer_k<K>_c<coeff>_<shift_mode>_l<layer>.json   steered forget answers of every candidate layer
+# Layout below output_dir (config_dir / run_dir in METHOD/NEAR/_utils/neighbors.py, mirrored by `config_dir` / `run_dir`
+# in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
+#   r_uv.pt, r_uv_summary.json              shared by every setting (r_uv.py)
+#   k<K>_c<coeff>_<shift_mode>/             one folder per setting
+#       layer_selection.json, responses_steer_l<layer>.json              (select_layer.py)
+#       l<layers>[_cf]/                     one folder per W_down run (`_cf` = closed form)
+#           model/, w_down.pt, w_down_summary.json, responses_before_*, responses_after_*       (w_down.py)
+#
+# Files written by THIS script (inside <output_dir>/k<K>_c<coeff>_<shift_mode>/):
+#   layer_selection.json         per layer: rougeL_recall, answer_logprob, refusal / degenerate rates, unseen_gap;
+#                                `selected_layer`, `ranking`
+#   responses_steer_l<layer>.json   steered forget answers of every candidate layer
 #
 # Read by / reads:
 #   reads `<output_dir>/r_uv.pt` (select.r_uv_path)
@@ -42,7 +49,7 @@ from model.steer import Steerer
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from METHOD.NEAR._utils.neighbors import forget_authors, selection_file_name
+from METHOD.NEAR._utils.neighbors import config_dir, forget_authors, selection_path
 from METHOD._common.editing import resolve_candidate_layers
 from METHOD._common.responses import generate_responses, summarize_responses
 
@@ -79,8 +86,8 @@ def main(config: DictConfig):
         rougeL_recall to the forget ground truth, ground-truth answer log-prob, refusal rate, degeneration rate.
 
     The selected layer minimises `unseen_gap` (forget answers look like answers about strangers) among the layers
-    whose degeneration rate stays below `select.max_degenerate`. Writes `layer_selection_k<K>_c<coeff>_<shift_mode>.json` (all metrics
-    per layer and the ranking, read it before trusting the automatic choice) and responses_steer_*_l<l>.json.
+    whose degeneration rate stays below `select.max_degenerate`. Writes `k<K>_c<coeff>_<shift_mode>/layer_selection.json` (all metrics
+    per layer and the ranking, read it before trusting the automatic choice) and `responses_steer_l<l>.json` (same folder).
 
     Candidates: `select.layers` (explicit), else `select.layer_fraction` (window of relative depths), else all layers.
 
@@ -152,7 +159,7 @@ def main(config: DictConfig):
                     authors = forget_authors(batch["index"], qa_per_author, author_offset)
                     steerer.set(torch.stack([r_author[a] for a in authors]), prompt_len=batch["input_ids"].shape[1])
                 records, steered = run("forget", f"forget / steer layer {layer}", before_batch)
-            save_logs(records, output_dir / f"responses_steer_k{k}_c{coeff:g}_{mode}_l{layer}.json")  # type: ignore
+            save_logs(records, config_dir(output_dir, k, coeff, mode) / f"responses_steer_l{layer}.json")  # type: ignore
             steered["unseen_gap"] = unseen_gap(steered, original, unseen)
             per_layer[layer] = steered
             logger.info(
@@ -180,9 +187,9 @@ def main(config: DictConfig):
             "forget_unsteered": original,
             "unseen_unsteered": {"mean": unseen, **unseen_parts},
             "per_layer": {str(l): v for l, v in per_layer.items()},
-        }, output_dir / selection_file_name(k, coeff, mode))  # type: ignore
+        }, selection_path(output_dir, k, coeff, mode))  # type: ignore
         logger.info(f"Selected layer {selected} ({criterion}), ranking {ranking[:5]}; "
-                    f"details in {output_dir / selection_file_name(k, coeff, mode)}")
+                    f"details in {selection_path(output_dir, k, coeff, mode)}")
 
 
 if __name__ == "__main__":

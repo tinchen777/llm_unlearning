@@ -15,10 +15,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 # Step 3: train W_down (MLP output projection) of the selected layer (wdown.layers=auto -> the layer of the selection file
 # of the SAME K / coeff / shift mode written by 2_select_layer.sh) with the r_UV of each K (needs 1_r_uv.sh):
-#   -> model_<tag>/                     edited model (tag = k<K>_l<layer>_c<coeff>_<mode>[_cf]), evaluated by 4_eval.sh
-#   -> w_down_<tag>.pt                  edited weights {layer: W_down}
-#   -> w_down_<tag>_summary.json        losses, achieved-vs-intended shift, response statistics before / after
-#   -> responses_before_<split>.json / responses_after_<tag>_<split>.json   same fixed samples, to read
+#   -> <config folder>/l<layer>[_cf]/model/             edited model, evaluated by 4_eval.sh
+#   -> <config folder>/l<layer>[_cf]/w_down.pt          edited weights {layer: W_down}
+#   -> <config folder>/l<layer>[_cf]/w_down_summary.json   losses, achieved-vs-intended shift, response statistics before / after
+#   -> <config folder>/l<layer>[_cf]/responses_before_<split>.json / responses_after_<split>.json   same fixed samples, to read
+#   config folder = saves/NEAR/<TASK_NAME>/k<K>_c<coeff>_<mode>/ (the one of the layer selection), `_cf` = closed form
 # Shift modes: `all` = the paper (the same r_UV on every token of a forget prompt), `eoi` = end-of-instruction tokens only.
 # SOLVER (in _common.sh): adam (AdamW, lr / epochs from the config) or closed_form (LUNAR Eq. 9, no lr / epochs).
 # (settings: `wdown` in configs/experiment/generate/NEAR.yaml)

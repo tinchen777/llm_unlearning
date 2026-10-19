@@ -7,7 +7,7 @@
 #                  scripts/NEAR/4_eval.sh  : probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>   (edited model)
 #                  ->  saves/NEAR/0_probe/tofu_Llama-3.2-1B-Instruct_retain90/  or  saves/NEAR/probe/probe_near_tofu_...
 # Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and, depending on the job_logging config, `<script name>.log` there.
+# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #

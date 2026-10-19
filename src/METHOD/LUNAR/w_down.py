@@ -6,23 +6,31 @@
 #                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
 #                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
 # Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and, depending on the job_logging config, `<script name>.log` there.
+# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
 # configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
-# Files written below output_dir:
-#   w_down_<tag>.pt                       the edited W_down per layer
-#   w_down_<tag>_summary.json             MSE before / after, achieved-vs-intended shift, response statistics before / after
-#   model_<tag>/                          the edited model + tokenizer (only if wdown.save_model)
-#   responses_before_<split>.json         responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
+# Layout below output_dir (config_dir / run_dir in METHOD/LUNAR/_utils/selection.py, mirrored by `config_dir` / `run_dir`
+# in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
+#   r_uv.pt, r_uv_summary.json              shared by every setting (r_uv.py)
+#   c<coeff>_<shift_mode>/                  one folder per setting
+#       layer_selection.json, responses_steer_l<layer>.json              (select_layer.py)
+#       l<layers>[_cf]/                     one folder per W_down run (`_cf` = closed form)
+#           model/, w_down.pt, w_down_summary.json, responses_before_*, responses_after_*       (w_down.py)
+#
+# Files written by THIS script (inside <output_dir>/c<coeff>_<shift_mode>/l<layers>[_cf]/; <layers> joined by '-'):
+#   model/                        the edited model + tokenizer (only if wdown.save_model)
+#   w_down.pt                     the edited W_down per layer
+#   w_down_summary.json           MSE before / after, achieved-vs-intended shift, response statistics before / after
+#   responses_before_<split>.json    responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
 #   responses_before_summary.json
-#   responses_after_<tag>_<split>.json    the same samples after the edit
-#   responses_after_<tag>_summary.json
-#      tag = c<coeff>_l<layers joined by '-'>_<shift_mode>[_cf]     (variable `tag`; scripts/LUNAR/_common.sh `w_down_tag` mirrors it)
+#   responses_after_<split>.json     the same samples after the edit
+#   responses_after_summary.json
 #
 # Read by / reads:
-#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, the selection file of select_layer.py
-#   scripts/LUNAR/4_eval.sh then evaluates `saves/LUNAR/<task_name>/model_<tag>`:
+#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, `<output_dir>/c<coeff>_<shift_mode>/layer_selection.json`
+#   (the selection of the SAME setting; wdown.layer_selection_path overrides it)
+#   scripts/LUNAR/4_eval.sh then evaluates `<run folder>/model`:
 #       src/eval.py   task_name=test/<TASK_NAME>_<TAG>  ->  saves/eval/test/<TASK_NAME>_<TAG>   (mode `eval`)
 # ==============================================================================
 from __future__ import annotations
@@ -51,7 +59,7 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD._common.editing import make_response_writer, train_w_down_layers
-from METHOD.LUNAR._utils.selection import selection_file_name
+from METHOD.LUNAR._utils.selection import run_dir as make_run_dir, selection_path as default_selection_path
 
 logger = logging.getLogger("main(w_down)")
 
@@ -63,7 +71,7 @@ def main(config: DictConfig):
     Per token of a forget prompt the target is the ORIGINAL MLP output + coeff * r_UV, per token of a retain prompt the
     original MLP output (Eq. 6 / 7); `wdown.solver` = `adam` (AdamW + ExponentialLR, as LUNAR's code) or `closed_form`
     (Eq. 9). `wdown.shift_mode`: `all` (the paper: the same vector on every token) or `eoi` (end-of-instruction tokens only).
-    The inputs / targets are recorded ONCE from the original model. Outputs are tagged `c<coeff>_l<layers>_<mode>[_cf]`.
+    The inputs / targets are recorded ONCE from the original model. Outputs go to `c<coeff>_<mode>/l<layers>[_cf]/`.
 
     Needs r_uv.pt of r_uv.py; `wdown.layers: auto` takes the layer of select_layer.py (same coeff / shift mode).
 
@@ -83,13 +91,15 @@ def main(config: DictConfig):
     if solver not in ("adam", "closed_form"):
         raise ValueError(f"wdown.solver must be `adam` or `closed_form`, got `{solver}`.")
     if wd["layers"] == "auto":
-        selection_path = wd.get("layer_selection_path", None) or output_dir / selection_file_name(coeff, shift_mode)
+        selection_path = wd.get("layer_selection_path", None) or default_selection_path(output_dir, coeff, shift_mode)
         with open(str(selection_path), encoding="utf-8") as f:
             train_layers = [int(json.load(f)["selected_layer"])]
         logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
         train_layers = [int(l) for l in wd["layers"]]
     tag = f"c{coeff:g}_l{'-'.join(str(l) for l in train_layers)}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
+    run_dir = make_run_dir(output_dir, coeff, shift_mode, train_layers, solver)  # <output_dir>/c<coeff>_<mode>/l<layers>[_cf]/
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     with step_logging(logger, "[1/6]", "r_UV", wd):
         saved = torch.load(str(wd["r_uv_path"]), weights_only=False)
@@ -118,7 +128,7 @@ def main(config: DictConfig):
 
     write_responses = make_response_writer(
         model, tokenizer, make_loader, list(wd["responses_splits"]), wd["gen_batch_size"], wd["max_gen_samples"],
-        cfg["generation_args"], float(cfg.get("hallucination_rouge", 0.3)), output_dir,
+        cfg["generation_args"], float(cfg.get("hallucination_rouge", 0.3)), run_dir,
     )
 
     with step_logging(logger, "[3/6]", "responses before the edit", wd):
@@ -151,7 +161,7 @@ def main(config: DictConfig):
             apply_w_down(model, l, w)
         torch.save({"layers": train_layers, "coeff": coeff,
                     "weights": {l: w.to(get_out_proj(model, l).weight.dtype) for l, w in new_weights.items()}},
-                   output_dir / f"w_down_{tag}.pt")
+                   run_dir / "w_down.pt")
 
     # what did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
     with step_logging(logger, "[6/6]", "effect of the edit", wd):
@@ -167,9 +177,9 @@ def main(config: DictConfig):
                 "cos": torch.nn.functional.cosine_similarity(achieved.float(), intended.float(), dim=0).item(),
                 "norm_ratio": (achieved.norm() / intended.norm()).item(),
             }
-        responses_after = write_responses(f"after_{tag}")
+        responses_after = write_responses("after")
         save_logs({
-            "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
+            "tag": tag, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd["ridge"]) if solver == "closed_form" else None,
             "num_tokens": num_tokens,
             "hyperparameters": {key: wd[key] for key in (
@@ -180,13 +190,13 @@ def main(config: DictConfig):
             "responses": {"before": responses_before, "after": responses_after},
             "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV. Exact for "
                     "a single edited layer; with several layers the deeper ones also contain the effect of the upstream edits.",
-        }, output_dir / f"w_down_{tag}_summary.json")  # type: ignore
+        }, run_dir / "w_down_summary.json")  # type: ignore
         for l, v in achieved_vs_intended.items():
             logger.info(f"layer {l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")
 
         if wd.get("save_model", False):
-            model.save_pretrained(output_dir / f"model_{tag}")
-            tokenizer.save_pretrained(output_dir / f"model_{tag}")
+            model.save_pretrained(run_dir / "model")
+            tokenizer.save_pretrained(run_dir / "model")
 
 
 if __name__ == "__main__":

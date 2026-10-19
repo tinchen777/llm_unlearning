@@ -5,8 +5,8 @@
 # retain tokens -> original output.
 #   step 1  src/METHOD/LUNAR/r_uv.py         r_UV of every layer (on the model that KNOWS the forget data)  -> r_uv.pt
 #   step 2  src/METHOD/LUNAR/select_layer.py layer selection by inference-time steering, maximising s1 - s2 (sentence-embedding
-#                                            similarity to desired / unrelated responses) -> layer_selection_c<coeff>_<mode>.json
-#   step 3  src/METHOD/LUNAR/w_down.py       train W_down of the selected layer (AdamW or closed form) -> model_<tag>/
+#                                            similarity to desired / unrelated responses) -> c<coeff>_<mode>/layer_selection.json
+#   step 3  src/METHOD/LUNAR/w_down.py       train W_down of the selected layer (AdamW or closed form) -> c<coeff>_<mode>/l<layers>[_cf]/model/
 #   step 4  src/eval.py (TOFU metrics) on the edited model (scripts/LUNAR/4_eval.sh)
 # The chain 1 -> 2 -> 3 needs the same coeff / shift_mode (and task_name) in every script.
 # Shared with NEAR (which uses neighbours of every author as D_ref): src/METHOD/_common/, src/model/{edit,steer}.py.
@@ -97,7 +97,7 @@ select:
 # ---- src/METHOD/LUNAR/w_down.py ------------------------------------------------------------------------
 wdown:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/LUNAR/r_uv.py
-  layer_selection_path: null # null -> <output_dir>/layer_selection_c<coeff>_<shift_mode>.json of select_layer.py
+  layer_selection_path: null # null -> <output_dir>/c<coeff>_<shift_mode>/layer_selection.json of select_layer.py
   layers: auto # auto -> the layer selected by select_layer.py; or explicit, e.g. [16]
   coeff: 1.0 # forget target = original MLP output + coeff * r_UV   (LUNAR README: 2.0)
   # all: every token of a forget prompt gets the SAME r_UV[ref_position] (paper Eq. 4, LUNAR's released code);
@@ -119,4 +119,4 @@ wdown:
   responses_splits: [forget, retain, holdout] # splits whose responses are written before / after the edit
   max_gen_samples: 32 # fixed random subset per split
   gen_batch_size: 16
-  save_model: true # save the edited model to <output_dir>/model_<tag> (needed by step 4)
+  save_model: true # save the edited model to <output_dir>/c<coeff>_<mode>/l<layers>[_cf]/model (needed by step 4)

@@ -5,8 +5,8 @@
 #           src/METHOD/NEAR/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
 #   step 1  src/METHOD/NEAR/r_uv.py          r_UV per forget author, for K neighbours (on the FULL model)      -> r_uv.pt
 #           src/METHOD/NEAR/select_layer.py  LUNAR-style layer selection by inference-time steering
-#                                -> layer_selection_k<K>_c<coeff>_<shift_mode>.json
-#   step 2  src/METHOD/NEAR/w_down.py        train W_down of the selected layer (AdamW or closed form) -> model_<tag>/
+#                                -> k<K>_c<coeff>_<shift_mode>/layer_selection.json
+#   step 2  src/METHOD/NEAR/w_down.py        train W_down of the selected layer (AdamW or closed form) -> k<K>_c<coeff>_<mode>/l<layers>[_cf]/model/
 #   step 3  src/eval.py (TOFU metrics) + src/METHOD/NEAR/probe.py on the edited model (scripts/NEAR/4_eval.sh)
 # The chain 1 -> 2 -> 3 needs the same K / coeff / shift_mode (and task_name) in every script.
 
@@ -116,7 +116,7 @@ select:
 # ---- src/METHOD/NEAR/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
 wdown:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/NEAR/r_uv.py
-  layer_selection_path: null # null -> <output_dir>/layer_selection_k<K>_c<coeff>_<shift_mode>.json of src/METHOD/NEAR/select_layer.py
+  layer_selection_path: null # null -> <output_dir>/k<K>_c<coeff>_<shift_mode>/layer_selection.json of src/METHOD/NEAR/select_layer.py
   k: 5 # which K of the ablation to train with (must be in ruv.ks)
   layers: auto # auto -> the layer selected by src/METHOD/NEAR/select_layer.py; or explicit, e.g. [10]
   coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
@@ -146,4 +146,4 @@ wdown:
   responses_splits: [forget, neighbor, retain, holdout] # splits whose responses are written before / after the edit
   max_gen_samples: 32 # fixed random subset per split
   gen_batch_size: 16
-  save_model: true # save the edited model to <output_dir>/model_<tag> (needed by step 4)
+  save_model: true # save the edited model to <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/model (needed by step 4)

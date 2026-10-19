@@ -14,10 +14,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 # Step 3: train W_down of the selected layer (wdown.layers=auto -> the layer of the selection file of the SAME coeff /
 # shift mode written by 2_select_layer.sh) with the r_UV of 1_r_uv.sh:
-#   -> model_<tag>/                edited model (tag = c<coeff>_l<layer>_<mode>[_cf]), evaluated by 4_eval.sh
-#   -> w_down_<tag>.pt             edited weights {layer: W_down}
-#   -> w_down_<tag>_summary.json   losses, achieved-vs-intended shift, response statistics before / after
-#   -> responses_before_<split>.json / responses_after_<tag>_<split>.json   same fixed samples, to read
+#   -> <config folder>/l<layer>[_cf]/model/             edited model, evaluated by 4_eval.sh
+#   -> <config folder>/l<layer>[_cf]/w_down.pt          edited weights {layer: W_down}
+#   -> <config folder>/l<layer>[_cf]/w_down_summary.json   losses, achieved-vs-intended shift, response statistics before / after
+#   -> <config folder>/l<layer>[_cf]/responses_before_<split>.json / responses_after_<split>.json   same fixed samples, to read
+#   config folder = saves/LUNAR/<TASK_NAME>/c<coeff>_<mode>/ (the one of the layer selection), `_cf` = closed form
 # Shift modes: `all` = the paper (the same r_UV on every token of a forget prompt), `eoi` = end-of-instruction tokens only.
 # SOLVER (in _common.sh): adam (AdamW, lr / epochs from the config) or closed_form (LUNAR Eq. 9, no lr / epochs).
 for MODE in "${SHIFT_MODES[@]}"; do

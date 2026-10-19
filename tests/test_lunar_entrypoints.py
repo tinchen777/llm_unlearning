@@ -45,3 +45,22 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-1500:]
     assert "forget_hf_split: train[:20]" in proc.stdout
+
+
+@pytest.mark.parametrize("coeff, solver", [("1.0", "adam"), ("2.5", "closed_form")])
+def test_shell_and_python_agree_on_the_output_folder_names(coeff, solver):
+    """4_eval.sh finds the edited model through `config_dir` / `run_dir` of _common.sh; the scripts write it through the
+    python functions of the same names. A mismatch means 4_eval.sh evaluates a model that does not exist."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from METHOD.LUNAR._utils import selection as lunar
+    from METHOD.NEAR._utils import neighbors as near
+
+    def shell(method, expr):
+        cmd = f'COEFF={coeff} SOLVER={solver}; source scripts/{method}/_common.sh; COEFF={coeff}; SOLVER={solver}; {expr}'
+        return subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+
+    out = Path("x")
+    assert shell("LUNAR", "config_dir all") == lunar.config_dir(out, float(coeff), "all").name
+    assert shell("LUNAR", "run_dir 16") == lunar.run_dir(out, float(coeff), "all", [16], solver).name
+    assert shell("NEAR", "config_dir 5 eoi") == near.config_dir(out, 5, float(coeff), "eoi").name
+    assert shell("NEAR", "run_dir 16") == near.run_dir(out, 5, float(coeff), "eoi", [16], solver).name

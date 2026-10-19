@@ -23,8 +23,8 @@ from model.edit import (
 )
 from model.steer import Steerer
 from METHOD.NEAR._utils.neighbors import (
-    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, selection_file_name,
-    summarize_r_uv,
+    check_neighbors, compute_r_uv, config_dir, forget_authors, nested_neighbor_order, neighbors_by_author, run_dir,
+    selection_path, summarize_r_uv,
 )
 from data.utils import IGNORE_INDEX
 
@@ -475,10 +475,15 @@ def test_closed_form_end_to_end_effect_on_the_model():
     assert ((retain_after - retain_before).norm() / retain_before.norm()).item() < 0.01
 
 
-def test_selection_file_name_encodes_k_coeff_and_mode():
-    assert selection_file_name(5, 1.0, "eoi") == "layer_selection_k5_c1_eoi.json"
-    assert selection_file_name(15, 2.5, "all") == "layer_selection_k15_c2.5_all.json"
-    assert selection_file_name(5, 1.0, "eoi") != selection_file_name(5, 1.0, "all")
+def test_output_layout_groups_the_files_by_setting_and_run():
+    out = Path("saves/NEAR/t")
+    assert config_dir(out, 5, 1.0, "eoi") == out / "k5_c1_eoi"
+    assert config_dir(out, 15, 2.5, "all") == out / "k15_c2.5_all"
+    assert selection_path(out, 5, 1.0, "eoi") == out / "k5_c1_eoi" / "layer_selection.json"
+    assert run_dir(out, 5, 1.0, "eoi", [16], "adam") == out / "k5_c1_eoi" / "l16"
+    assert run_dir(out, 5, 1.0, "eoi", [10, 11], "closed_form") == out / "k5_c1_eoi" / "l10-11_cf"
+    assert config_dir(out, 5, 1.0, "eoi") != config_dir(out, 5, 1.0, "all")  # shift modes do not overwrite each other
+
 
 
 def test_group_folds_keep_groups_together_and_share_common_groups():

@@ -15,8 +15,9 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # Step 2: layer selection (needs 1_r_uv.sh), once per shift mode. For every candidate layer the forget prompts are
 # redirected at inference time (block_out += coeff * r_UV) and the responses are scored by s1 - s2 (sentence-embedding
 # similarity to desired minus similarity to unrelated responses):
-#   -> layer_selection_c<coeff>_<mode>.json   per layer: s1, s2, score, response statistics; `selected_layer`, `ranking`. READ IT.
-#   -> responses_steer_c<coeff>_<mode>_l<l>.json   steered forget answers of every layer
+#   -> <coeff,mode folder>/layer_selection.json   per layer: s1, s2, score, response statistics; `selected_layer`, `ranking`. READ IT.
+#   -> <coeff,mode folder>/responses_steer_l<l>.json   steered forget answers of every layer
+#   folder = saves/LUNAR/<TASK_NAME>/c<coeff>_<mode>/   (config_dir in _common.sh)
 # The sentence encoder (select.embedder) must be in the local HF cache (HF_HUB_OFFLINE=1).
 # Candidates: select.layer_fraction=[0.4,0.8] (default); 'select.layers=[4,5,6]' for an explicit list.
 for MODE in "${SHIFT_MODES[@]}"; do

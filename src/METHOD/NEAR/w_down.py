@@ -5,24 +5,32 @@
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
 # Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and, depending on the job_logging config, `<script name>.log` there.
+# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
-# Files written below output_dir:
-#   w_down_<tag>.pt                       the edited W_down per layer
-#   w_down_<tag>_summary.json             MSE before / after, achieved-vs-intended shift, response statistics before / after
-#   model_<tag>/                          the edited model + tokenizer (only if wdown.save_model)
-#   responses_before_<split>.json         responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
+# Layout below output_dir (config_dir / run_dir in METHOD/NEAR/_utils/neighbors.py, mirrored by `config_dir` / `run_dir`
+# in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
+#   r_uv.pt, r_uv_summary.json              shared by every setting (r_uv.py)
+#   k<K>_c<coeff>_<shift_mode>/             one folder per setting
+#       layer_selection.json, responses_steer_l<layer>.json              (select_layer.py)
+#       l<layers>[_cf]/                     one folder per W_down run (`_cf` = closed form)
+#           model/, w_down.pt, w_down_summary.json, responses_before_*, responses_after_*       (w_down.py)
+#
+# Files written by THIS script (inside <output_dir>/k<K>_c<coeff>_<shift_mode>/l<layers>[_cf]/; <layers> joined by '-'):
+#   model/                        the edited model + tokenizer (only if wdown.save_model)
+#   w_down.pt                     the edited W_down per layer
+#   w_down_summary.json           MSE before / after, achieved-vs-intended shift, response statistics before / after
+#   responses_before_<split>.json    responses of the ORIGINAL model on a fixed subset of every split in wdown.responses_splits
 #   responses_before_summary.json
-#   responses_after_<tag>_<split>.json    the same samples after the edit
-#   responses_after_<tag>_summary.json
-#      tag = k<K>_l<layers joined by '-'>_c<coeff>_<shift_mode>[_cf]     (variable `tag`; scripts/NEAR/_common.sh `w_down_tag` mirrors it)
-#      (the responses are written directly in output_dir, not in a `responses/` sub-folder as in probe.py)
+#   responses_after_<split>.json     the same samples after the edit
+#   responses_after_summary.json
+#   (the responses are written directly in the run folder, not in a `responses/` sub-folder as in probe.py)
 #
 # Read by / reads:
-#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, the selection file of select_layer.py
-#   scripts/NEAR/4_eval.sh then evaluates `saves/NEAR/<task_name>/model_<tag>`:
+#   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, `<output_dir>/k<K>_c<coeff>_<shift_mode>/layer_selection.json`
+#   (the selection of the SAME setting; wdown.layer_selection_path overrides it)
+#   scripts/NEAR/4_eval.sh then evaluates `<run folder>/model`:
 #       src/eval.py   task_name=NEAR/eval_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>  ->  saves/eval/NEAR/eval_near_tofu_...   (mode `eval`)
 #       probe.py      task_name=probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG> ->  saves/NEAR/probe/probe_near_tofu_...
 # ==============================================================================
@@ -52,7 +60,7 @@ from model.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
-from METHOD.NEAR._utils.neighbors import forget_authors, selection_file_name
+from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir, selection_path as default_selection_path
 from METHOD._common.editing import make_response_writer, train_w_down_layers
 from METHOD.NEAR._utils.activations import collect_group_means
 
@@ -65,12 +73,12 @@ def main(config: DictConfig):
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
     Needs the `r_uv.pt` written by src/METHOD/NEAR/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/METHOD/NEAR/select_layer.py
-    (`layer_selection_k<K>_c<coeff>_<shift_mode>.json`, the one of the same K / coeff / shift mode).
+    (`k<K>_c<coeff>_<shift_mode>/layer_selection.json`, the one of the same K / coeff / shift mode).
 
     `wdown.solver`: `adam` (AdamW + ExponentialLR, as LUNAR's code; needs lr / epochs) or `closed_form` (LUNAR Eq. 9,
     ridge regression of the weight change, no lr / epochs; `wdown.ridge` shrinks the edit towards the original weights).
     `wdown.shift_mode`: `eoi` (r_UV only on the end-of-instruction tokens) or `all` (the paper: the same vector on every
-    token of a forget prompt). Outputs are tagged `k<K>_l<layers>_c<coeff>_<shift_mode>[_cf]`. Args:
+    token of a forget prompt). Outputs go to `k<K>_c<coeff>_<shift_mode>/l<layers>[_cf]/`. Args:
         config (DictConfig): `experiment=generate/NEAR` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
@@ -86,13 +94,15 @@ def main(config: DictConfig):
     if solver not in ("adam", "closed_form"):
         raise ValueError(f"wdown.solver must be `adam` or `closed_form`, got `{solver}`.")
     if wd["layers"] == "auto":
-        selection_path = wd.get("layer_selection_path", None) or output_dir / selection_file_name(k, coeff, shift_mode)
+        selection_path = wd.get("layer_selection_path", None) or default_selection_path(output_dir, k, coeff, shift_mode)
         with open(str(selection_path), encoding="utf-8") as f:
             train_layers = [int(json.load(f)["selected_layer"])]
         logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
         train_layers = [int(l) for l in wd["layers"]]
     tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
+    run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. r_UV of the K-neighbour reference
     with step_logging(logger, "[1/6]", "r_UV", wd):
@@ -130,7 +140,7 @@ def main(config: DictConfig):
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
     write_responses = make_response_writer(
         model, tokenizer, make_loader, list(wd["responses_splits"]), wd["gen_batch_size"], wd["max_gen_samples"],
-        cfg["generation_args"], hallucination_rouge, output_dir,
+        cfg["generation_args"], hallucination_rouge, run_dir,
     )
 
     # 3. Responses of the ORIGINAL model (same fixed subset as after the edit)
@@ -165,7 +175,7 @@ def main(config: DictConfig):
             apply_w_down(model, l, w)
         torch.save({"layers": train_layers, "k": k, "coeff": coeff,
                     "weights": {l: w.to(get_out_proj(model, l).weight.dtype) for l, w in new_weights.items()}},
-                   output_dir / f"w_down_{tag}.pt")
+                   run_dir / "w_down.pt")
 
     # 6. What did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
     with step_logging(logger, "[6/6]", "effect of the edit", wd):
@@ -184,9 +194,9 @@ def main(config: DictConfig):
                 cos.append(torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item())
                 ratio.append((achieved.norm() / intended.norm()).item())
             achieved_vs_intended[l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
-        responses_after = write_responses(f"after_{tag}")
+        responses_after = write_responses("after")
         save_logs({
-            "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
+            "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd["ridge"]) if solver == "closed_form" else None,
             "num_tokens": num_tokens,
             "hyperparameters": {key: wd[key] for key in (
@@ -198,13 +208,13 @@ def main(config: DictConfig):
             "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV "
                     "(per author, averaged). Exact for a single edited layer; with several layers the deeper ones "
                     "also contain the effect of the upstream edits.",
-        }, output_dir / f"w_down_{tag}_summary.json")  # type: ignore
+        }, run_dir / "w_down_summary.json")  # type: ignore
         for l, v in achieved_vs_intended.items():
             logger.info(f"layer {l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")
 
         if wd.get("save_model", False):
-            model.save_pretrained(output_dir / f"model_{tag}")
-            tokenizer.save_pretrained(output_dir / f"model_{tag}")
+            model.save_pretrained(run_dir / "model")
+            tokenizer.save_pretrained(run_dir / "model")
 
 
 if __name__ == "__main__":

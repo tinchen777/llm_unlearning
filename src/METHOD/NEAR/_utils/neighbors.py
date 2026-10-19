@@ -13,6 +13,7 @@ steering) is generic and lives in `model.edit` / `model.steer`.
 from __future__ import annotations
 import logging
 import random
+from pathlib import Path
 import torch
 import torch.nn.functional as F
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Set, Tuple
@@ -22,10 +23,32 @@ from METHOD._common.activations import unlearning_vector
 logger = logging.getLogger(__name__)
 
 
-def selection_file_name(k: int, coeff: float, shift_mode: str) -> str:
-    """Name of the layer-selection file of select_layer.py: the selected layer depends on the reference size K,
-    the coefficient and the shift mode, so W_down training (w_down.py) must read the file of the SAME ones."""
-    return f"layer_selection_k{k}_c{coeff:g}_{shift_mode}.json"
+# Layout of the outputs below `output_dir` (= saves/NEAR/<task_name>/):
+#     r_uv.pt, r_uv_summary.json                  shared by every setting (r_uv.py)
+#     k<K>_c<coeff>_<shift_mode>/                 one folder per setting (`config_dir`)
+#         layer_selection.json, responses_steer_l<layer>.json          (select_layer.py)
+#         l<layers>[_cf]/                          one folder per W_down run (`run_dir`): layers, closed form or AdamW
+#             w_down.pt, w_down_summary.json, responses_before_*, responses_after_*, model/        (w_down.py)
+# scripts/NEAR/_common.sh mirrors these names (`config_dir`, `run_dir`).
+SELECTION_FILE = "layer_selection.json"
+
+
+def config_dir(output_dir: Path, k: int, coeff: float, shift_mode: str) -> Path:
+    """Folder of one setting (K, coeff, shift mode): the selected layer depends on all three, so W_down training
+    (w_down.py) must read the selection of the SAME setting."""
+    return Path(output_dir) / f"k{k}_c{coeff:g}_{shift_mode}"
+
+
+def run_dir(output_dir: Path, k: int, coeff: float, shift_mode: str, layers: Sequence[int], solver: str) -> Path:
+    """Folder of one W_down run inside the setting folder: the trained layers and the solver (`_cf` = closed form)."""
+    return config_dir(output_dir, k, coeff, shift_mode) / (
+        "l" + "-".join(str(l) for l in layers) + ("_cf" if solver == "closed_form" else "")
+    )
+
+
+def selection_path(output_dir: Path, k: int, coeff: float, shift_mode: str) -> Path:
+    """Layer-selection file of a setting, written by select_layer.py and read by w_down.py."""
+    return config_dir(output_dir, k, coeff, shift_mode) / SELECTION_FILE
 
 
 def forget_authors(indices: Iterable[Any], qa_per_author: int, author_offset: int = 0) -> List[int]:

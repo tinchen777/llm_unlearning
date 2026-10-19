@@ -20,7 +20,7 @@ from model.edit import apply_w_down, build_shift, collect_mlp_tokens
 from METHOD._common.activations import unlearning_vector
 from METHOD._common.editing import resolve_candidate_layers, train_w_down_layers
 from METHOD.LUNAR._utils.embedding import layer_score, rank_layers, similarity_to_list
-from METHOD.LUNAR._utils.selection import selection_file_name
+from METHOD.LUNAR._utils.selection import config_dir, run_dir, selection_path
 from utils.config import TrackingConfig
 
 N_LAYERS, HIDDEN = 4, 32
@@ -133,9 +133,14 @@ def test_rank_layers_orders_by_score_and_drops_degenerate_layers():
     assert rank_layers({1: {"score": 0.0, "degenerate_rate": 1.0}}, max_degenerate=0.1) == [1]  # none passes -> keep all
 
 
-def test_selection_file_name_encodes_coeff_and_mode():
-    assert selection_file_name(1.0, "all") == "layer_selection_c1_all.json"
-    assert selection_file_name(2.5, "eoi") == "layer_selection_c2.5_eoi.json"
+def test_output_layout_groups_the_files_by_setting_and_run():
+    out = Path("saves/LUNAR/t")
+    assert config_dir(out, 1.0, "all") == out / "c1_all"
+    assert config_dir(out, 2.5, "eoi") == out / "c2.5_eoi"
+    assert selection_path(out, 1.0, "all") == out / "c1_all" / "layer_selection.json"
+    assert run_dir(out, 1.0, "all", [16], "adam") == out / "c1_all" / "l16"
+    assert run_dir(out, 1.0, "all", [10, 11], "closed_form") == out / "c1_all" / "l10-11_cf"
+
 
 
 def test_prompt_only_reference_dataset_has_no_answer_column(tmp_path):

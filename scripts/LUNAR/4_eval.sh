@@ -20,10 +20,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
-  SELECTION=saves/LUNAR/${TASK_NAME}/$(selection_name ${MODE})
+  CONFIG_DIR=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})
+  SELECTION=${CONFIG_DIR}/layer_selection.json
   LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
   TAG=$(w_down_tag ${LAYER} ${MODE})
-  EDITED=saves/LUNAR/${TASK_NAME}/model_${TAG}
+  EDITED=${CONFIG_DIR}/$(run_dir ${LAYER})/model
   echo start eval ${EDITED}
   python src/eval.py \
     experiment=eval/tofu/default \
