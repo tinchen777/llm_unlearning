@@ -31,7 +31,8 @@
 #   reads `<output_dir>/r_uv.pt` (wdown.r_uv_path) and, for wdown.layers=auto, `<output_dir>/c<coeff>_<shift_mode>/layer_selection.json`
 #   (the selection of the SAME setting; wdown.layer_selection_path overrides it)
 #   scripts/LUNAR/4_eval.sh then evaluates `<run folder>/model`:
-#       src/eval.py   task_name=test/<TASK_NAME>_<TAG>  ->  saves/eval/test/<TASK_NAME>_<TAG>   (mode `eval`)
+#       src/eval.py   task_name=LUNAR/eval_lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>_<TAG>
+#                     ->  saves/eval/LUNAR/eval_lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>_<TAG>   (mode `eval`)
 # ==============================================================================
 from __future__ import annotations
 # from rich.traceback import install
