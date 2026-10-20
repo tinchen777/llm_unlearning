@@ -14,7 +14,7 @@ import pytest
 import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 
-from model.activations import capture_activations, collect_activations, gather_positions, get_out_proj
+from model.activations import capture_activations, collect_sample_activations, gather_positions, get_out_proj
 from METHOD.NEAR._utils.activations import _group_folds, auc, collect_group_means, mean_diff_auc
 from model.generation import answer_logprobs
 from METHOD._common.responses import is_degenerate, is_refusal, summarize_responses
@@ -519,12 +519,12 @@ def test_group_wise_auc_removes_the_author_leak():
                                 groups_b=[100 + i // 20 for i in range(40)], min_groups=2) <= 1.0
 
 
-def test_collect_activations_returns_requested_metadata(model):
+def test_collect_sample_activations_returns_requested_metadata(model):
     prompts = make_prompts(5, seed=20)
     batches = make_batches(prompts, {"index": list(range(5)), "author_id": [10, 10, 11, 11, 12]}, 2)
-    acts, layers, meta = collect_activations(model, batches, POSITIONS, reduce_="none", meta_keys=("author_id", "nope"))
+    acts, layers, meta = collect_sample_activations(model, batches, POSITIONS, meta_keys=("author_id", "nope"))
     assert sorted(acts) == list(range(5)) and meta[2] == {"author_id": 11} and meta[4] == {"author_id": 12}
-    assert len(collect_activations(model, batches, POSITIONS, reduce_="none")) == 2, "unchanged without meta_keys"
+    assert collect_sample_activations(model, batches, POSITIONS)[2] == {}, "no metadata recorded without meta_keys"
 
 
 def test_neighbor_sample_groups():
@@ -555,3 +555,13 @@ def test_neighbor_compare_difference_of_two_probes():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q", "-x"]))
+
+
+def test_mean_activations_equal_the_mean_of_the_sample_activations(model):
+    from model.activations import collect_mean_activations
+
+    batches = make_batches(make_prompts(7, seed=21), {"index": list(range(7))}, 3)
+    mean, layers = collect_mean_activations(model, batches, POSITIONS)
+    per_sample, layers2, _ = collect_sample_activations(model, batches, POSITIONS)
+    assert layers == layers2
+    torch.testing.assert_close(mean, torch.stack([per_sample[i] for i in range(7)]).double().mean(0), atol=1e-5, rtol=1e-5)

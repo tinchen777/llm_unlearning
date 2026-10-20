@@ -335,3 +335,93 @@ class Plotter:
     #     legend_if_multi(ax, n)
     #     fig.tight_layout()
     #     return fig
+
+
+# ---------------------------------------------------------------------------------------------
+# Basic panels: draw ONE axes from plain python data. The multi-panel figures and tables built from several kinds of runs
+# (plots/) read their data through `vis.loader`, write it to a temporary csv and compose these panels.
+# ---------------------------------------------------------------------------------------------
+
+def line_panel(
+    ax,
+    lines: Sequence[Dict[str, Any]],
+    xlabel: str = "",
+    ylabel: str = "",
+    title: str = "",
+    vlines: Sequence[Tuple[float, str]] = (),
+    hlines: Sequence[Tuple[float, str]] = (),
+):
+    """Lines over a shared x axis. Each line: `{x, y, label?, color?, linestyle?, marker?, highlight?}`; `highlight` = the x of
+    one point to mark with a star (e.g. the selected layer). `vlines` / `hlines`: `(value, color)` reference lines."""
+    for ln in lines:
+        (artist,) = ax.plot(
+            ln["x"], ln["y"], color=ln.get("color"), linestyle=ln.get("linestyle", "-"),
+            marker=ln.get("marker"), label=ln.get("label"),
+        )
+        if ln.get("highlight") is not None:
+            xs = list(ln["x"])
+            if ln["highlight"] in xs:
+                ax.scatter([ln["highlight"]], [list(ln["y"])[xs.index(ln["highlight"])]], marker="*", s=130,
+                           color=artist.get_color(), zorder=4, edgecolors="white", linewidths=0.6)
+    for value, color in vlines:
+        ax.axvline(value, color=color, linestyle=":", linewidth=1.0)
+    for value, color in hlines:
+        ax.axhline(value, color=color, linestyle="--", linewidth=1.0)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    return ax
+
+
+def grouped_bar_panel(
+    ax,
+    groups: Sequence[str],
+    series: Sequence[Dict[str, Any]],
+    ylabel: str = "",
+    title: str = "",
+    value_labels: bool = True,
+):
+    """Grouped bars: `groups` on the x axis, one bar per series in every group. Each series: `{label, values (aligned with
+    `groups`, NaN / None = no bar), color?}`."""
+    n = max(len(series), 1)
+    width = 0.8 / n
+    for j, s in enumerate(series):
+        xs, vals = [], []
+        for g, v in enumerate(s["values"]):
+            if v is not None and v == v:  # not None, not NaN
+                xs.append(g - 0.4 + width * (j + 0.5))
+                vals.append(v)
+        ax.bar(xs, vals, width=width * 0.92, color=s.get("color"), label=s.get("label"))
+        if value_labels:
+            for x, v in zip(xs, vals):
+                ax.annotate(f"{v:.2f}", (x, v), xytext=(0, 2), textcoords="offset points", ha="center", va="bottom",
+                            fontsize=6, color=INK_SECONDARY)
+    ax.set_xticks(range(len(groups)))
+    ax.set_xticklabels(groups)
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    return ax
+
+
+def scatter_panel(
+    ax,
+    points: Sequence[Dict[str, Any]],
+    xlabel: str = "",
+    ylabel: str = "",
+    title: str = "",
+    yscale: Optional[str] = None,
+):
+    """Labelled points. Each point: `{x, y, label?, color?, marker?, size?}`; points sharing a `label` share one legend entry."""
+    seen = set()
+    for p in points:
+        label = p.get("label")
+        ax.scatter([p["x"]], [p["y"]], s=p.get("size", 46), color=p.get("color"), marker=p.get("marker", "o"),
+                   label=label if label not in seen else None, zorder=3, edgecolors="white", linewidths=0.5)
+        seen.add(label)
+    if yscale:
+        ax.set_yscale(yscale)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    return ax

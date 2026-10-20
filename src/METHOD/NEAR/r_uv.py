@@ -133,7 +133,7 @@ def main(config: DictConfig):
             "neighbor_counts": {key: c for key, c in neighbor_counts.items() if key[0] in forget_author_set},
             **({"neighbor_means": neighbor_means} if ruv_cfg.get("save_group_means", True) else {}),
             "positions": positions, "layers": layers, "point": point,
-            "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": int(ruv_cfg["seed"]),
+            "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": seed,
         }, output_dir / "r_uv.pt")
         save_logs(summarize_r_uv(r_uv, forget_means, layers), output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt and r_uv_summary.json to {output_dir}")

@@ -1,7 +1,7 @@
 """Activation statistics of the NEAR experiment: means per GROUP (author), separability of two question sets.
 
 `collect_group_means` is used by r_uv.py / w_down.py, `mean_diff_auc` (+ `auc`, `_group_folds`) by probe.py.
-The plain hooks (`capture_activations`, `collect_activations`, ...) are generic and live in `model.activations`.
+The plain hooks (`capture_activations`, `collect_mean_activations`, `collect_sample_activations`, ...) are generic and live in `model.activations`.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def collect_group_means(
     point: str = "block_out",
     desc: str = "",
 ):
-    """Like `collect_activations(reduce="mean")`, but one mean per GROUP (e.g. per author).
+    """Like `collect_mean_activations`, but one mean per GROUP (e.g. per author).
 
     `group_fn(batch)` returns one hashable group key per row of the batch. Only running sums are
     kept (no per-sample storage), so memory is `n_groups * n_pos * n_layers * d` float32.

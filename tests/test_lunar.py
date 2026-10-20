@@ -15,7 +15,7 @@ from omegaconf import OmegaConf
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
-from model.activations import collect_activations, get_out_proj
+from model.activations import collect_mean_activations, get_out_proj
 from model.edit import apply_w_down, build_shift, collect_mlp_tokens
 from METHOD._common.activations import unlearning_vector
 from METHOD._common.editing import resolve_candidate_layers, train_w_down_layers
@@ -56,8 +56,8 @@ def test_lunar_global_r_uv_is_reproduced_by_the_w_down_edit_on_forget_tokens_and
     fb, rb, refb = (make_batches(make_prompts(8, 10), 4), make_batches(make_prompts(24, 12), 8),
                     make_batches(make_prompts(12, 11), 4))
 
-    forget_mean, layers = collect_activations(model, fb, positions=POSITIONS, layers=[layer])
-    ref_mean, _ = collect_activations(model, refb, positions=POSITIONS, layers=[layer])
+    forget_mean, layers = collect_mean_activations(model, fb, positions=POSITIONS, layers=[layer])
+    ref_mean, _ = collect_mean_activations(model, refb, positions=POSITIONS, layers=[layer])
     r_uv = unlearning_vector(ref_mean, forget_mean)  # [n_pos, n_layers, d]
     r = r_uv[:, 0, :].float()
 
@@ -72,10 +72,10 @@ def test_lunar_global_r_uv_is_reproduced_by_the_w_down_edit_on_forget_tokens_and
     assert per_layer[layer]["forget_mse_after"] < 1e-2 * per_layer[layer]["forget_mse_before"]
     assert per_layer[layer]["retain_mse_after"] < 1e-2 * per_layer[layer]["forget_mse_before"]
 
-    retain_before, _ = collect_activations(model, rb, positions=POSITIONS, layers=[layer])
+    retain_before, _ = collect_mean_activations(model, rb, positions=POSITIONS, layers=[layer])
     apply_w_down(model, layer, new_weights[layer])
-    forget_after, _ = collect_activations(model, fb, positions=POSITIONS, layers=[layer])
-    retain_after, _ = collect_activations(model, rb, positions=POSITIONS, layers=[layer])
+    forget_after, _ = collect_mean_activations(model, fb, positions=POSITIONS, layers=[layer])
+    retain_after, _ = collect_mean_activations(model, rb, positions=POSITIONS, layers=[layer])
     achieved = (forget_after[:, 0] - forget_mean[:, 0]).flatten()
     intended = (coeff * r[POSITIONS.index(ref_position)].expand_as(r)).flatten().double()
     cos = torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item()

@@ -186,7 +186,7 @@ def collect_sample_activations(
     desc: str = "",
     meta_keys: Optional[Sequence[str]] = None,
 ):
-    """Collect `point` activations at `positions` for every layer in `layers`, returning the dataset-mean activations.
+    """Collect `point` activations at `positions` for every layer in `layers`, one tensor PER SAMPLE (no averaging).
 
     Args:
         positions: sequence of positions to gather activations from (default: `(-1,)` for the last position).

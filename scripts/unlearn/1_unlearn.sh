@@ -1,24 +1,21 @@
 #!/bin/bash
 # =============================================================================
-# Demo 4: 用一个【已有的】遗忘方法做 unlearning (这里用 GradDiff)
-# -----------------------------------------------------------------------------
-# 入口: src/train.py  (mode=unlearn)
-# experiment=unlearn/tofu/default -> configs/experiment/unlearn/tofu/default.yaml
-#   - model:   待遗忘的目标模型 (默认 open-unlearning/tofu_Llama-3.2-1B-Instruct_full)
-#   - data:    unlearn -> 同时加载 forget 和 retain 两个数据集
-#              collator 把每个 batch 组织成 {"forget": {...}, "retain": {...}}
-#   - trainer: 由命令行 trainer=GradDiff 指定 (handler=GradDiff)
-#   - eval:    tofu (遗忘过程中/结束后评测)
+# TOFU unlearning baselines (OpenUnlearning trainers) for ONE (model, forget set); the methods are listed in _common.sh.
+# Entry: src/train.py (mode=unlearn); experiment=unlearn/tofu/default (forget + retain data, balanced on the forget set)
+#        or unlearn/tofu/idk (IdkDPO). The TOFU metrics are evaluated at the start and after every epoch by the trainer
+#        (eval.tofu in the experiment), forget quality / privleak against the official retain model (RETAIN_LOGS).
 #
-# 遗忘方法的核心只有一个函数: trainer 的 compute_loss(model, inputs)。
-#   - GradAscent: loss = -forget_loss
-#   - GradDiff:   loss = gamma*(-forget_loss) + alpha*retain_loss
-#   - NPO/SimNPO/DPO/RMU/...: 各自不同的 compute_loss
+# Every method is trained from the official TOFU-full model:  GradAscent: -forget loss;  GradDiff: forget ascent + retain NLL;
+# NPO / SimNPO: bounded negative preference;  IdkDPO: prefer "I don't know";  RMU: random steering vector on one layer.
 #
-# 输出: saves/unlearn/test/graddiff
+# Output: saves/unlearn/tofu_<MODEL>_<FORGET_SPLIT>/<METHOD>/   (see task_name() in _common.sh)
+#   checkpoint-<step>/evals/TOFU_SUMMARY.json   TOFU metrics of every epoch (step 0 = the original model)
+# Loop over models / forget sets: scripts/unlearn/run.sh.   MUSE: scripts/unlearn/3_unlearn.sh.
 # =============================================================================
 set -e
-cd $(dirname "$0")/../.. || exit 1
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/_common.sh"
+cd "${SCRIPT_DIR}/../.." || exit 1
 
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
@@ -27,98 +24,14 @@ GPU_ID=${1:-0}
 echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
-
-MODEL=Llama-3.2-1B-Instruct
-
-echo start BoundedGradDiff
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=BoundedGradDiff \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/BoundedGradDiff \
-  # --cfg job --resolve
-echo end BoundedGradDiff
-
-# 换方法只需改 trainer= : GradAscent / NPO / SimNPO / DPO / RMU / UNDIAL / WGA / CEU ...
-# 对应方法的额外超参在 trainer.method_args.* 下覆盖, 例如 NPO:
-#   trainer=NPO trainer.method_args.beta=0.1 trainer.method_args.gamma=1.0
-
-echo start CEU
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=CEU \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/CEU \
-  # --cfg job --resolve
-echo end CEU
-
-echo start DPO
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/idk \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=DPO \
-  trainer.args.eval_on_start=False \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/DPO
-echo end DPO
-
-
-echo start GradAscent
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=GradAscent \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/GradAscent \
-  # --cfg job --resolve
-echo end GradAscent
-
-
-echo start NPO
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=NPO \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/NPO \
-  # --cfg job --resolve
-echo end NPO
-
-echo start GradDiff
-python src/train.py --config-name=unlearn \
-  experiment=unlearn/tofu/default \
-  model=tofu/tofu_${MODEL}_full \
-  trainer=GradDiff \
-  trainer.method_args.gamma=1.0 \
-  trainer.method_args.alpha=1.0 \
-  trainer.method_args.retain_loss_type=NLL \
-  forget_split=forget10 \
-  retain_split=retain90 \
-  holdout_split=holdout10 \
-  retain_logs_path=saves/eval/tofu_${MODEL}_retain90/TOFU_EVAL.json \
-  task_name=test/GradDiff \
-  # --cfg job --resolve
-echo end GradDiff
-
+for METHOD in "${METHODS[@]}"; do
+  echo start ${METHOD} ${FULL_MODEL} ${FORGET_SPLIT}
+  python src/train.py --config-name=unlearn \
+    $(method_args ${METHOD}) \
+    model=${FULL_MODEL} \
+    "${SPLIT_ARGS[@]}" \
+    "${EXTRA_ARGS[@]}" \
+    task_name=$(task_name ${METHOD})
+    # --cfg job --resolve
+  echo end ${METHOD} ${FULL_MODEL} ${FORGET_SPLIT}
+done
