@@ -22,8 +22,15 @@ class Steerer:
     - `mode="all"` : every token (prompt, answer, generated) gets `r[:, ref_position]`, as LUNAR's released code.
     """
 
-    def __init__(self, model: Any, layer: int, positions: Sequence[int], mode: str = "eoi",
-                 ref_position: int = -1, coeff: float = 1.0):
+    def __init__(
+        self,
+        model: Any,
+        layer: int,
+        positions: Sequence[int],
+        mode: str = "eoi",
+        ref_position: int = -1,
+        coeff: float = 1.0
+    ):
         if mode not in ("eoi", "all"):
             raise ValueError(f"steering mode must be `eoi` or `all`, got `{mode}`.")
         if mode == "all" and ref_position not in positions:

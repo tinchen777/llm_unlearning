@@ -36,7 +36,6 @@ def main(config: DictConfig):
     cfg = TrackingConfig(config)
     # Set seed for reproducibility
     set_seed(cfg["seed"])
-    # mode = cfg["mode"]
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]

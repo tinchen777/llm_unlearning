@@ -90,7 +90,6 @@ probe:
 ruv:
   batch_size: 32
   ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
-  seed: 0 # seed of that random order
   qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
   author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
   point: block_out # block_out | mlp_out  (r_UV must live in d_model space for W_down training)

@@ -27,6 +27,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
     TAG=$(w_down_tag ${K} ${LAYER} ${MODE})
     EDITED=${CONFIG_DIR}/$(run_dir ${LAYER})/model
+
     echo start eval ${EDITED}
     python src/eval.py \
       experiment=eval/tofu/default \

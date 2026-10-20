@@ -125,39 +125,91 @@ def gather_positions(
 
 
 @torch.no_grad()
-def collect_activations(
+def collect_mean_activations(
     model: Any,
     dataloader: Iterable[Mapping[str, Any]],
     positions: Sequence[int] = (-1,),
     layers: Optional[Sequence[int]] = None,
     point: str = "block_out",
-    reduce: str = "mean",
     desc: str = "",
-    meta_keys: Optional[Sequence[str]] = None,
 ):
-    """Collect `point` activations at `positions` for every layer in `layers`.
+    """Collect `point` activations at `positions` for every layer in `layers`, returning the dataset-mean activations.
 
     Args:
-        reduce: - `"mean"`: dataset-mean activations, Tensor[n_pos, n_layers, d] (float64, CPU),
-                  accumulated on the fly (no per-sample storage), as in LUNAR.
-                - `"none"`: per-sample activations, `{dataset_index: Tensor[n_pos, n_layers, d]}`
-                  (model dtype, CPU), e.g. to build per-sample redirection targets.
-        meta_keys: only with `reduce="none"`: batch metadata (e.g. `author_id`) to record per sample as well.
+        positions: sequence of positions to gather activations from (default: `(-1,)` for the last position).
+        layers: sequence of layer indices to collect activations from (default: all layers).
+        point: the point in the model to capture activations from (default: `"block_out"`).
+        desc: description for the progress bar (default: empty string).
+
     Returns:
-        (activations, layers); with `meta_keys` additionally `{dataset_index: {key: value}}` as a third element.
+        (mean-activations, layers), where:
+            - `mean-activations`: Tensor[n_pos, n_layers, d] (float64, CPU), the dataset-mean activations.
+            - `layers`: list of layer indices.
     """
-    if reduce not in ("mean", "none"):
-        raise ValueError(f"reduce must be `mean` or `none`, got `{reduce}`.")
     layers = list(range(model.config.num_hidden_layers)) if layers is None else list(layers)
     was_training = model.training
     model.eval()
 
     total: Optional[torch.Tensor] = None
     n_samples = 0
+    with capture_activations(model, layers, point) as cache:
+        for batch in tqdm(dataloader, desc=f"Collecting `{point}` activations [{desc}]", unit="batch(es)", colour="green"):
+            if "input_ids" not in batch:
+                raise ValueError(f"Expected a flat batch with `input_ids`, got keys {list(batch)}.")
+            inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
+            model(**inputs)
+            # [bsz, n_pos, n_layers, d]
+            acts = torch.stack(
+                [gather_positions(cache[l], inputs["attention_mask"], positions).cpu() for l in layers],
+                dim=2
+            )
+            batch_sum = acts.to(torch.float64).sum(dim=0)
+            total = batch_sum if total is None else total + batch_sum
+            # update
+            n_samples += acts.shape[0]
+
+    if was_training:
+        model.train()
+    if n_samples == 0 or total is None:
+        raise ValueError("The dataloader yielded no samples.")
+
+    return total / n_samples, layers
+
+
+@torch.no_grad()
+def collect_sample_activations(
+    model: Any,
+    dataloader: Iterable[Mapping[str, Any]],
+    positions: Sequence[int] = (-1,),
+    layers: Optional[Sequence[int]] = None,
+    point: str = "block_out",
+    desc: str = "",
+    meta_keys: Optional[Sequence[str]] = None,
+):
+    """Collect `point` activations at `positions` for every layer in `layers`, returning the dataset-mean activations.
+
+    Args:
+        positions: sequence of positions to gather activations from (default: `(-1,)` for the last position).
+        layers: sequence of layer indices to collect activations from (default: all layers).
+        point: the point in the model to capture activations from (default: `"block_out"`).
+        desc: description for the progress bar (default: empty string).
+        meta_keys: batch metadata keys to record per sample (default: `None`).
+
+    Returns:
+        (activations, layers, per_meta), where:
+            - `activations`: `{dataset_index: Tensor[n_pos, n_layers, d]}` (model dtype, CPU), per-sample activations.
+            - `layers`: list of layer indices.
+            - `per_meta`: `{dataset_index: {key: value}}` containing the requested metadata for each sample.
+    """
+    layers = list(range(model.config.num_hidden_layers)) if layers is None else list(layers)
+    was_training = model.training
+    model.eval()
+
+    n_samples = 0
     per_sample: Dict[int, torch.Tensor] = {}
     per_meta: Dict[int, Dict[str, Any]] = {}
     with capture_activations(model, layers, point) as cache:
-        for batch in tqdm(dataloader, desc=f"Collecting `{point}` activations [{desc}]", unit="batch(es)", colour="blue"):
+        for batch in tqdm(dataloader, desc=f"Collecting `{point}` activations [{desc}]", unit="batch(es)", colour="green"):
             if "input_ids" not in batch:
                 raise ValueError(f"Expected a flat batch with `input_ids`, got keys {list(batch)}.")
             indices = batch.get("index")
@@ -168,27 +220,20 @@ def collect_activations(
                 [gather_positions(cache[l], inputs["attention_mask"], positions).cpu() for l in layers],
                 dim=2
             )
-            if reduce == "mean":
-                batch_sum = acts.to(torch.float64).sum(dim=0)
-                total = batch_sum if total is None else total + batch_sum
-            else:
-                if indices is None:
-                    raise ValueError("reduce='none' needs the dataset `index` in each batch.")
-                for i, idx in enumerate(torch.as_tensor(indices).tolist()):
-                    per_sample[int(idx)] = acts[i]
-                    if meta_keys:
-                        per_meta[int(idx)] = {
-                            k: (batch[k][i].item() if isinstance(batch[k], torch.Tensor) else batch[k][i])
-                            for k in meta_keys if k in batch
-                        }
+            if indices is None:
+                raise ValueError("Collecting sample-wise activations needs the dataset `index` in each batch.")
+            for i, idx in enumerate(torch.as_tensor(indices).tolist()):
+                per_sample[int(idx)] = acts[i]
+                if meta_keys:
+                    per_meta[int(idx)] = {
+                        k: (batch[k][i].item() if isinstance(batch[k], torch.Tensor) else batch[k][i])
+                        for k in meta_keys if k in batch
+                    }
             n_samples += acts.shape[0]
 
     if was_training:
         model.train()
     if n_samples == 0:
         raise ValueError("The dataloader yielded no samples.")
-    if reduce == "mean":
-        return total / n_samples, layers  # type: ignore
-    if meta_keys:
-        return per_sample, layers, per_meta
-    return per_sample, layers
+
+    return per_sample, layers, per_meta

@@ -44,7 +44,7 @@ from omegaconf import DictConfig
 from data import get_split_loaders
 from data.utils import one_loader
 from model import get_model_and_tokenizer
-from model.activations import collect_activations
+from model.activations import collect_mean_activations
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
@@ -91,10 +91,10 @@ def main(config: DictConfig):
         layers = ruv_cfg.get("layers", None)
         point = ruv_cfg.get("point", "block_out")
         logger.info(f"Hook point: `{point}`, positions: {positions}")
-        forget_mean, layers = collect_activations(
+        forget_mean, layers = collect_mean_activations(
             model, forget_loader, positions=positions, layers=layers, point=point, desc="forget"
         )
-        ref_mean, _ = collect_activations(
+        ref_mean, _ = collect_mean_activations(
             model, ref_loader, positions=positions, layers=layers, point=point, desc="reference"
         )
         r_uv = unlearning_vector(ref_mean, forget_mean)  # [n_pos, n_layers, d]

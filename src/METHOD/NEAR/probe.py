@@ -44,7 +44,7 @@ from typing import Any, Dict, Hashable
 from data import get_split_data
 from data.utils import one_dataset, get_subloader
 from model import get_model_and_tokenizer
-from model.activations import collect_activations
+from model.activations import collect_sample_activations
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
@@ -107,13 +107,13 @@ def main(config: DictConfig):
     # Set seed for reproducibility
     seed = cfg["seed"]
     set_seed(seed)
-    mode = cfg["mode"]
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
     # 1. Load model and tokenizer
     with step_logging(logger, "[1/4]", "model & tokenizer", model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
+        model.eval()
 
     # 2. Data of every split (left padded, prompt only)
     with step_logging(logger, "[2/4]", "data", cfg["data"]):
@@ -182,7 +182,7 @@ def main(config: DictConfig):
         per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
         groups = {}  # {split: [group key per row]}
         for split, (datasets, collator) in split_data.items():
-            acts, layers, meta = collect_activations(
+            acts, layers, meta = collect_sample_activations(
                 model,
                 dataloader=get_subloader(
                     one_dataset(datasets),
@@ -191,7 +191,7 @@ def main(config: DictConfig):
                     max_samples=activations_cfg.get("max_act_samples", None),
                     seed=seed
                 ),
-                positions=positions, layers=layers, point=point, reduce="none", desc=split, meta_keys=_META_KEYS
+                positions=positions, layers=layers, point=point, desc=split, meta_keys=_META_KEYS
             )
             order = sorted(acts)
             per_sample[split] = torch.stack([acts[i] for i in order]).float()

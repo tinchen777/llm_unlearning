@@ -522,9 +522,9 @@ def test_group_wise_auc_removes_the_author_leak():
 def test_collect_activations_returns_requested_metadata(model):
     prompts = make_prompts(5, seed=20)
     batches = make_batches(prompts, {"index": list(range(5)), "author_id": [10, 10, 11, 11, 12]}, 2)
-    acts, layers, meta = collect_activations(model, batches, POSITIONS, reduce="none", meta_keys=("author_id", "nope"))
+    acts, layers, meta = collect_activations(model, batches, POSITIONS, reduce_="none", meta_keys=("author_id", "nope"))
     assert sorted(acts) == list(range(5)) and meta[2] == {"author_id": 11} and meta[4] == {"author_id": 12}
-    assert len(collect_activations(model, batches, POSITIONS, reduce="none")) == 2, "unchanged without meta_keys"
+    assert len(collect_activations(model, batches, POSITIONS, reduce_="none")) == 2, "unchanged without meta_keys"
 
 
 def test_neighbor_sample_groups():

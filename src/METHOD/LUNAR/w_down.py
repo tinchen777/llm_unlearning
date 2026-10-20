@@ -54,7 +54,7 @@ from torch.utils.data import DataLoader
 from data import get_split_data, get_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
-from model.activations import collect_activations, get_out_proj
+from model.activations import collect_mean_activations, get_out_proj
 from model.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
@@ -166,7 +166,7 @@ def main(config: DictConfig):
 
     # what did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
     with step_logging(logger, "[6/6]", "effect of the edit", wd):
-        new_mean, _ = collect_activations(
+        new_mean, _ = collect_mean_activations(
             model, forget_loader, positions=positions, layers=train_layers, point=saved["point"], desc="forget after the edit"
         )
         achieved_vs_intended = {}

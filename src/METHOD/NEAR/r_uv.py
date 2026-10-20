@@ -68,7 +68,9 @@ def main(config: DictConfig):
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     init_hydra_choices(HydraConfig.get().runtime.choices)
     cfg = TrackingConfig(config)
-    set_seed(int(cfg["seed"]))
+    seed = int(cfg["seed"])
+    set_seed(seed)
+
     ruv_cfg = cfg["ruv"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     ks = sorted(int(k) for k in ruv_cfg["ks"])
@@ -90,14 +92,15 @@ def main(config: DictConfig):
         forget_loader = one_loader(split_loaders["forget"])
         neighbor_loader = one_loader(split_loaders["neighbor"])
 
-        neighbor_data = neighbor_loader.dataset.data  # type: ignore  # tokenised HF dataset, extra_keys are columns
-        nb_by_author = neighbors_by_author(neighbor_data["author_id"], neighbor_data["neighbor_id"])
-        forget_author_set = set(forget_authors(range(len(forget_loader.dataset)), qa_per_author, author_offset))  # type: ignore
-        check_neighbors(forget_author_set, nb_by_author, ks)
-        order = nested_neighbor_order({a: nb_by_author[a] for a in forget_author_set}, seed=int(ruv_cfg["seed"]))
+        _neighbor_data = neighbor_loader.dataset.data  # type: ignore  # tokenised HF dataset, extra_keys are columns
+        _nb_by_author = neighbors_by_author(_neighbor_data["author_id"], _neighbor_data["neighbor_id"])  # {author_id: [neighbor_id, ...]}
+        forget_author_set = set(forget_authors(range(len(forget_loader.dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
+        check_neighbors(forget_author_set, _nb_by_author, ks)
+
+        order = nested_neighbor_order({a: _nb_by_author[a] for a in forget_author_set}, seed=seed)
         logger.info(
             f"{len(forget_author_set)} forget author(s), neighbours per author: "
-            f"{ {a: len(nb_by_author[a]) for a in sorted(forget_author_set)} }, ks={ks}"
+            f"{ {a: len(_nb_by_author[a]) for a in sorted(forget_author_set)} }, ks={ks}"
         )
 
     # 3. Mean activation per author (forget questions) and per (author, neighbour) (neighbour questions)

@@ -111,8 +111,10 @@ def main(config: DictConfig):
         if k not in saved["ks"]:
             raise ValueError(f"select.k={k} was not computed in {sel['r_uv_path']} (ks={saved['ks']}).")
         if saved["point"] not in ("block_out", "mlp_out"):
-            raise ValueError(f"r_UV was computed at `{saved['point']}`; steering needs the residual stream "
-                             "(`block_out` / `mlp_out`).")
+            raise ValueError(
+                f"r_UV was computed at `{saved['point']}`; "
+                "steering needs the residual stream (`block_out` / `mlp_out`)."
+            )
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
         candidates = resolve_candidate_layers(sel, saved["layers"])
         logger.info(f"K={k}, coeff={coeff}, mode={mode}, positions={positions}, candidate layers={candidates}")
