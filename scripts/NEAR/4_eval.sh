@@ -14,11 +14,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
 # Step 4: evaluate the edited models of 3_w_down.sh
-#   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/<task>/TOFU_EVAL.json
+#   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/TOFU/<task>/TOFU_EVAL.json
 #       RETAIN_LOGS: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (forget quality / privleak reference)
 #   (b) the step-1 probe on the edited model: compare its responses/responses_summary.json / activations_summary.json with
 #       the `full` and `retain` probes of 0_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
-RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
+RETAIN_LOGS=saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
@@ -35,7 +35,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       forget_split=${FORGET_SPLIT} \
       holdout_split=${HOLDOUT_SPLIT} \
       retain_logs_path=${RETAIN_LOGS} \
-      task_name=NEAR/eval_near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
+      task_name=NEAR/near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
 
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
     python src/METHOD/NEAR/probe.py \

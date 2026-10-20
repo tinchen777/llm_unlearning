@@ -18,7 +18,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # RETAIN_LOGS: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (forget quality / privleak reference).
 # NOTE: the TOFU forget metrics are those of the WHOLE forget split (forget_split=${FORGET_SPLIT}); LUNAR unlearns the
 # first 20 QAs (one author) of it, so forget quality is only meaningful if FORGET_HF_SPLIT is "train" (all of it).
-RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
+RETAIN_LOGS=saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
   CONFIG_DIR=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})
@@ -34,6 +34,6 @@ for MODE in "${SHIFT_MODES[@]}"; do
     forget_split=${FORGET_SPLIT} \
     holdout_split=${HOLDOUT_SPLIT} \
     retain_logs_path=${RETAIN_LOGS} \
-    task_name=LUNAR/eval_lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")_${TAG}
+    task_name=LUNAR/lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")_${TAG}
   echo end eval ${EDITED}
 done

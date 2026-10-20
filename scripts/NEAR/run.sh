@@ -22,8 +22,8 @@ STAGES=${2:-"1 2 3 4"}
 
 BASE_MODELS=(
   Llama-3.2-1B-Instruct
-  # Llama-3.2-3B-Instruct
-  # Llama-3.1-8B-Instruct
+  Llama-3.2-3B-Instruct
+  Llama-3.1-8B-Instruct
 )
 
 # "forget_split holdout_split retain_split neighbor_split author_offset"
