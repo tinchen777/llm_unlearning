@@ -12,7 +12,7 @@ RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 FULL_MODEL=tofu/tofu_${MODEL}_full          # the model that KNOWS the forget data = start of every method
 
 # TOFU_EVAL.json of the official retain model of RETAIN_SPLIT: forget quality / privleak reference
-RETAIN_LOGS=saves/eval/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
+RETAIN_LOGS=saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 # Hydra overrides of the data. An ARRAY, used as "${SPLIT_ARGS[@]}".
 SPLIT_ARGS=(
