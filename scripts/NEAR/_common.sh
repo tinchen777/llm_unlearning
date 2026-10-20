@@ -19,9 +19,9 @@ SPLITS="forget_split=${FORGET_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} retain_spl
 FULL_MODEL=tofu/tofu_${MODEL}_full
 TASK_NAME=near_tofu_${MODEL}_${FORGET_SPLIT}     # output: saves/NEAR/${TASK_NAME}/
 
-KS=(1 5 15)                       # number of neighbours per author used as the reference (must be in ruv.ks)
+read -r -a KS <<< "${KS_LIST:-1 5 15}"   # number of neighbours per author used as the reference (must be in ruv.ks); e.g. KS_LIST="5"
 COEFF=${COEFF:-1.0}                         # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
-SHIFT_MODES=(eoi all)             # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
+read -r -a SHIFT_MODES <<< "${MODES:-eoi all}"   # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
 SOLVER=${SOLVER:-adam}                       # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
 
 # folder of one setting (K, MODE) below saves/NEAR/${TASK_NAME}/ and the W_down run folder of (LAYER) inside it; same rules

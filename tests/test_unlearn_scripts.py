@@ -33,7 +33,7 @@ def test_method_defaults_are_not_overridden(method):
     out = compose(method, ENV_3B_FORGET05)
     assert "task_name: tofu_Llama-3.2-3B-Instruct_forget05/" + method in out
     assert "forget_split: forget05" in out and "retain_split: retain95" in out and "holdout_split: holdout05" in out
-    assert "saves/eval/tofu_Llama-3.2-3B-Instruct_retain95/TOFU_EVAL.json" in out
+    assert "saves/eval/TOFU/tofu_Llama-3.2-3B-Instruct_retain95/TOFU_EVAL.json" in out
     if method == "SimNPO":
         assert "gamma: 0.125" in out  # the authors' value, not the 1.0 of the former scripts
     else:

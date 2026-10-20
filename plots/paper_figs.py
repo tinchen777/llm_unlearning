@@ -57,8 +57,8 @@ PROBE_RETAIN = ["NEAR/0_probe/tofu_{model}_{retain}", "NEAR/0_probe/tofu_{model}
 PROBE_NEAR = ["NEAR/probe/probe_near_tofu_{model}_{forget}_k{k}_l*_c*_{mode}"]
 PROBE_LUNAR = ["NEAR/probe/probe_lunar_tofu_{model}_{forget}_*_{mode}", "LUNAR/probe/probe_lunar_tofu_{model}_{forget}_*_{mode}"]
 # the reference models of TOFU (official logs, scripts: python setup/setup_data.py --eval_logs)
-EVAL_ORIGINAL = ["eval/tofu_{model}_full/evals_{forget}", "eval/tofu_{model}_full"]
-EVAL_RETAIN = ["eval/tofu_{model}_{retain}"]
+EVAL_ORIGINAL = ["eval/TOFU/tofu_{model}_full/evals_{forget}", "eval/tofu_{model}_full/evals_{forget}", "eval/tofu_{model}_full"]
+EVAL_RETAIN = ["eval/TOFU/tofu_{model}_{retain}", "eval/tofu_{model}_{retain}"]
 
 TABLE_METRICS = ["forget_quality", "model_utility", "forget_Q_A_ROUGE", "forget_Q_A_Prob", "forget_truth_ratio", "privleak"]
 SPLITS = ["forget", "neighbor", "retain", "holdout"]
