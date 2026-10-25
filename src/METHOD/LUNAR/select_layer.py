@@ -42,7 +42,6 @@ import torch
 from omegaconf import DictConfig
 
 from data import get_split_data, make_subloader
-from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
 from model.steer import Steerer
@@ -82,8 +81,9 @@ def main(config: DictConfig):
     coeff, mode, ref_position = float(sel["coeff"]), str(sel["shift_mode"]), int(sel["ref_position"])
     hallucination_rouge = float(cfg.get("hallucination_rouge", 0.3))
 
-    with step_logging(logger, "[1/4]", "r_UV", sel):
-        saved = torch.load(str(sel["r_uv_path"]), weights_only=False)
+    # 1. Load r_UV
+    with step_logging(logger, "<1/4>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
+        saved = torch.load(str(r_uv_path), weights_only=False)
         if saved["point"] not in ("block_out", "mlp_out"):
             raise ValueError(f"r_UV was computed at `{saved['point']}`; steering needs the residual stream "
                              "(`block_out` / `mlp_out`).")
@@ -93,23 +93,38 @@ def main(config: DictConfig):
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
-    with step_logging(logger, "[2/4]", "model & tokenizer & data", model_cfg):
+    # 2. Load model and tokenizer
+    with step_logging(logger, "<2/4>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
         n_layers = len(get_decoder_layers(model))
         if max(candidates) >= n_layers:
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
-        split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
-        datasets, collator = split_data["forget"]
-        forget_loader = make_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
-                                      max_samples=sel.get("max_samples", None), seed=seed)
+    # 3. Load data
+    with step_logging(logger, "<3/4>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
+        split_data = get_split_data(
+            data_cfg,
+            use_single_dataset=True,
+            tokenizer=tokenizer,
+            template_args=template_args
+        )
+        dataset, collator = split_data["forget"]
+        forget_loader = make_subloader(
+            dataset,
+            sel["batch_size"],
+            collator=collator,
+            max_samples=sel.get("max_samples", None),
+            seed=seed
+        )
 
-    with step_logging(logger, "[3/4]", "sentence embeddings of the target responses", sel):
+    # 4. Load sentence embeddings of the target responses
+    with step_logging(logger, "<4/4>", "sentence embeddings of the target responses", mode="load", cfg=sel):
         embedder = SentenceEmbedder(str(sel["embedder"]), device=model.device)
         desired = embedder([str(x) for x in sel["desired_responses"]])
         unrelated = embedder([str(x) for x in sel["unrelated_responses"]])
 
-    with step_logging(logger, "[4/4]", "steering per layer", sel):
+    # ==========
+    with step_logging(logger, "#1", "steering per layer"):
         per_layer = {}
         for layer in candidates:
             r = saved["r_uv"][:, saved["layers"].index(layer), :]  # [n_pos, d]

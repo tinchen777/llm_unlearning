@@ -83,7 +83,6 @@ def main(config: DictConfig):
         model.eval()
     # 2. Dataloaders (forget, neighbor) + check that authors / neighbours are consistent BEFORE any forward pass
     with step_logging(logger, "<2/2>", "dataloaders & neighbour check", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-    # with step_logging(logger, "[2/4]", "dataloaders & neighbour check", cfg["data"]):
         split_loaders = make_split_loaders(
             data_cfg,
             batch_size=ruv_cfg["batch_size"],

@@ -53,7 +53,6 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
 from data import get_split_data, make_subloader
-from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_out_proj
 from model.edit import apply_w_down, build_shift, collect_mlp_tokens
@@ -105,10 +104,10 @@ def main(config: DictConfig):
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. r_UV of the K-neighbour reference
-    with step_logging(logger, "[1/6]", "r_UV", wd):
-        saved = torch.load(str(wd["r_uv_path"]), weights_only=False)
+    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=wd["r_uv_path"], ensure_cfg=True) as r_uv_path:
+        saved = torch.load(str(r_uv_path), weights_only=False)
         if k not in saved["ks"]:
-            raise ValueError(f"wdown.k={k} was not computed in {wd['r_uv_path']} (ks={saved['ks']}).")
+            raise ValueError(f"wdown.k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
         if saved["point"] not in ("block_out", "mlp_out"):
             raise ValueError(f"r_UV was computed at `{saved['point']}`; only `block_out` / `mlp_out` live in the "
                              "d_model space of the MLP output.")
@@ -126,16 +125,23 @@ def main(config: DictConfig):
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
-    # 2. Model and data
-    with step_logging(logger, "[2/6]", "model & tokenizer & data", model_cfg):
+    # 2. Load model and tokenizer
+    with step_logging(logger, "<2/3>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-        split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
+    # 3. Load data
+    with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
+        split_data = get_split_data(
+            data_cfg,
+            use_single_dataset=True,
+            tokenizer=tokenizer,
+            template_args=template_args
+        )
 
     def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        datasets, collator = split_data[split]
-        return make_subloader(one_dataset(datasets), batch_size, collator=collator, max_samples=max_samples, seed=seed)
+        dataset, collator = split_data[split]
+        return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
     write_responses = make_response_writer(
@@ -143,12 +149,13 @@ def main(config: DictConfig):
         cfg["generation_args"], hallucination_rouge, run_dir,
     )
 
-    # 3. Responses of the ORIGINAL model (same fixed subset as after the edit)
-    with step_logging(logger, "[3/6]", "responses before the edit", wd):
+    # ==========
+    # Responses of the ORIGINAL model (same fixed subset as after the edit)
+    with step_logging(logger, "#1", "responses before the edit"):
         responses_before = write_responses("before")
 
-    # 4. Record the original (x, y) of every token and build the targets
-    with step_logging(logger, "[4/6]", "MLP inputs / targets", wd):
+    # Record the original (x, y) of every token and build the targets
+    with step_logging(logger, "#2", "MLP inputs / targets"):
         def shift_fn(batch, layer, attention_mask):
             authors = forget_authors(batch["index"], qa_per_author, author_offset)
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
@@ -165,8 +172,8 @@ def main(config: DictConfig):
         num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
         logger.info(f"tokens: {num_tokens}")
 
-    # 5. Train every layer on the recorded data (independent of each other), then write the weights
-    with step_logging(logger, "[5/6]", "W_down training", wd):
+    # Train every layer on the recorded data (independent of each other), then write the weights
+    with step_logging(logger, "#3", "W_down training"):
         device = wd.get("device", None) or model.device
         per_layer, new_weights = train_w_down_layers(
             model, train_layers, forget_tokens, retain_tokens, wd, seed, solver=solver, device=device
@@ -177,8 +184,8 @@ def main(config: DictConfig):
                     "weights": {l: w.to(get_out_proj(model, l).weight.dtype) for l, w in new_weights.items()}},
                    run_dir / "w_down.pt")
 
-    # 6. What did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
-    with step_logging(logger, "[6/6]", "effect of the edit", wd):
+    # What did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
+    with step_logging(logger, "#4", "effect of the edit"):
         new_means, _, _ = collect_group_means(
             model, forget_loader, lambda b: forget_authors(b["index"], qa_per_author, author_offset),
             positions=positions, layers=train_layers, point=saved["point"], desc="forget after the edit"

@@ -42,7 +42,6 @@ import torch
 from omegaconf import DictConfig
 
 from data import make_split_loaders
-from data.utils import one_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_mean_activations
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
@@ -74,18 +73,24 @@ def main(config: DictConfig):
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
-    with step_logging(logger, "[1/3]", "model & tokenizer", model_cfg):
+    # 1. Load model and tokenizer
+    with step_logging(logger, "<1/2>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-
-    with step_logging(logger, "[2/3]", "dataloaders", cfg["data"]):
+    # 2. Load dataloaders (forget, ref)
+    with step_logging(logger, "<2/2>", "dataloaders", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
         split_loaders = make_split_loaders(
-            cfg["data"], batch_size=ruv_cfg["batch_size"], shuffle=False,
-            tokenizer=tokenizer, template_args=template_args
+            data_cfg,
+            batch_size=ruv_cfg["batch_size"],
+            use_single_loader=True,
+            shuffle=False,
+            tokenizer=tokenizer,
+            template_args=template_args
         )
-        forget_loader, ref_loader = one_loader(split_loaders["forget"]), one_loader(split_loaders["ref"])
+        forget_loader, ref_loader = split_loaders["forget"], split_loaders["ref"]
 
-    with step_logging(logger, "[3/3]", "r_UV", ruv_cfg):
+    # ==========
+    with step_logging(logger, "#1", "calculate r_UV"):
         positions = ruv_cfg.get("positions", None)
         positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
         layers = ruv_cfg.get("layers", None)

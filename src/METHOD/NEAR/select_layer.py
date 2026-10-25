@@ -42,7 +42,6 @@ import torch
 from omegaconf import DictConfig
 
 from data import get_split_data, make_subloader
-from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
 from model.steer import Steerer
@@ -136,10 +135,10 @@ def main(config: DictConfig):
             template_args=template_args
         )
 
-    # def loader(split):
-    #     datasets, collator = split_data[split]
-    #     return make_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
-    #                          max_samples=sel.get("max_samples", None), seed=seed)
+    def loader(split):
+        dataset, collator = split_data[split]
+        return make_subloader(dataset, sel["batch_size"], collator=collator,
+                              max_samples=sel.get("max_samples", None), seed=seed)
 
     def run(split, desc, before_batch=None):
         records = generate_responses(model, tokenizer, loader(split), cfg["generation_args"], desc=desc,
