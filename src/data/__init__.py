@@ -57,6 +57,17 @@ def make_split_loaders(
     seed: int = 42,
     **data_kwargs
 ) -> Dict[str, Dict[str, DataLoader]]: ...
+@overload
+def make_split_loaders(
+    data_cfg: TrackingConfig,
+    batch_size: int,
+    use_single_loader: bool,
+    shuffle: bool = False,
+    num_workers: int = 0,
+    max_samples: Optional[int] = None,
+    seed: int = 42,
+    **data_kwargs
+) -> Dict[str, Any]: ...
 
 
 def make_split_loaders(
@@ -88,7 +99,9 @@ def make_split_loaders(
         use_single_dataset=False,
         **data_kwargs
     )
-    _reduce_loaders = lambda loaders: one_loader(loaders) if use_single_loader else loaders
+
+    def _reduce_loaders(loaders: Dict[str, DataLoader]):
+        return one_loader(loaders) if use_single_loader else loaders
 
     return {
         split_name: _reduce_loaders(make_loaders(
@@ -143,6 +156,12 @@ def get_split_data(
     use_single_dataset: Literal[False] = ...,
     **kwargs
 ) -> Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]]: ...
+@overload
+def get_split_data(
+    data_cfg: TrackingConfig,
+    use_single_dataset: bool,
+    **kwargs
+) -> Dict[str, Tuple[Any, Optional[Any]]]: ...
 
 
 def get_split_data(
@@ -164,7 +183,8 @@ def get_split_data(
         ...
     }
     """
-    _reduce_datasets = lambda datasets: one_dataset(datasets) if use_single_dataset else datasets
+    def _reduce_datasets(datasets: Dict[str, Dataset]):
+        return one_dataset(datasets) if use_single_dataset else datasets
 
     split_data = {
         split_name: (
