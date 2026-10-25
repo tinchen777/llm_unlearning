@@ -79,7 +79,7 @@ def make_split_loaders(
     max_samples: Optional[int] = None,
     seed: int = 42,
     **data_kwargs
-):
+) -> Dict[str, Any]:
     """
     Returns
     -------
@@ -168,7 +168,7 @@ def get_split_data(
     data_cfg: TrackingConfig,
     use_single_dataset: bool = False,
     **kwargs
-):
+) -> Dict[str, Any]:
     """
     Returns
     -------

@@ -85,9 +85,9 @@ def step_logging(
     name: str,
     *,
     mode: _Mode = ...,
-    cfg: Optional[_T] = ...,
+    cfg: Any = ...,
     ensure_cfg: bool,
-) -> Generator[Optional[_T], Any, None]: ...
+) -> Generator[Any, Any, None]: ...
 
 
 @contextmanager
