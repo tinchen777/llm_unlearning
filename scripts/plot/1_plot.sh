@@ -27,13 +27,6 @@ cd $(dirname "$0")/../.. || exit 1
 #   --cfg job  --resolve
 
 python src/plot.py \
-  +vis.run_folders='[[saves/eval/test, "*"]]' \
-  +vis.out_dir=saves/plots/eval_redirect \
+  +vis.run_folders='[[saves/eval/NEAR, "*1B*"]]' \
+  +vis.out_dir=saves/plots/eval_NEAR_1B \
   # --cfg job  --resolve
-
-# 单独画某张图的例子:
-# python src/plot.py train saves/unlearn/demo_unlearn_NCU \
-#   --keys loss forget_pull_loss anchor_loss retain_lm_loss
-# python src/plot.py evals saves/unlearn/demo_unlearn_NCU --metrics forget_quality model_utility
-# python src/plot.py tradeoff saves/unlearn/*
-# python src/plot.py dist saves/unlearn/demo_unlearn_NCU --metric forget_Q_A_Prob --stat prob

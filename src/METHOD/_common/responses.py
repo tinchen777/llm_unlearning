@@ -58,7 +58,7 @@ def is_degenerate(text: str, n: int = 3, min_distinct: float = 0.5) -> bool:
 def generate_responses(
     model: Any,
     tokenizer: Any,
-    loader: Iterable[Mapping[str, Any]],
+    dataloader: Iterable[Mapping[str, Any]],
     generation_args: Any,
     max_samples: Optional[int] = None,
     desc: str = "",
@@ -80,7 +80,7 @@ def generate_responses(
     """
     model.eval()
     records: List[Dict[str, Any]] = []
-    for batch in tqdm(loader, desc=f"Generating [{desc}]", unit="batch(es)", colour="blue"):
+    for batch in tqdm(dataloader, desc=f"Generating [{desc}]", unit="batch(es)", colour="blue"):
         if max_samples is not None and len(records) >= max_samples:
             break
         if before_batch is not None:

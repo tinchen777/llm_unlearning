@@ -41,7 +41,7 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_loaders
+from data import make_split_loaders
 from data.utils import one_loader
 from model import get_model_and_tokenizer
 from model.activations import collect_mean_activations
@@ -79,7 +79,7 @@ def main(config: DictConfig):
         model.eval()
 
     with step_logging(logger, "[2/3]", "dataloaders", cfg["data"]):
-        split_loaders = get_split_loaders(
+        split_loaders = make_split_loaders(
             cfg["data"], batch_size=ruv_cfg["batch_size"], shuffle=False,
             tokenizer=tokenizer, template_args=template_args
         )

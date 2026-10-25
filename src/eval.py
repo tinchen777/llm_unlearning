@@ -34,12 +34,10 @@ def main(config: DictConfig):
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
     # 1. Load model and tokenizer
-    with step_logging(logger, "[1/2]", "model & tokenizer", model_cfg):
+    with step_logging(logger, "<1/2>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
-
     # 2. Get Evaluators
-    eval_cfgs = cfg["eval"]
-    with step_logging(logger, "[2/2]", "evaluators", eval_cfgs):
+    with step_logging(logger, "<2/2>", "evaluators", mode="load", cfg=cfg["eval"], ensure_cfg=True) as eval_cfgs:
         evaluators = get_evaluators(
             eval_cfgs,
             tokenizer=tokenizer,
@@ -47,13 +45,17 @@ def main(config: DictConfig):
         )
 
     # ==========
+    run_dir = None
     # EVALUATION
+    with step_logging(logger, "#1", "evaluation"):
+        for evaluator in evaluators.values():
+            evaluator.evaluate(model)
+            run_dir = evaluator.output_dir
+
+    # plotting
     vis_cfg = cfg.get("vis", None)
-    for evaluator in evaluators.values():
-        evaluator.evaluate(model)
-        # plotting
-        run_dir = evaluator.output_dir
-        if vis_cfg and run_dir is not None:
+    if vis_cfg and run_dir is not None:
+        with step_logging(logger, "#2", "plotting"):
             plot_figures(run_dir, vis_cfg=vis_cfg)
 
 

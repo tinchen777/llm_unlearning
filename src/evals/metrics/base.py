@@ -7,7 +7,7 @@ from functools import wraps
 from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
 from .utils import SUBDATA_SUFFIX
-from data import get_datasets, get_collator, get_loaders
+from data import get_datasets, get_collator, make_loaders
 from data.utils import one_loader
 from utils.common import load_logs
 from utils.config import reprlib
@@ -58,7 +58,7 @@ class UnlearningMetric:
         if subdata_params or "dataloader" in self.func.params:
             try:
                 # prepare dataloaders
-                loaders = get_loaders(
+                loaders = make_loaders(
                     datasets=self._prepare_datasets(**kwargs),
                     batch_size=self.cfg_dict.pop("batch_size"),  # type: ignore
                     collator=self._prepare_collator(**kwargs)

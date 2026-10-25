@@ -41,7 +41,7 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_data, get_subloader
+from data import get_split_data, make_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
@@ -101,7 +101,7 @@ def main(config: DictConfig):
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
         split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
         datasets, collator = split_data["forget"]
-        forget_loader = get_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
+        forget_loader = make_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
                                       max_samples=sel.get("max_samples", None), seed=seed)
 
     with step_logging(logger, "[3/4]", "sentence embeddings of the target responses", sel):

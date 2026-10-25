@@ -42,7 +42,7 @@ from omegaconf import DictConfig
 from typing import Any, Dict, Hashable
 
 from data import get_split_data
-from data.utils import one_dataset, get_subloader
+from data.utils import make_subloader
 from model import get_model_and_tokenizer
 from model.activations import collect_sample_activations
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
@@ -53,7 +53,7 @@ from METHOD._common.responses import generate_responses, summarize_responses
 from METHOD._common.template import get_eoi_positions
 from METHOD.NEAR._utils.activations import mean_diff_auc
 
-logger = logging.getLogger("main(probe)")
+logger = logging.getLogger("main(NEAR-probe)")
 
 _META_KEYS = ("author_id", "neighbor_id")
 
@@ -111,154 +111,158 @@ def main(config: DictConfig):
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
     # 1. Load model and tokenizer
-    with step_logging(logger, "[1/4]", "model & tokenizer", model_cfg):
+    with step_logging(logger, "<1/2>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-
-    # 2. Data of every split (left padded, prompt only)
-    with step_logging(logger, "[2/4]", "data", cfg["data"]):
-        split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
-
-    # ==========
-    probe_cfg = cfg["probe"]
-    output_dir = Path(str(cfg["paths"]["output_dir"]))
-    # Model responses on a FIXED random subset of each split (the same subset for every model)
-    responses_cfg = probe_cfg.get("responses", None)
-    if responses_cfg:
-        responses_dir = output_dir / "responses"
-        logger.info("Generating model responses for each split...")
-        summary = {}
-        for split, (datasets, collator) in split_data.items():
-            records = generate_responses(
-                model, tokenizer,
-                loader=get_subloader(
-                    one_dataset(datasets),
-                    probe_cfg["batch_size"],
-                    collator=collator,
-                    max_samples=responses_cfg.get("max_gen_samples", None),
-                    seed=seed,
-                    shuffle=False,
-                    num_workers=0
-                ),
-                generation_args=cfg["generation_args"],
-                desc=split,
-                # refusal_patterns=list(responses_cfg["refusal_patterns"])
-            )
-            save_logs(records, responses_dir / f"responses_{split}.json")
-            summary[split] = summarize_responses(
-                records,
-                float(responses_cfg["hallucination_rouge"])
-            )
-
-            for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
-                logger.info(
-                    f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
-                    f"        GT: {record['ground_truth']!r}\n"
-                    f"        A : {record['generation']!r}"
-                )
-        save_logs(
-            {"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summary},
-            file_path=responses_dir / "responses_summary.json"
+    # 2. Load Data (left padded, prompt only)
+    with step_logging(logger, "<2/2>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
+        split_data = get_split_data(
+            data_cfg,
+            use_single_dataset=True,
+            tokenizer=tokenizer,
+            template_args=template_args
         )
 
-        for split, s in summary.items():
-            logger.info(
-                f"[{split:>8}] rougeL_recall={s['rougeL_recall']:.3f}  answer_prob={s.get('answer_prob', float('nan')):.3f}  "
-                f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
+    # ==========
+    output_dir = Path(str(cfg["paths"]["output_dir"]))
+    probe_cfg = cfg["probe"]
+    # Model responses on a FIXED random subset of each split (the same subset for every model)
+    with step_logging(logger, "#1", "calculate responses", cfg=probe_cfg.get("responses", None)) as responses_cfg:
+        if responses_cfg:
+            responses_dir = output_dir / "responses"
+            logger.info("Generating model responses for each split...")
+            summary = {}
+            for split, (dataset, collator) in split_data.items():
+                records = generate_responses(
+                    model, tokenizer,
+                    dataloader=make_subloader(
+                        dataset,
+                        probe_cfg["batch_size"],
+                        collator=collator,
+                        max_samples=responses_cfg.get("max_gen_samples", None),
+                        seed=seed,
+                        shuffle=False,
+                        num_workers=0
+                    ),
+                    generation_args=cfg["generation_args"],
+                    desc=split,
+                    # refusal_patterns=list(responses_cfg["refusal_patterns"])
+                )
+                save_logs(records, responses_dir / f"responses_{split}.json")
+                summary[split] = summarize_responses(
+                    records,
+                    float(responses_cfg["hallucination_rouge"])
+                )
+
+                for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
+                    logger.info(
+                        f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
+                        f"        GT: {record['ground_truth']!r}\n"
+                        f"        A : {record['generation']!r}"
+                    )
+            save_logs(
+                {"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summary},
+                file_path=responses_dir / "responses_summary.json"
             )
+
+            for split, s in summary.items():
+                logger.info(
+                    f"[{split:>8}] rougeL_recall={s['rougeL_recall']:.3f}  answer_prob={s.get('answer_prob', float('nan')):.3f}  "
+                    f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
+                )
 
     # Per-layer activations: means, global r_UV, separability of pairs of question sets
-    activations_cfg = probe_cfg.get("activations", None)
-    if activations_cfg:
-        positions = activations_cfg.get("positions", None)
-        positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
-        layers = activations_cfg.get("layers", None)
-        point = activations_cfg.get("point", "block_out")
-        logger.info(f"Hook point: `{point}`, positions: {positions}")
-        qa_per_author = int(cfg["ruv"]["qa_per_author"])
-        author_offset = int(cfg["ruv"]["author_offset"])
-        forget, reference = activations_cfg["forget"], activations_cfg["reference"]
+    with step_logging(logger, "#2", "calculate activations", cfg=probe_cfg.get("activations", None)) as activations_cfg:
+        if activations_cfg:
+            positions = activations_cfg.get("positions", None)
+            positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
+            layers = activations_cfg.get("layers", None)
+            point = activations_cfg.get("point", "block_out")
+            logger.info(f"Hook point: `{point}`, positions: {positions}")
+            qa_per_author = int(cfg["ruv"]["qa_per_author"])
+            author_offset = int(cfg["ruv"]["author_offset"])
+            forget, reference = activations_cfg["forget"], activations_cfg["reference"]
 
-        per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
-        groups = {}  # {split: [group key per row]}
-        for split, (datasets, collator) in split_data.items():
-            acts, layers, meta = collect_sample_activations(
-                model,
-                dataloader=get_subloader(
-                    one_dataset(datasets),
-                    probe_cfg["batch_size"],
-                    collator=collator,
-                    max_samples=activations_cfg.get("max_act_samples", None),
-                    seed=seed
-                ),
-                positions=positions, layers=layers, point=point, desc=split, meta_keys=_META_KEYS
-            )
-            order = sorted(acts)
-            per_sample[split] = torch.stack([acts[i] for i in order]).float()
-            groups[split] = [sample_group(split, i, meta.get(i, {}), forget, qa_per_author, author_offset) for i in order]
-        means = {split: a.mean(0) for split, a in per_sample.items()}  # [n_pos, n_layers, d]
-        # r_UV[p, l]: shift that moves the forget activations onto the reference (LUNAR: ref - forget)
-        r_uv = unlearning_vector(means[reference], means[forget])  # [n_pos, n_layers, d]
+            per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
+            groups = {}  # {split: [group key per row]}
+            for split, (dataset, collator) in split_data.items():
+                acts, layers, meta = collect_sample_activations(
+                    model,
+                    dataloader=make_subloader(
+                        dataset,
+                        probe_cfg["batch_size"],
+                        collator=collator,
+                        max_samples=activations_cfg.get("max_act_samples", None),
+                        seed=seed
+                    ),
+                    positions=positions, layers=layers, point=point, desc=split, meta_keys=_META_KEYS
+                )
+                order = sorted(acts)
+                per_sample[split] = torch.stack([acts[i] for i in order]).float()
+                groups[split] = [sample_group(split, i, meta.get(i, {}), forget, qa_per_author, author_offset) for i in order]
+            means = {split: a.mean(0) for split, a in per_sample.items()}  # [n_pos, n_layers, d]
+            # r_UV[p, l]: shift that moves the forget activations onto the reference (LUNAR: ref - forget)
+            r_uv = unlearning_vector(means[reference], means[forget])  # [n_pos, n_layers, d]
 
-        torch.save({
-            "r_uv": r_uv,
-            "means": means,
-            "forget": forget,
-            "reference": reference,
-            "positions": positions,
-            "layers": layers,
-            "point": point,
-            "num_samples": {split: len(a) for split, a in per_sample.items()},
-            "num_groups": {split: len(set(g)) for split, g in groups.items()},
-        }, output_dir / "activations.pt")
+            torch.save({
+                "r_uv": r_uv,
+                "means": means,
+                "forget": forget,
+                "reference": reference,
+                "positions": positions,
+                "layers": layers,
+                "point": point,
+                "num_samples": {split: len(a) for split, a in per_sample.items()},
+                "num_groups": {split: len(set(g)) for split, g in groups.items()},
+            }, output_dir / "activations.pt")
 
-        # separability per layer, on the activations averaged over the end-of-instruction positions
-        pooled = {split: a.mean(1) for split, a in per_sample.items()}  # [n, n_layers, d]
-        seen = [s for s in activations_cfg["seen"] if s in pooled]
-        unseen = [s for s in activations_cfg["unseen"] if s in pooled]
-        pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
-        pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data), 2)]
+            # separability per layer, on the activations averaged over the end-of-instruction positions
+            pooled = {split: a.mean(1) for split, a in per_sample.items()}  # [n, n_layers, d]
+            seen = [s for s in activations_cfg["seen"] if s in pooled]
+            unseen = [s for s in activations_cfg["unseen"] if s in pooled]
+            pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
+            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data), 2)]
 
-        def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
-            try:
-                return mean_diff_auc(x, y, seed=seed, groups_a=ga, groups_b=gb)
-            except ValueError as e:  # e.g. fewer groups than folds (forget01 has 2 authors, fine; one author is not)
-                logger.warning(f"group-wise AUC skipped: {e}")
-                return None
+            def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
+                try:
+                    return mean_diff_auc(x, y, seed=seed, groups_a=ga, groups_b=gb)
+                except ValueError as e:  # e.g. fewer groups than folds (forget01 has 2 authors, fine; one author is not)
+                    logger.warning(f"group-wise AUC skipped: {e}")
+                    return None
 
-        layer_summary = {}
-        for i, layer in enumerate(layers):
-            cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
-            cat_groups = lambda names: [g for s in names for g in groups[s]]
-            norm_forget = means[forget][:, i].norm(dim=-1).mean().item()
-            r_uv_norm = r_uv[:, i].norm(dim=-1).mean().item()
-            layer_summary[str(layer)] = {
-                "r_uv_norm": r_uv_norm,
-                "r_uv_rel_norm": r_uv_norm / norm_forget,  # size of the redirection relative to the activation
-                **{f"norm[{s}]": means[s][:, i].norm(dim=-1).mean().item() for s in means},
-                **{
-                    f"cos[{a},{b}]": F.cosine_similarity(means[a][:, i], means[b][:, i], dim=-1).mean().item()
-                    for a, b in itertools.combinations(means, 2)
-                },
-                **{f"auc[{name}]": mean_diff_auc(cat(a), cat(b), seed=seed) for name, a, b in pairs},
-                **{f"auc_group[{name}]": group_auc(cat(a), cat(b), cat_groups(a), cat_groups(b)) for name, a, b in pairs},
-            }
-        save_logs({
-            "note": "auc[A | B]: 2-fold cross-validated AUC of separating A from B along their difference of means "
-                    "(0.5 = indistinguishable), folds split BY QUESTION. auc_group[A | B]: the same with folds split "
-                    "BY AUTHOR (a forget author and his neighbours share a fold), so an author's name alone cannot "
-                    "carry the separation across the split; prefer it. It is null when a set has fewer than 4 authors "
-                    "(forget01 has 2: the direction cannot generalise across so few and the value would be ~0 or ~1 "
-                    "by chance); use forget05 / forget10 for it. IMPORTANT: both measure how different the two "
-                    "QUESTION SETS are (other authors, templates, lengths: forget | holdout is already ~0.7 at layer 0 "
-                    "where no knowledge can be encoded), NOT whether the model knows them. Do not expect 0.5 for "
-                    "sets about different authors, whatever the model. Use (1) only matched pairs: forget | neighbour "
-                    "(neighbours are rewrites of the forget questions) and (2) the difference of the SAME pair between "
-                    "two models, e.g. full - retain (src/METHOD/NEAR/neighbor_compare.py): content effects cancel, knowledge "
-                    "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||.",
-            "layers": layer_summary,
-        }, output_dir / "activations_summary.json")  # type: ignore
-        logger.info(f"Saved r_UV {tuple(r_uv.shape)} (n_pos, n_layers, d) and per-layer diagnostics to {output_dir}")
+            layer_summary = {}
+            for i, layer in enumerate(layers):
+                cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
+                cat_groups = lambda names: [g for s in names for g in groups[s]]
+                norm_forget = means[forget][:, i].norm(dim=-1).mean().item()
+                r_uv_norm = r_uv[:, i].norm(dim=-1).mean().item()
+                layer_summary[str(layer)] = {
+                    "r_uv_norm": r_uv_norm,
+                    "r_uv_rel_norm": r_uv_norm / norm_forget,  # size of the redirection relative to the activation
+                    **{f"norm[{s}]": means[s][:, i].norm(dim=-1).mean().item() for s in means},
+                    **{
+                        f"cos[{a},{b}]": F.cosine_similarity(means[a][:, i], means[b][:, i], dim=-1).mean().item()
+                        for a, b in itertools.combinations(means, 2)
+                    },
+                    **{f"auc[{name}]": mean_diff_auc(cat(a), cat(b), seed=seed) for name, a, b in pairs},
+                    **{f"auc_group[{name}]": group_auc(cat(a), cat(b), cat_groups(a), cat_groups(b)) for name, a, b in pairs},
+                }
+            save_logs({
+                "note": "auc[A | B]: 2-fold cross-validated AUC of separating A from B along their difference of means "
+                        "(0.5 = indistinguishable), folds split BY QUESTION. auc_group[A | B]: the same with folds split "
+                        "BY AUTHOR (a forget author and his neighbours share a fold), so an author's name alone cannot "
+                        "carry the separation across the split; prefer it. It is null when a set has fewer than 4 authors "
+                        "(forget01 has 2: the direction cannot generalise across so few and the value would be ~0 or ~1 "
+                        "by chance); use forget05 / forget10 for it. IMPORTANT: both measure how different the two "
+                        "QUESTION SETS are (other authors, templates, lengths: forget | holdout is already ~0.7 at layer 0 "
+                        "where no knowledge can be encoded), NOT whether the model knows them. Do not expect 0.5 for "
+                        "sets about different authors, whatever the model. Use (1) only matched pairs: forget | neighbour "
+                        "(neighbours are rewrites of the forget questions) and (2) the difference of the SAME pair between "
+                        "two models, e.g. full - retain (src/METHOD/NEAR/neighbor_compare.py): content effects cancel, knowledge "
+                        "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||.",
+                "layers": layer_summary,
+            }, output_dir / "activations_summary.json")  # type: ignore
+            logger.info(f"Saved r_UV {tuple(r_uv.shape)} (n_pos, n_layers, d) and per-layer diagnostics to {output_dir}")
 
 
 if __name__ == "__main__":

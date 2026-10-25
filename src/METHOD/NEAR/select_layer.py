@@ -41,7 +41,7 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_data, get_subloader
+from data import get_split_data, make_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
@@ -105,11 +105,11 @@ def main(config: DictConfig):
     mode, ref_position = str(sel["shift_mode"]), int(sel["ref_position"])
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
 
-    # 1. r_UV of the K-neighbour reference
-    with step_logging(logger, "[1/4]", "r_UV", sel):
-        saved = torch.load(str(sel["r_uv_path"]), weights_only=False)
+    # 1. Load r_UV of the K-neighbour reference
+    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
+        saved = torch.load(str(r_uv_path), weights_only=False)
         if k not in saved["ks"]:
-            raise ValueError(f"select.k={k} was not computed in {sel['r_uv_path']} (ks={saved['ks']}).")
+            raise ValueError(f"select.k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
         if saved["point"] not in ("block_out", "mlp_out"):
             raise ValueError(
                 f"r_UV was computed at `{saved['point']}`; "
@@ -118,40 +118,46 @@ def main(config: DictConfig):
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
         candidates = resolve_candidate_layers(sel, saved["layers"])
         logger.info(f"K={k}, coeff={coeff}, mode={mode}, positions={positions}, candidate layers={candidates}")
-
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
-    # 2. Model and data
-    with step_logging(logger, "[2/4]", "model & tokenizer & data", model_cfg):
+    # 2. Load model and tokenizer
+    with step_logging(logger, "<2/3>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
         n_layers = len(get_decoder_layers(model))
         if max(candidates) >= n_layers:
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
-        split_data = get_split_data(cfg["data"], tokenizer=tokenizer, template_args=template_args)
+    # 3. load Data
+    with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
+        split_data = get_split_data(
+            data_cfg,
+            use_single_dataset=True,
+            tokenizer=tokenizer,
+            template_args=template_args
+        )
 
-    def loader(split):
-        datasets, collator = split_data[split]
-        return get_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
-                             max_samples=sel.get("max_samples", None), seed=seed)
+    # def loader(split):
+    #     datasets, collator = split_data[split]
+    #     return make_subloader(one_dataset(datasets), sel["batch_size"], collator=collator,
+    #                          max_samples=sel.get("max_samples", None), seed=seed)
 
     def run(split, desc, before_batch=None):
         records = generate_responses(model, tokenizer, loader(split), cfg["generation_args"], desc=desc,
                                      before_batch=before_batch)
         return records, summarize_responses(records, hallucination_rouge)
 
-    # 3. Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
-    with step_logging(logger, "[3/4]", "unsteered reference", sel):
+    # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
+    with step_logging(logger, "#1", "get unsteered reference", cfg=sel["unseen_splits"], ensure_cfg=True) as unseen_splits:
         _, original = run("forget", "forget / unsteered")
-        unseen_parts = {s: run(s, f"{s} / unsteered")[1] for s in sel["unseen_splits"]}
+        unseen_parts = {s: run(s, f"{s} / unsteered")[1] for s in unseen_splits}
         unseen = {
             key: sum(p[key] for p in unseen_parts.values()) / len(unseen_parts)
             for key in ("rougeL_recall", "answer_logprob", "refusal_rate", "degenerate_rate", "hallucination_rate")
         }
         logger.info(f"forget (unsteered): {original}\nunseen (unsteered): {unseen}")
 
-    # 4. Steer every candidate layer
-    with step_logging(logger, "[4/4]", "steering per layer", sel):
+    # Steer every candidate layer
+    with step_logging(logger, "#2", "steering per layer"):
         per_layer = {}
         for layer in candidates:
             li = saved["layers"].index(layer)

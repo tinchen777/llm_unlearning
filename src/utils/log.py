@@ -5,10 +5,9 @@ from rich.markup import escape
 from rich import print
 from cobra_color import cstr
 from contextlib import contextmanager
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, Literal, overload, Generator
 
-if TYPE_CHECKING:
-    from .config import TrackingConfig
+from .config import TrackingConfig
 
 
 class RichNameFormatter(logging.Formatter):
@@ -36,20 +35,86 @@ class RichNameFormatter(logging.Formatter):
         return name + message
 
 
-@contextmanager
-def step_logging(logger: logging.Logger, step: str, name: str, cfg: Optional[TrackingConfig] = None, is_skip: bool = False):
-    print()
-    # loc of config
-    loc = f" `@{cfg.loc_choices}`" if cfg is not None else ""
+CONFIG_PLACEHOLDER = "<CONFIG_PLACEHOLDER>"
+LOGGING_MODE = {
+    "load": ("Loading", "Loaded"),
+    "step": ("Start", "End"),
+}
 
-    if is_skip:
-        logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Skipping {name}{loc}.", styles="bold"))
+@overload
+@contextmanager
+def step_logging(
+    logger: logging.Logger,
+    step_tag: str,
+    name: str,
+    *,
+    mode: Literal["load", "step"] = ...,
+    cfg: Optional[TrackingConfig] = ...,
+    ensure_cfg: Literal[True],
+) -> Generator[TrackingConfig, Any, None]: ...
+@overload
+@contextmanager
+def step_logging(
+    logger: logging.Logger,
+    step_tag: str,
+    name: str,
+    *,
+    mode: Literal["load", "step"] = ...,
+    cfg: Optional[TrackingConfig] = ...,
+    ensure_cfg: Literal[False] = ...,
+) -> Generator[Optional[TrackingConfig], Any, None]: ...
+@overload
+@contextmanager
+def step_logging(
+    logger: logging.Logger,
+    step_tag: str,
+    name: str,
+    *,
+    mode: Literal["load", "step"] = ...,
+    cfg: Optional[TrackingConfig] = ...,
+    ensure_cfg: bool,
+) -> Generator[Optional[TrackingConfig], Any, None]: ...
+
+
+@contextmanager
+def step_logging(
+    logger: logging.Logger,
+    step_tag: str,
+    name: str,
+    *,
+    mode: Literal["load", "step"] = "step",
+    cfg: Optional[TrackingConfig] = CONFIG_PLACEHOLDER,  # type: ignore
+    ensure_cfg: bool = False,
+) -> Generator[Optional[TrackingConfig], Any, None]:
+    # name
+    name += f" `@{cfg.loc_choices}`" if isinstance(cfg, TrackingConfig) else ""
+    # mode
+    header, footer = LOGGING_MODE[mode]
+
+    if cfg is None:
+        logger.info(
+            cstr(step_tag, fg="g", styles="bold") +
+            cstr(f" Skipping {name}.", styles=("bold", "del"))
+        )
         yield
     else:
-        logger.info(cstr(step, fg="y", styles="bold") + cstr(f" Loading {name}{loc} ...", styles="bold"))
+        logger.info(
+            cstr(step_tag, fg="d", bg="y", styles="bold") +
+            cstr(f" {header} {name} ...", styles="bold")
+        )
         try:
-            yield
+            if cfg is CONFIG_PLACEHOLDER or cfg is None:
+                if ensure_cfg:
+                    raise ValueError(f"`cfg` must be a `TrackingConfig`, got {type(cfg)}.")
+                else:
+                    yield None
+            else:
+                yield cfg
         except Exception as e:
-            raise RuntimeError(f"Error loading {name}{loc}.") from e
+            raise RuntimeError(f"Error for {name}!") from e
         else:
-            logger.info(cstr(step, fg="g", styles="bold") + cstr(f" Loaded {name}{loc}.", styles="bold"))
+            logger.info(
+                cstr(step_tag, fg="d", bg="g", styles="bold") +
+                cstr(f" {footer} {name}.", styles="bold")
+            )
+    print()

@@ -52,7 +52,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from data import get_split_data, get_subloader
+from data import get_split_data, make_subloader
 from data.utils import one_dataset
 from model import get_model_and_tokenizer
 from model.activations import get_out_proj
@@ -135,7 +135,7 @@ def main(config: DictConfig):
     def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
         """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
         datasets, collator = split_data[split]
-        return get_subloader(one_dataset(datasets), batch_size, collator=collator, max_samples=max_samples, seed=seed)
+        return make_subloader(one_dataset(datasets), batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
     write_responses = make_response_writer(

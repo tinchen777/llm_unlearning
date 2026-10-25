@@ -2,6 +2,7 @@
 Utility functions for `data` module.
 """
 from __future__ import annotations
+from collections.abc import Sized
 import torch
 from torch.utils.data import DataLoader, Subset
 from typing import Any, Optional, Dict, TYPE_CHECKING
@@ -21,10 +22,13 @@ def fixed_subset(
     A FIXED random subset of `max_samples` samples (sorted indices; the same for every call / model given `seed`),
     or the dataset itself when `max_samples` is None or not smaller than the dataset.
     """
-    if max_samples is None or int(max_samples) >= len(dataset):  # type: ignore
+    dataset_size = get_dataset_size(dataset)
+
+    if max_samples is None or int(max_samples) >= dataset_size:
         return dataset
+
     idx = torch.randperm(
-        len(dataset),  # type: ignore
+        dataset_size,
         generator=torch.Generator().manual_seed(seed)
     )[:int(max_samples)]
     return Subset(dataset, sorted(idx.tolist()))
@@ -36,7 +40,7 @@ def one_dataset(datasets: Dict[str, Dataset]) -> Dataset:
     return next(iter(datasets.values()))
 
 
-def get_subloader(
+def make_subloader(
     dataset: Dataset,
     batch_size: int,
     collator: Optional[Any] = None,
@@ -44,7 +48,9 @@ def get_subloader(
     seed: int = 42,
     **loader_kwargs
 ) -> DataLoader:
-    """Unshuffled loader of the single dataset on a fixed subset."""
+    """
+    Unshuffled loader of the single dataset on a fixed subset.
+    """
     return DataLoader(
         fixed_subset(dataset, max_samples=max_samples, seed=seed),
         batch_size=batch_size,
@@ -62,3 +68,9 @@ def one_loader(loaders: Dict[str, DataLoader]) -> DataLoader:
 def randidx(high: int) -> int:
     """Returns a random integer in the range [0, high)."""
     return int(torch.randint(high, ()).item())
+
+
+def get_dataset_size(dataset: Dataset):
+    if isinstance(dataset, Sized):
+        return len(dataset)
+    raise TypeError("Dataset does not implement __len__")

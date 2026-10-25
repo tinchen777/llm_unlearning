@@ -131,7 +131,7 @@ def collect_mean_activations(
     positions: Sequence[int] = (-1,),
     layers: Optional[Sequence[int]] = None,
     point: str = "block_out",
-    desc: str = "",
+    desc: str = ""
 ):
     """Collect `point` activations at `positions` for every layer in `layers`, returning the dataset-mean activations.
 
@@ -184,7 +184,7 @@ def collect_sample_activations(
     layers: Optional[Sequence[int]] = None,
     point: str = "block_out",
     desc: str = "",
-    meta_keys: Optional[Sequence[str]] = None,
+    meta_keys: Optional[Sequence[str]] = None
 ):
     """Collect `point` activations at `positions` for every layer in `layers`, one tensor PER SAMPLE (no averaging).
 

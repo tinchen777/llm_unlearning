@@ -41,8 +41,7 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_loaders
-from data.utils import one_loader
+from data import make_split_loaders
 from model import get_model_and_tokenizer
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
@@ -79,18 +78,22 @@ def main(config: DictConfig):
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
     # 1. Load model and tokenizer
-    with step_logging(logger, "[1/4]", "model & tokenizer", model_cfg):
+    with step_logging(logger, "<1/2>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-
     # 2. Dataloaders (forget, neighbor) + check that authors / neighbours are consistent BEFORE any forward pass
-    with step_logging(logger, "[2/4]", "dataloaders & neighbour check", cfg["data"]):
-        split_loaders = get_split_loaders(
-            cfg["data"], batch_size=ruv_cfg["batch_size"], shuffle=False,
-            tokenizer=tokenizer, template_args=template_args
+    with step_logging(logger, "<2/2>", "dataloaders & neighbour check", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
+    # with step_logging(logger, "[2/4]", "dataloaders & neighbour check", cfg["data"]):
+        split_loaders = make_split_loaders(
+            data_cfg,
+            batch_size=ruv_cfg["batch_size"],
+            use_single_loader=True,
+            shuffle=False,
+            tokenizer=tokenizer,
+            template_args=template_args
         )
-        forget_loader = one_loader(split_loaders["forget"])
-        neighbor_loader = one_loader(split_loaders["neighbor"])
+        forget_loader = split_loaders["forget"]
+        neighbor_loader = split_loaders["neighbor"]
 
         _neighbor_data = neighbor_loader.dataset.data  # type: ignore  # tokenised HF dataset, extra_keys are columns
         _nb_by_author = neighbors_by_author(_neighbor_data["author_id"], _neighbor_data["neighbor_id"])  # {author_id: [neighbor_id, ...]}
@@ -103,8 +106,9 @@ def main(config: DictConfig):
             f"{ {a: len(_nb_by_author[a]) for a in sorted(forget_author_set)} }, ks={ks}"
         )
 
-    # 3. Mean activation per author (forget questions) and per (author, neighbour) (neighbour questions)
-    with step_logging(logger, "[3/4]", "group mean activations", ruv_cfg):
+    # ==========
+    # Mean activation per author (forget questions) and per (author, neighbour) (neighbour questions)
+    with step_logging(logger, "#1", "calculate group mean activations"):
         positions = ruv_cfg.get("positions", None)
         positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
         layers = ruv_cfg.get("layers", None)
@@ -121,8 +125,8 @@ def main(config: DictConfig):
         )
         neighbor_means = {key: m for key, m in neighbor_means.items() if key[0] in forget_author_set}
 
-    # 4. r_UV for every K
-    with step_logging(logger, "[4/4]", "r_UV for each K", ruv_cfg):
+    # r_UV for every K
+    with step_logging(logger, "#2", "calculate r_UV for each K"):
         r_uv = compute_r_uv(forget_means, neighbor_means, order, ks)
         torch.save({
             "r_uv": r_uv,  # {K: {author: Tensor[n_pos, n_layers, d]}}, = mean(reference) - mean(forget)

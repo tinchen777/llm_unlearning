@@ -22,7 +22,7 @@ SPLIT_ARGS=(
 FULL_MODEL=tofu/tofu_${MODEL}_full
 TASK_NAME=lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")     # output: saves/LUNAR/${TASK_NAME}/
 
-COEFF=${COEFF:-1.0}               # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
+COEFF=${COEFF:-2.0}               # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
 read -r -a SHIFT_MODES <<< "${MODES:-all eoi}"   # all = the paper (same r_UV on every token), eoi = end-of-instruction tokens only
 SOLVER=${SOLVER:-adam}            # adam | closed_form (LUNAR Eq. 9, no lr / epochs)
 
