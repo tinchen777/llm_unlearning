@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch.nn.functional as F
 from typing import Any, Mapping, Optional, TYPE_CHECKING
 
-from model.utils import forward_batch
+from model.inference.utils import forward_batch
 from data.utils import IGNORE_INDEX
 from .base import UnlearnTrainer
 

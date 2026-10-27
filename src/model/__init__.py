@@ -5,8 +5,6 @@ import logging
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Dict, Any, Tuple, TYPE_CHECKING
 
-from .probe import ProbedLlamaForCausalLM
-
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
@@ -108,7 +106,6 @@ def _add_or_replace_eos_token(tokenizer, eos_token: str):
 
 # register model handler
 _register_model_handler(AutoModelForCausalLM)
-_register_model_handler(ProbedLlamaForCausalLM)
 
 # register tokenizer handler
 _register_tokenizer_handler(AutoTokenizer)

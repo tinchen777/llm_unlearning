@@ -42,15 +42,15 @@ import torch
 from omegaconf import DictConfig
 
 from data import make_split_loaders
+from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
+from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD.NEAR._utils.neighbors import (
     check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
 )
-from METHOD._common.template import get_eoi_positions
-from METHOD.NEAR._utils.activations import collect_group_means
 
 logger = logging.getLogger("main(r_uv)")
 
@@ -108,19 +108,25 @@ def main(config: DictConfig):
     # ==========
     # Mean activation per author (forget questions) and per (author, neighbour) (neighbour questions)
     with step_logging(logger, "#1", "calculate group mean activations"):
-        positions = ruv_cfg.get("positions", None)
-        positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
-        layers = ruv_cfg.get("layers", None)
-        point = ruv_cfg.get("point", "block_out")
-        logger.info(f"Hook point: `{point}`, positions: {positions}")
-
-        forget_means, forget_counts, layers = collect_group_means(
-            model, forget_loader, lambda b: forget_authors(b["index"], qa_per_author, author_offset),
-            positions=positions, layers=layers, point=point, desc="forget / author"
+        # collector
+        _positions = ruv_cfg.get("positions", None)
+        collector = ActivationCollector(
+            model,
+            positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
+            layers=ruv_cfg.get("layers", None),
+            point=ruv_cfg.get("point", "block_out")
         )
-        neighbor_means, neighbor_counts, _ = collect_group_means(
-            model, neighbor_loader, lambda b: list(zip(b["author_id"], b["neighbor_id"])),
-            positions=positions, layers=layers, point=point, desc="neighbor / (author, neighbor)"
+        logger.info(f"Hook point: `{collector.point}`, positions: {collector.positions}")
+
+        forget_means, forget_counts = collector.group_means(
+            dataloader=forget_loader,
+            group_fn=lambda b: forget_authors(b["index"], qa_per_author, author_offset),
+            desc="forget / author"
+        )
+        neighbor_means, neighbor_counts = collector.group_means(
+            dataloader=neighbor_loader,
+            group_fn=lambda b: list(zip(b["author_id"], b["neighbor_id"])),
+            desc="neighbor / (author, neighbor)"
         )
         neighbor_means = {key: m for key, m in neighbor_means.items() if key[0] in forget_author_set}
 
@@ -135,10 +141,10 @@ def main(config: DictConfig):
             "forget_counts": forget_counts,
             "neighbor_counts": {key: c for key, c in neighbor_counts.items() if key[0] in forget_author_set},
             **({"neighbor_means": neighbor_means} if ruv_cfg.get("save_group_means", True) else {}),
-            "positions": positions, "layers": layers, "point": point,
+            "positions": collector.positions, "layers": collector.layers, "point": collector.point,
             "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": seed,
         }, output_dir / "r_uv.pt")
-        save_logs(summarize_r_uv(r_uv, forget_means, layers), output_dir / "r_uv_summary.json")  # type: ignore
+        save_logs(summarize_r_uv(r_uv, forget_means, collector.layers), output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt and r_uv_summary.json to {output_dir}")
 
 

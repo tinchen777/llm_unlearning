@@ -44,7 +44,7 @@ from omegaconf import DictConfig
 from data import get_split_data, make_subloader
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
-from model.steer import Steerer
+from model.intervene.steer import Steerer
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices

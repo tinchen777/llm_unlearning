@@ -211,10 +211,15 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
 
     dataset_cfg_dict = {datasets_cfg["name"]: datasets_cfg} if "handler" in datasets_cfg else datasets_cfg
     datasets: Dict[str, Dataset] = {}
+
+    def _load_dataset(dataset_cfg: TrackingConfig) -> Dataset:
+        dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
+        return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
+
     # Load the datasets
     for dataset_name, item_cfg in dataset_cfg_dict.items():
         try:
-            datasets[dataset_name] = _load_dataset(item_cfg, **kwargs)
+            datasets[dataset_name] = _load_dataset(item_cfg)
         except Exception as e:
             raise RuntimeError(f"Error loading dataset `{dataset_name}` in `@{item_cfg.loc_choices}` with {item_cfg}") from e
     # Combine datasets if necessary
@@ -228,11 +233,6 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
         }
 
     return datasets
-
-
-def _load_dataset(dataset_cfg: TrackingConfig, **kwargs) -> Dataset:
-    dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
-    return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
 
 # === Collator ===
 

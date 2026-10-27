@@ -22,9 +22,9 @@ def init_hydra_choices(choices: Dict[str, str]):
         HYDRA_CHOICES[loc] = choice
 
 
-def check_and_return(func):
+def _check_and_return(func):
     @wraps(func)
-    def wrapper(self, key, default=_MISSING, check_none=False):
+    def _wrapper(self, key, default=_MISSING, check_none=False):
         if key not in self._cfg:
             if default is not _MISSING:
                 return default
@@ -42,7 +42,7 @@ def check_and_return(func):
             new_loc_choices = f"{self._loc_choices}.{_key_choice}" if self._loc_choices else _key_choice
             return TrackingConfig(val, new_loc, new_loc_choices)
         return val
-    return wrapper
+    return _wrapper
 
 
 class TrackingConfig(Mapping):
@@ -53,11 +53,11 @@ class TrackingConfig(Mapping):
             raise ValueError(f"`@{self._loc_choices}` must be a DictConfig, got {type(cfg)}")
         self._cfg = cfg
 
-    @check_and_return
+    @_check_and_return
     def get(self, key: Any, default: Any = _MISSING, check_none: bool = False) -> Any:
         return self._cfg[key]
 
-    @check_and_return
+    @_check_and_return
     def pop(self, key: Any, default: Any = _MISSING, check_none: bool = False) -> Any:
         with open_dict(self._cfg):
             return self._cfg.pop(key)
@@ -76,7 +76,6 @@ class TrackingConfig(Mapping):
 
     def __iter__(self) -> Iterator[str]:
         return (str(k) for k in self._cfg)
-
 
     def __len__(self):
         return len(self._cfg)

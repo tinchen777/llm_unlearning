@@ -18,8 +18,9 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from model.activations import capture_activations, get_out_proj
-from .utils import batch_to_device
+from ..inference.utils import batch_to_device
+from ..hooks.utils import capture_activations
+from ..arch import get_out_proj, eval_mode
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ def build_shift(
 
 
 @torch.no_grad()
+@eval_mode
 def collect_mlp_tokens(
     model: Any,
     loader: Iterable[Mapping[str, Any]],
@@ -72,25 +74,21 @@ def collect_mlp_tokens(
     One forward pass records all layers. Everything is returned on CPU.
     """
     layers = list(layers)
-    was_training = model.training
-    model.eval()
-    xs: Dict[int, List[torch.Tensor]] = {l: [] for l in layers}
-    ts: Dict[int, List[torch.Tensor]] = {l: [] for l in layers}
+    xs: Dict[int, List[torch.Tensor]] = {_l: [] for _l in layers}
+    ts: Dict[int, List[torch.Tensor]] = {_l: [] for _l in layers}
     with capture_activations(model, layers, "down_proj_in") as cache_in, \
             capture_activations(model, layers, "mlp_out") as cache_out:
         for batch in tqdm(loader, desc=f"Recording MLP inputs/outputs [{desc}]", unit="batch(es)", colour="blue"):
             inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, model.device)
             model(**inputs)
             mask = inputs["attention_mask"].bool()
-            for l in layers:
-                t = cache_out[l].float()
+            for _l in layers:
+                t = cache_out[_l].float()
                 if shift_fn is not None:
-                    t = t + shift_fn(batch, l, inputs["attention_mask"]).to(t)
-                xs[l].append(cache_in[l][mask].cpu())
-                ts[l].append(t[mask].cpu())
-    if was_training:
-        model.train()
-    return {l: (torch.cat(xs[l]), torch.cat(ts[l])) for l in layers}
+                    t = t + shift_fn(batch, _l, inputs["attention_mask"]).to(t)
+                xs[_l].append(cache_in[_l][mask].cpu())
+                ts[_l].append(t[mask].cpu())
+    return {_l: (torch.cat(xs[_l]), torch.cat(ts[_l])) for _l in layers}
 
 
 @torch.no_grad()

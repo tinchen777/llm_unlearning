@@ -12,8 +12,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import torch
 
-from model.activations import get_out_proj
-from model.edit import solve_w_down_closed_form, train_w_down, w_down_mse
+from model.arch import get_out_proj
+from model.intervene.edit import solve_w_down_closed_form, train_w_down, w_down_mse
 from utils.common import save_logs
 from .responses import generate_responses, summarize_responses
 

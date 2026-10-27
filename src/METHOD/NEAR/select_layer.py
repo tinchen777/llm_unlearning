@@ -41,10 +41,9 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_data, make_subloader
+from data import make_split_loaders
 from model import get_model_and_tokenizer
-from model.activations import get_decoder_layers
-from model.steer import Steerer
+from model.intervene.steer import Steerer
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
@@ -123,26 +122,26 @@ def main(config: DictConfig):
     with step_logging(logger, "<2/3>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-        n_layers = len(get_decoder_layers(model))
+        n_layers = model.model.config.num_hidden_layers
         if max(candidates) >= n_layers:
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
     # 3. load Data
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_data = get_split_data(
+        split_loaders = make_split_loaders(
             data_cfg,
-            use_single_dataset=True,
+            batch_size=sel["batch_size"],
+            use_single_loader=True,
+            max_samples=sel.get("max_samples", None),
+            seed=seed,
             tokenizer=tokenizer,
-            template_args=template_args
+            template_args=template_args,
         )
 
-    def loader(split):
-        dataset, collator = split_data[split]
-        return make_subloader(dataset, sel["batch_size"], collator=collator,
-                              max_samples=sel.get("max_samples", None), seed=seed)
-
-    def run(split, desc, before_batch=None):
-        records = generate_responses(model, tokenizer, loader(split), cfg["generation_args"], desc=desc,
-                                     before_batch=before_batch)
+    def run(split: str, desc: str, before_batch=None):
+        records = generate_responses(
+            model, tokenizer, split_loaders[split], cfg["generation_args"],
+            desc=desc, before_batch=before_batch
+        )
         return records, summarize_responses(records, hallucination_rouge)
 
     # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
@@ -176,14 +175,14 @@ def main(config: DictConfig):
             )
 
         criterion = str(sel["criterion"])
-        valid = [l for l in candidates if per_layer[l]["degenerate_rate"] <= float(sel["max_degenerate"])]
+        valid = [_l for _l in candidates if per_layer[_l]["degenerate_rate"] <= float(sel["max_degenerate"])]
         if not valid:
             logger.warning("Every layer exceeds select.max_degenerate; selecting among all layers.")
             valid = candidates
         if criterion not in ("unseen_gap", "rougeL_recall", "answer_logprob"):
             raise ValueError(f"select.criterion must be unseen_gap | rougeL_recall | answer_logprob, got `{criterion}`.")
         # unseen_gap: look like a stranger; rougeL_recall / answer_logprob (lower is better): largest knowledge removal
-        ranking = sorted(valid, key=lambda l: per_layer[l][criterion])
+        ranking = sorted(valid, key=lambda _l: per_layer[_l][criterion])
         selected = ranking[0]
         save_logs({
             "selected_layer": selected,
@@ -193,10 +192,12 @@ def main(config: DictConfig):
             "max_degenerate": float(sel["max_degenerate"]),
             "forget_unsteered": original,
             "unseen_unsteered": {"mean": unseen, **unseen_parts},
-            "per_layer": {str(l): v for l, v in per_layer.items()},
+            "per_layer": {str(_l): v for _l, v in per_layer.items()},
         }, selection_path(output_dir, k, coeff, mode))  # type: ignore
-        logger.info(f"Selected layer {selected} ({criterion}), ranking {ranking[:5]}; "
-                    f"details in {selection_path(output_dir, k, coeff, mode)}")
+        logger.info(
+            f"Selected layer {selected} ({criterion}), ranking {ranking[:5]}; "
+            f"details in {selection_path(output_dir, k, coeff, mode)}"
+        )
 
 
 if __name__ == "__main__":

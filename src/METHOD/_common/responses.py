@@ -22,7 +22,7 @@ from tqdm import tqdm
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from evals.metrics.metric_utils import eval_text_similarity
-from model.generation import answer_logprobs
+from model.inference.ops import answer_logprobs
 
 # keys the model / eval function consume; everything else in a batch is per-sample metadata
 MODEL_INPUT_KEYS = ("input_ids", "attention_mask", "labels")
@@ -55,74 +55,111 @@ def is_degenerate(text: str, n: int = 3, min_distinct: float = 0.5) -> bool:
     return len(set(grams)) / len(grams) < min_distinct
 
 
-def generate_responses(
-    model: Any,
-    tokenizer: Any,
-    dataloader: Iterable[Mapping[str, Any]],
-    generation_args: Any,
-    max_samples: Optional[int] = None,
-    desc: str = "",
-    with_logprob: bool = True,
-    refusal_patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS,
-    before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
-) -> List[Dict[str, Any]]:
-    """Generate a response for every sample of `loader`.
+class ResponseCollector:
+    """Generate responses of `model` and aggregate them.
+
+    One configuration, then `generate` (records) -> `summarize` (aggregate), or `run` for both.
 
     Args:
         generation_args: a `TrackingConfig` (e.g. `cfg["generation_args"]`); see configs/generation/.
-        max_samples: stop after this many samples (None -> the whole loader).
         with_logprob: also compute `answer_logprob` of the ground truth (one extra forward pass per batch).
-        before_batch: called with every batch (metadata included) before the model sees it, e.g. to set
-            the per-row vectors of a `Steerer`.
-    Returns:
-        One record per sample: the batch metadata (`index`, `author_id`, ...) plus `input` (decoded prompt),
-        `ground_truth`, `generation`, the ROUGE scores, `answer_logprob`, `refusal` and `degenerate`.
+        refusal_patterns: lower-case substrings that mark a generation as a refusal.
+        hallucination_rouge: a confident answer with rougeL_recall below this counts as a hallucination.
     """
-    model.eval()
-    records: List[Dict[str, Any]] = []
-    for batch in tqdm(dataloader, desc=f"Generating [{desc}]", unit="batch(es)", colour="blue"):
-        if max_samples is not None and len(records) >= max_samples:
-            break
-        if before_batch is not None:
-            before_batch(batch)
-        # metadata (index, author_id, ...) is not a tensor input of the model: set it aside
-        meta = {k: _as_list(batch[k]) for k in batch if k not in MODEL_INPUT_KEYS}
-        inputs = {k: batch[k] for k in MODEL_INPUT_KEYS}
-        logprobs = answer_logprobs(model, inputs, tokenizer.pad_token_id) if with_logprob else None
-        outputs = eval_text_similarity(model, inputs, tokenizer=tokenizer, generation_args=generation_args)
-        for i, output in enumerate(outputs):
-            records.append({
-                **{k: v[i] for k, v in meta.items()},
-                **output,
-                **({"answer_logprob": logprobs[i]} if logprobs is not None else {}),
-                "refusal": is_refusal(output["generation"], refusal_patterns),
-                "degenerate": is_degenerate(output["generation"]),
-            })
-    return records[:max_samples] if max_samples is not None else records
 
+    def __init__(
+        self,
+        model: Any,
+        tokenizer: Any,
+        generation_args: Any,
+        with_logprob: bool = True,
+        refusal_patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS,
+        hallucination_rouge: float = 0.3,
+    ):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.generation_args = generation_args
+        self.with_logprob = with_logprob
+        self.refusal_patterns = tuple(refusal_patterns)
+        self.hallucination_rouge = float(hallucination_rouge)
 
-def summarize_responses(records: Sequence[Mapping[str, Any]], hallucination_rouge: float = 0.3) -> Dict[str, Any]:
-    """Aggregate of `generate_responses` records.
+    def generate(
+        self,
+        dataloader: Iterable[Mapping[str, Any]],
+        max_samples: Optional[int] = None,
+        desc: str = "",
+        before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Generate a response for every sample of `dataloader`.
 
-    `hallucination_rate`: a confident (no refusal, not degenerate) answer that does NOT match the ground truth
-    (rougeL_recall < `hallucination_rouge`) - the behaviour expected on entities the model has never seen.
-    """
-    n = len(records)
-    if n == 0:
-        return {"n": 0}
-    mean = lambda key: sum(float(r[key]) for r in records) / n
-    out: Dict[str, Any] = {
-        "n": n,
-        "rougeL_recall": mean("rougeL_recall"),
-        "rouge1_recall": mean("rouge1_recall"),
-        "refusal_rate": mean("refusal"),
-        "degenerate_rate": mean("degenerate"),
-        "hallucination_rate": sum(
-            (not r["refusal"]) and (not r["degenerate"]) and r["rougeL_recall"] < hallucination_rouge for r in records
-        ) / n,
-        "mean_words": sum(len(str(r["generation"]).split()) for r in records) / n,
-    }
-    if all("answer_logprob" in r for r in records):
-        out["answer_logprob"] = mean("answer_logprob")
-        out["answer_prob"] = sum(math.exp(r["answer_logprob"]) for r in records) / n
-    return out
+        Args:
+            max_samples: stop after this many samples (None -> the whole loader).
+            before_batch: called with every batch (metadata included) before the model sees it, e.g. to set
+                the per-row vectors of a `Steerer`.
+        Returns:
+            One record per sample: the batch metadata (`index`, `author_id`, ...) plus `input` (decoded prompt),
+            `ground_truth`, `generation`, the ROUGE scores, `answer_logprob`, `refusal` and `degenerate`.
+        """
+        self.model.eval()
+        records: List[Dict[str, Any]] = []
+        for batch in tqdm(dataloader, desc=f"Generating [{desc}]", unit="batch(es)", colour="blue"):
+            if max_samples is not None and len(records) >= max_samples:
+                break
+            if before_batch is not None:
+                before_batch(batch)
+            # metadata (index, author_id, ...) is not a tensor input of the model: set it aside
+            meta = {k: _as_list(batch[k]) for k in batch if k not in MODEL_INPUT_KEYS}
+            inputs = {k: batch[k] for k in MODEL_INPUT_KEYS}
+            logprobs = (
+                answer_logprobs(self.model, inputs, self.tokenizer.pad_token_id) if self.with_logprob else None
+            )
+            outputs = eval_text_similarity(
+                self.model, inputs, tokenizer=self.tokenizer, generation_args=self.generation_args
+            )
+            for i, output in enumerate(outputs):
+                records.append({
+                    **{k: v[i] for k, v in meta.items()},
+                    **output,
+                    **({"answer_logprob": logprobs[i]} if logprobs is not None else {}),
+                    "refusal": is_refusal(output["generation"], self.refusal_patterns),
+                    "degenerate": is_degenerate(output["generation"]),
+                })
+        return records[:max_samples] if max_samples is not None else records
+
+    def summarize(self, records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+        """Aggregate of `generate` records.
+
+        `hallucination_rate`: a confident (no refusal, not degenerate) answer that does NOT match the ground truth
+        (rougeL_recall < `hallucination_rouge`) - the behaviour expected on entities the model has never seen.
+        """
+        n = len(records)
+        if n == 0:
+            return {"n": 0}
+        mean = lambda key: sum(float(r[key]) for r in records) / n
+        out: Dict[str, Any] = {
+            "n": n,
+            "rougeL_recall": mean("rougeL_recall"),
+            "rouge1_recall": mean("rouge1_recall"),
+            "refusal_rate": mean("refusal"),
+            "degenerate_rate": mean("degenerate"),
+            "hallucination_rate": sum(
+                (not r["refusal"]) and (not r["degenerate"]) and r["rougeL_recall"] < self.hallucination_rouge
+                for r in records
+            ) / n,
+            "mean_words": sum(len(str(r["generation"]).split()) for r in records) / n,
+        }
+        if all("answer_logprob" in r for r in records):
+            out["answer_logprob"] = mean("answer_logprob")
+            out["answer_prob"] = sum(math.exp(r["answer_logprob"]) for r in records) / n
+        return out
+
+    def run(
+        self,
+        dataloader: Iterable[Mapping[str, Any]],
+        max_samples: Optional[int] = None,
+        desc: str = "",
+        before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """`generate` + `summarize`: returns `(records, summary)`."""
+        records = self.generate(dataloader, max_samples=max_samples, desc=desc, before_batch=before_batch)
+        return records, self.summarize(records)

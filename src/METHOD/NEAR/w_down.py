@@ -54,14 +54,14 @@ from torch.utils.data import DataLoader
 
 from data import get_split_data, make_subloader
 from model import get_model_and_tokenizer
-from model.activations import get_out_proj
-from model.edit import apply_w_down, build_shift, collect_mlp_tokens
+from model.arch import get_out_proj
+from model.hooks.collector import ActivationCollector
+from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir, selection_path as default_selection_path
 from METHOD._common.editing import make_response_writer, train_w_down_layers
-from METHOD.NEAR._utils.activations import collect_group_means
 
 logger = logging.getLogger("main(w_down)")
 

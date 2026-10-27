@@ -1,8 +1,8 @@
 
 from __future__ import annotations
 
-from model.utils import forward_batch
-from model.ops import per_token_CE
+from model.inference.utils import forward_batch
+from model.inference.ops import per_token_CE
 from data.utils import IGNORE_INDEX
 from .base import ForgetRetainTrainer
 

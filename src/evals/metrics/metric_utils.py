@@ -8,9 +8,8 @@ import logging
 from typing import List, Any, Dict, Mapping, TYPE_CHECKING
 
 from data.utils import IGNORE_INDEX
-from model.utils import forward_batch
-from model.generation import generate_texts
-from model.ops import per_token_CE
+from model.inference.utils import forward_batch, generate_texts
+from model.inference.ops import per_token_CE
 from .utils import batch_to_model_device, to_np
 
 if TYPE_CHECKING:

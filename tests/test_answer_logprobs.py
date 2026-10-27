@@ -17,7 +17,7 @@ from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 from data.collators.nested_data import DataCollatorForNestedData
 from data.datasets.datasets_utils import tok_chat_sample
 from evals.metrics.metric_utils import evaluate_probability
-from model.generation import answer_logprobs
+from model.inference.generation import answer_logprobs
 
 QA = [
     ("who wrote it ?", "the author is jane doe ."),
@@ -69,7 +69,7 @@ def test_answer_logprobs_matches_eval_probability(setup):
 def test_eval_text_similarity_uses_generate_texts(setup):
     """The split `eval_text_similarity` = `model.generation.generate_texts` + ground truth + ROUGE."""
     from evals.metrics.metric_utils import eval_text_similarity
-    from model.generation import generate_texts
+    from model.inference.generation import generate_texts
     from utils.config import TrackingConfig
     from omegaconf import OmegaConf
 
@@ -83,7 +83,7 @@ def test_eval_text_similarity_uses_generate_texts(setup):
 
 
 def test_append_answers_keeps_prompt_columns_and_counts_positions_from_first_real_token(setup):
-    from model.utils import append_answers
+    from model.inference.utils import append_answers
 
     tokenizer, _ = setup
     left = _batch(tokenizer, True)
@@ -101,7 +101,7 @@ def test_append_answers_keeps_prompt_columns_and_counts_positions_from_first_rea
 
 
 def test_mean_answer_logprob_is_the_masked_mean_of_the_answer_token_log_probs():
-    from model.ops import mean_answer_logprob
+    from model.inference.ops import mean_answer_logprob
 
     torch.manual_seed(0)
     logits = torch.randn(2, 7, 11)  # 4 context columns + 3 answer columns

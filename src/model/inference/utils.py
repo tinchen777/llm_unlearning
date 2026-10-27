@@ -1,12 +1,11 @@
-"""
-Utility functions for `model` module.
-"""
+
 from __future__ import annotations
 import torch
 from transformers import BatchEncoding
-from typing import Any, Dict, Mapping, Literal, overload, Tuple, TYPE_CHECKING
+from typing import Any, List, Mapping, Literal, overload, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from utils.config import TrackingConfig
     from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
@@ -26,6 +25,8 @@ def batch_to_device(batch: Any, device: torch.device):
 def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: Literal[False] = ..., grad: bool = ...) -> Tuple[torch.Tensor, torch.Tensor, CausalLMOutputWithPast]: ...
 @overload
 def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: Literal[True], grad: bool = ...) -> Tuple[torch.Tensor, CausalLMOutputWithPast]: ...
+
+
 def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: bool = False, grad: bool = True):
     """
     Forward a batch through the model.
@@ -76,42 +77,44 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
         return loss, logits, outputs
 
 
-def append_answers(
-    batch: Mapping[str, Any],
-    pad_token_id: int,
-    ignore_index: int = -100
-) -> Tuple[Dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
-    """
-    Turn a LEFT padded prompt-only batch (generation layout, `predict_with_generate`) into full sequences by appending the
-    answer tokens (the non-`ignore_index` part of `labels`) after the prompt columns.
+def _cut_off_at_stopwords(s: str, seps: List[str]) -> str:
+    """Cut off the string `s` at the earliest occurrence of any of the stopwords in `seps`."""
+    end = len(s)
+    for sep in seps:
+        idx = s.find(sep)
+        if idx != -1:
+            end = min(end, idx)
+    return s[:end].strip()
 
-    The prompt keeps exactly its columns of the generation pass, so a hook set up for generation (e.g. a `Steerer`)
-    acts on the same tokens; the answers are RIGHT padded after it.
 
-    Returns
-    -------
-    inputs : dict
-        `input_ids`, `attention_mask`, `position_ids` of shape `[batch_size, n_prompt + n_answer]`. The positions are
-        counted from the first real token (left padding shifts the columns, plain `model(...)` would use the column).
-    answer_ids : torch.Tensor
-        `[batch_size, n_answer]`, right padded with `pad_token_id`.
-    answer_mask : torch.Tensor
-        `[batch_size, n_answer]`, 1 at the real answer tokens.
-    """
-    ids, am, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
-    if not bool(am[:, -1].all()):
-        raise ValueError("append_answers needs LEFT padded prompt-only batches (collator padding_side: left).")
-    answers = [label[label != ignore_index] for label in labels]
-    bsz, n_ans = ids.shape[0], max(len(a) for a in answers)
-    answer_ids = torch.full((bsz, n_ans), pad_token_id, dtype=ids.dtype)
-    answer_mask = torch.zeros((bsz, n_ans), dtype=am.dtype)
-    for i, a in enumerate(answers):
-        answer_ids[i, :len(a)] = a
-        answer_mask[i, :len(a)] = 1
-    full_mask = torch.cat([am, answer_mask], dim=1)
-    inputs = {
-        "input_ids": torch.cat([ids, answer_ids], dim=1),
-        "attention_mask": full_mask,
-        "position_ids": (full_mask.long().cumsum(-1) - 1).clamp(min=0),
-    }
-    return inputs, answer_ids, answer_mask
+def generate_texts(
+    model: Any,
+    tokenizer: Any,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    generation_args: TrackingConfig
+) -> List[str]:
+    """Generate for every (left padded) prompt of `input_ids`; returns the new text only, cut off at the stopwords."""
+    initial_input_length = input_ids.shape[1]
+
+    generation_kwargs = generation_args.to_dict()
+    assert not generation_kwargs.get("return_dict_in_generate")
+    stopwords = list(generation_kwargs.pop("stopwords", []))
+    if stopwords:
+        generation_kwargs["stop_strings"] = stopwords
+        generation_kwargs["tokenizer"] = tokenizer
+
+    # generate outputs
+    outputs = model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        **generation_kwargs,
+        pad_token_id=tokenizer.eos_token_id,
+    )
+    gen_texts = tokenizer.batch_decode(
+        outputs[:, initial_input_length:],
+        skip_special_tokens=True
+    )
+
+    # cut off at stopwords and strip
+    return [_cut_off_at_stopwords(text, stopwords) for text in gen_texts]

@@ -38,7 +38,7 @@ if [ -n "${EPOCHS}" ]; then EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS
 
 # Output: saves/unlearn/tofu_<MODEL>_<FORGET_SPLIT>/<METHOD><SUFFIX>/   (mode `unlearn`: saves/unlearn/<task_name>), so the
 # methods of one setting are siblings and can be plotted together: +vis.run_folders='[[saves/unlearn/tofu_<MODEL>_<FORGET_SPLIT>, "*"]]'
-task_name() { printf "tttofu_%s_%s/%s%s" "${MODEL}" "${FORGET_SPLIT}" "$1" "${SUFFIX}"; }
+task_name() { printf "tofu_%s_%s/%s%s" "${MODEL}" "${FORGET_SPLIT}" "$1" "${SUFFIX}"; }
 
 # experiment + trainer + the method's own hyper-parameters. Everything else comes from configs/trainer/<METHOD>.yaml and
 # configs/experiment/unlearn/tofu/*.yaml (learning rate 1e-5, 10 epochs, ...): do NOT repeat the defaults here, an override

@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from model.utils import forward_batch
+from model.inference.utils import forward_batch
 from .base import ForgetRetainTrainer
 
 

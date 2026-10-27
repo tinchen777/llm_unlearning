@@ -43,14 +43,14 @@ from typing import Any, Dict, Hashable
 
 from data import get_split_data
 from data.utils import make_subloader
+from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
-from model.activations import collect_sample_activations
+from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD._common.activations import unlearning_vector
 from METHOD._common.responses import generate_responses, summarize_responses
-from METHOD._common.template import get_eoi_positions
 from METHOD.NEAR._utils.activations import mean_diff_auc
 
 logger = logging.getLogger("main(NEAR-probe)")
@@ -58,8 +58,7 @@ logger = logging.getLogger("main(NEAR-probe)")
 _META_KEYS = ("author_id", "neighbor_id")
 
 
-def sample_group(split: str, index: int, meta: Dict[str, Any], forget_split: str, qa_per_author: int,
-                 author_offset: int) -> Hashable:
+def sample_group(split: str, index: int, meta: Dict[str, Any], forget_split: str, qa_per_author: int, author_offset: int) -> Hashable:
     """Group (= author or neighbour) of a question, the unit of the group-wise cross-validation.
 
     - neighbour rows: the author they were generated for (`author_id`), so a forget author and his neighbours share
@@ -174,11 +173,16 @@ def main(config: DictConfig):
     # Per-layer activations: means, global r_UV, separability of pairs of question sets
     with step_logging(logger, "#2", "calculate activations", cfg=probe_cfg.get("activations", None)) as activations_cfg:
         if activations_cfg:
-            positions = activations_cfg.get("positions", None)
-            positions = list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args)
-            layers = activations_cfg.get("layers", None)
-            point = activations_cfg.get("point", "block_out")
-            logger.info(f"Hook point: `{point}`, positions: {positions}")
+            # collector
+            _positions = activations_cfg.get("positions", None)
+            collector = ActivationCollector(
+                model,
+                positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
+                layers=activations_cfg.get("layers", None),
+                point=activations_cfg.get("point", "block_out")
+            )
+            logger.info(f"Hook point: `{collector.point}`, positions: {collector.positions}")
+
             qa_per_author = int(cfg["ruv"]["qa_per_author"])
             author_offset = int(cfg["ruv"]["author_offset"])
             forget, reference = activations_cfg["forget"], activations_cfg["reference"]
@@ -186,8 +190,7 @@ def main(config: DictConfig):
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
             groups = {}  # {split: [group key per row]}
             for split, (dataset, collator) in split_data.items():
-                acts, layers, meta = collect_sample_activations(
-                    model,
+                acts, meta = collector.per_sample(
                     dataloader=make_subloader(
                         dataset,
                         probe_cfg["batch_size"],
@@ -195,7 +198,8 @@ def main(config: DictConfig):
                         max_samples=activations_cfg.get("max_act_samples", None),
                         seed=seed
                     ),
-                    positions=positions, layers=layers, point=point, desc=split, meta_keys=_META_KEYS
+                    desc=split,
+                    meta_keys=_META_KEYS
                 )
                 order = sorted(acts)
                 per_sample[split] = torch.stack([acts[i] for i in order]).float()
@@ -209,9 +213,9 @@ def main(config: DictConfig):
                 "means": means,
                 "forget": forget,
                 "reference": reference,
-                "positions": positions,
-                "layers": layers,
-                "point": point,
+                "positions": collector.positions,
+                "layers": collector.layers,
+                "point": collector.point,
                 "num_samples": {split: len(a) for split, a in per_sample.items()},
                 "num_groups": {split: len(set(g)) for split, g in groups.items()},
             }, output_dir / "activations.pt")
@@ -231,7 +235,7 @@ def main(config: DictConfig):
                     return None
 
             layer_summary = {}
-            for i, layer in enumerate(layers):
+            for i, layer in enumerate(collector.layers):
                 cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
                 cat_groups = lambda names: [g for s in names for g in groups[s]]
                 norm_forget = means[forget][:, i].norm(dim=-1).mean().item()

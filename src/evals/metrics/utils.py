@@ -9,7 +9,7 @@ from tqdm.auto import tqdm
 import logging
 from typing import List, Any, Dict, Callable, Mapping
 
-from model.utils import batch_to_device
+from model.inference.utils import batch_to_device
 
 SUBDATA_SUFFIX = "_dl"
 

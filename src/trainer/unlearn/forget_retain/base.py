@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Any, Mapping, Optional, Tuple, TYPE_CHECKING
 
-from model.utils import forward_batch
+from model.inference.utils import forward_batch
 from ...utils import compute_kl_divergence
 from ..base import UnlearnTrainer
 

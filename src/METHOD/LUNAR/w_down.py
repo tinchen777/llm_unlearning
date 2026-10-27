@@ -54,7 +54,7 @@ from torch.utils.data import DataLoader
 from data import get_split_data, make_subloader
 from model import get_model_and_tokenizer
 from model.activations import collect_mean_activations, get_out_proj
-from model.edit import apply_w_down, build_shift, collect_mlp_tokens
+from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices

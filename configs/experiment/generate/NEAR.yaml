@@ -71,20 +71,20 @@ probe:
   batch_size: 16
 
   responses:
-    max_gen_samples: 100 # null -> all
+    max_gen_samples: 100 # null: all
     hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
 
   activations:
-    # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass
-    # probe.activations.seen=[retain] 'probe.activations.unseen=[forget,neighbor,holdout]' (the retain model has not seen the forget data).
+    # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass [retain] as seen and [forget, neighbor, holdout] as unseen
     seen: [forget, retain]
     unseen: [neighbor, holdout]
-    max_act_samples: 200 # fixed random subset per split for the activations; null -> all
+    max_act_samples: 200 # fixed random subset per split for the activations; null: all
     forget: forget # split name of the data to forget
     reference: neighbor # split name of the redirection target
+
     point: block_out # block_out | mlp_out | down_proj_in | resid_mid
-    # positions: [-1]  # default (omitted): end-of-instruction template tokens, as in LUNAR
-    # layers: [10, 11] # default (omitted): all decoder layers
+    positions: null  # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
+    layers: null # null: all decoder layers | [10, 11]
 
 # ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
@@ -92,10 +92,12 @@ ruv:
   ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
   qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
   author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
+
   point: block_out # block_out | mlp_out  (r_UV must live in d_model space for W_down training)
+  positions: null  # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
+  layers: null # null: all decoder layers | [10, 11]
+
   save_group_means: true # also keep every (author, neighbour) mean in r_uv.pt (to try other K / orders without re-running)
-  # positions: [-1]  # default (omitted): end-of-instruction template tokens
-  # layers: [10, 11] # default (omitted): all decoder layers
 
 # ---- src/METHOD/NEAR/select_layer.py : LUNAR-style layer selection by inference-time steering ---------------
 select:

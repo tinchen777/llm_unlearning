@@ -2,7 +2,7 @@
 from __future__ import annotations
 from torch.nn import functional as F
 
-from model.utils import forward_batch
+from model.inference.utils import forward_batch
 from data.utils import IGNORE_INDEX
 from .base import ForgetRetainTrainer
 

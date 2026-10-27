@@ -8,6 +8,8 @@ from __future__ import annotations
 import torch
 from typing import Any, Optional, Sequence
 
+from ..arch import get_decoder_layers
+
 
 class Steerer:
     """Add `coeff * r` to the residual stream after decoder layer `layer` (= `block_out`, where r_UV lives),
@@ -35,7 +37,6 @@ class Steerer:
             raise ValueError(f"steering mode must be `eoi` or `all`, got `{mode}`.")
         if mode == "all" and ref_position not in positions:
             raise ValueError(f"ref_position={ref_position} is not one of the positions {list(positions)}.")
-        from model.activations import get_decoder_layers
 
         self.module = get_decoder_layers(model)[layer]
         self.positions = list(positions)
