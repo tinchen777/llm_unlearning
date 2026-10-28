@@ -4,8 +4,6 @@
 #   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
-# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
@@ -36,38 +34,34 @@
 # ==============================================================================
 
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
 import sys
 from pathlib import Path
-
-# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
-# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import json
 import logging
 import torch
-from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from typing import TYPE_CHECKING
 
-from data import get_split_data, make_subloader
+from data import SplitData
 from model import get_model_and_tokenizer
 from model.arch import get_out_proj
 from model.hooks.collector import ActivationCollector
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir, selection_path as default_selection_path
 from METHOD._common.editing import make_response_writer, train_w_down_layers
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(w_down)")
 
 
-@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
-def main(config: DictConfig):
+@hydra_main(config_path="../../../configs", config_name="generate")
+def main(cfg: TrackingConfig):
     """Train W_down (the MLP output projection) of chosen layers so that forget prompts are redirected by
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
@@ -78,11 +72,9 @@ def main(config: DictConfig):
     ridge regression of the weight change, no lr / epochs; `wdown.ridge` shrinks the edit towards the original weights).
     `wdown.shift_mode`: `eoi` (r_UV only on the end-of-instruction tokens) or `all` (the paper: the same vector on every
     token of a forget prompt). Outputs go to `k<K>_c<coeff>_<shift_mode>/l<layers>[_cf]/`. Args:
-        config (DictConfig): `experiment=generate/NEAR` (uses `data.*`, `wdown`)
+        cfg (TrackingConfig): `experiment=generate/NEAR` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     seed = int(cfg["seed"])
     set_seed(seed)
     wd = cfg["wdown"]
@@ -98,7 +90,7 @@ def main(config: DictConfig):
             train_layers = [int(json.load(f)["selected_layer"])]
         logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
-        train_layers = [int(l) for l in wd["layers"]]
+        train_layers = [int(_l) for _l in wd["layers"]]
     tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
     run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -131,17 +123,16 @@ def main(config: DictConfig):
         model.eval()
     # 3. Load data
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_data = get_split_data(
+        split_data = SplitData(
             data_cfg,
-            use_single_dataset=True,
             tokenizer=tokenizer,
             template_args=template_args
         )
 
-    def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
-        """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        dataset, collator = split_data[split]
-        return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
+    # def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
+    #     """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
+    #     dataset, collator = split_data[split]
+    #     return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
     hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
     write_responses = make_response_writer(
@@ -178,8 +169,8 @@ def main(config: DictConfig):
         per_layer, new_weights = train_w_down_layers(
             model, train_layers, forget_tokens, retain_tokens, wd, seed, solver=solver, device=device
         )
-        for l, w in new_weights.items():
-            apply_w_down(model, l, w)
+        for _l, w in new_weights.items():
+            apply_w_down(model, _l, w)
         torch.save({"layers": train_layers, "k": k, "coeff": coeff,
                     "weights": {l: w.to(get_out_proj(model, l).weight.dtype) for l, w in new_weights.items()}},
                    run_dir / "w_down.pt")
@@ -191,16 +182,16 @@ def main(config: DictConfig):
             positions=positions, layers=train_layers, point=saved["point"], desc="forget after the edit"
         )
         achieved_vs_intended = {}
-        for j, l in enumerate(train_layers):
-            li = saved["layers"].index(l)
+        for j, _l in enumerate(train_layers):
+            li = saved["layers"].index(_l)
             cos, ratio = [], []
             for a in new_means:
                 achieved = (new_means[a][:, j] - saved["forget_means"][a][:, li]).flatten()
-                r = r_layer[l][a]
+                r = r_layer[_l][a]
                 intended = (coeff * (r if shift_mode == "eoi" else r[positions.index(ref_position)].expand_as(r))).flatten()
                 cos.append(torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item())
                 ratio.append((achieved.norm() / intended.norm()).item())
-            achieved_vs_intended[l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
+            achieved_vs_intended[_l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
         responses_after = write_responses("after")
         save_logs({
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
@@ -216,8 +207,8 @@ def main(config: DictConfig):
                     "(per author, averaged). Exact for a single edited layer; with several layers the deeper ones "
                     "also contain the effect of the upstream edits.",
         }, run_dir / "w_down_summary.json")  # type: ignore
-        for l, v in achieved_vs_intended.items():
-            logger.info(f"layer {l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")
+        for _l, v in achieved_vs_intended.items():
+            logger.info(f"layer {_l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")
 
         if wd.get("save_model", False):
             model.save_pretrained(run_dir / "model")

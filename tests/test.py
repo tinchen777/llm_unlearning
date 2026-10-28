@@ -1,13 +1,13 @@
 
 from __future__ import annotations
 import sys
+import os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-# from rich.traceback import install
-# install(show_locals=False, width=100)
-import hydra
-from hydra.core.hydra_config import HydraConfig
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["HF_DATASETS_OFFLINE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+from torch import nn
 import logging
 from typing import TYPE_CHECKING
 
@@ -18,25 +18,37 @@ from evals import get_evaluators
 from vis import plot_figures
 from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 
 if TYPE_CHECKING:
-    from omegaconf import DictConfig
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(finetune)")
 
+def get_decoder_layers(model) -> nn.ModuleList:
+    if hasattr(model, "module"):
+        model = model.module
+    if hasattr(model, "get_base_model"):
+        model = model.get_base_model()
+    return model.get_decoder().layers
 
-@hydra.main(version_base=None, config_path="../configs", config_name="finetune")
-def main(config: DictConfig):
+def get_decoder_layers(model) -> nn.ModuleList:
+    """The decoder-layer ModuleList, found structurally (works through PEFT/DDP wrappers)."""
+    n_layers = model.config.num_hidden_layers
+    for name, module in model.named_modules():
+        if isinstance(module, nn.ModuleList) and len(module) == n_layers and name.endswith("layers"):
+            return module
+    raise ValueError(f"Cannot find the decoder layers (ModuleList of length {n_layers}) in {type(model).__name__}.")
+
+
+@hydra_main(config_path="../configs", config_name="finetune", argv=["task_name=test"])
+def main(cfg: TrackingConfig):
     """Entry point of the code to train models
     Args:
-        config (DictConfig): Config to finetune
+        cfg (TrackingConfig): Config to finetune
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    # config
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     # Set seed for reproducibility
     set_seed(cfg["seed"])
 
@@ -46,15 +58,24 @@ def main(config: DictConfig):
     with step_logging(logger, "<1/4>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
     
+    print(model)
+    print("="*21)
+    layers = get_decoder_layers(model)
+    print(type(layers))
+    print(layers)
     
-    print(model, model_cfg)
+    layer = layers[0]
+    print(type(layer))
+    print(layer)
+    
+    
     
     exit()
     # 2. Load Data
     with step_logging(logger, "<2/4>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
         data = get_split_data(
             data_cfg,
-            use_single_dataset=True,
+            unwrap_single=True,
             tokenizer=tokenizer,
             template_args=template_args
         )

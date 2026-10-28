@@ -2,14 +2,13 @@
 from __future__ import annotations
 import logging
 from pprint import pprint
-from torch.utils.data import DataLoader
-from typing import Dict, Any, Optional, Tuple, overload, Literal, TYPE_CHECKING
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .datasets.pretraining import PretrainingDataset, CompletionDataset
 from .collators.nested_data import DataCollatorForNestedData
 from .combined_dataset import BalancedUnlearnDataset
-from .utils import make_subloader, one_dataset, one_loader
+from .utils import make_subloader
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
@@ -33,172 +32,120 @@ def _register_combined_dataset(combined_cls):
 def _register_collator(collator_cls):
     COLLATOR_REGISTRY[collator_cls.__name__] = collator_cls
 
-# === Data Loaders ===
 
-@overload
-def make_split_loaders(
-    data_cfg: TrackingConfig,
-    batch_size: int,
-    use_single_loader: Literal[True],
-    shuffle: bool = False,
-    num_workers: int = 0,
-    max_samples: Optional[int] = None,
-    seed: int = 42,
-    **data_kwargs
-) -> Dict[str, DataLoader]: ...
-@overload
-def make_split_loaders(
-    data_cfg: TrackingConfig,
-    batch_size: int,
-    use_single_loader: Literal[False] = ...,
-    shuffle: bool = False,
-    num_workers: int = 0,
-    max_samples: Optional[int] = None,
-    seed: int = 42,
-    **data_kwargs
-) -> Dict[str, Dict[str, DataLoader]]: ...
-@overload
-def make_split_loaders(
-    data_cfg: TrackingConfig,
-    batch_size: int,
-    use_single_loader: bool,
-    shuffle: bool = False,
-    num_workers: int = 0,
-    max_samples: Optional[int] = None,
-    seed: int = 42,
-    **data_kwargs
-) -> Dict[str, Any]: ...
+class Data:
+    @classmethod
+    def from_cfg(
+        cls,
+        datasets_cfg: TrackingConfig,
+        collator_cfg: Optional[TrackingConfig] = None,
+        **kwargs
+    ):
+        return cls(
+            datasets=get_datasets(datasets_cfg, **kwargs),
+            collator=get_collator(collator_cfg, **kwargs)
+        )
 
+    def __init__(self, datasets: Dict[str, Dataset], collator: Optional[Any] = None):
+        self.datasets = datasets
+        self.collator = collator
 
-def make_split_loaders(
-    data_cfg: TrackingConfig,
-    batch_size: int,
-    use_single_loader: bool = False,
-    shuffle: bool = False,
-    num_workers: int = 0,
-    max_samples: Optional[int] = None,
-    seed: int = 42,
-    **data_kwargs
-) -> Dict[str, Any]:
-    """
-    Returns
-    -------
-    - use_single_loader is `True`:
-    {
-        `split_name`: _DataLoader_,
-        ...
-    }
-    - use_single_loader is `False`:
-    {
-        `split_name`: {`loader_name`: _DataLoader_, ...},
-        ...
-    }
-    """
-    split_data = get_split_data(
-        data_cfg,
-        use_single_dataset=False,
-        **data_kwargs
-    )
+    def set_loader(
+        self,
+        batch_size: int,
+        shuffle: bool = False,
+        num_workers: int = 0,
+        max_samples: Optional[int] = None,
+        seed: int = 42
+    ):
+        """Set the loader configuration for the data."""
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.num_workers = num_workers
+        self.max_samples = max_samples
+        self.seed = seed
+        return self
 
-    def _reduce_loaders(loaders: Dict[str, DataLoader]):
-        return one_loader(loaders) if use_single_loader else loaders
-
-    return {
-        split_name: _reduce_loaders(make_loaders(
-            datasets,
-            batch_size=batch_size,
-            collator=collator,
-            max_samples=max_samples,
-            seed=seed,
-            shuffle=shuffle,
-            num_workers=num_workers
-        ))
-        for split_name, (datasets, collator) in split_data.items()
-    }
-
-
-def make_loaders(
-    datasets: Dict[str, Dataset],
-    batch_size: int,
-    collator: Optional[Any] = None,
-    max_samples: Optional[int] = None,
-    seed: int = 42,
-    **loader_kwargs
-) -> Dict[str, DataLoader]:
-    """
-    Returns
-    -------
-        {`loader_name`: _DataLoader_, ...}
-    """
-    return {
-        name: make_subloader(
-            dataset,
-            batch_size=batch_size,
-            collator=collator,
-            max_samples=max_samples,
-            seed=seed,
+    def one_loader(self, **loader_kwargs):
+        """Get a data loader for the single dataset."""
+        return make_subloader(
+            self.one_dataset,
+            batch_size=self.batch_size,
+            collator=self.collator,
+            max_samples=self.max_samples,
+            seed=self.seed,
             **loader_kwargs
         )
-        for name, dataset in datasets.items()
-    }
 
-# === Split Data ===
+    def loaders(self, **loader_kwargs):
+        """Get data loaders for all datasets."""
+        return {
+            name: make_subloader(
+                dataset,
+                batch_size=self.batch_size,
+                collator=self.collator,
+                max_samples=self.max_samples,
+                seed=self.seed,
+                shuffle=self.shuffle,
+                num_workers=self.num_workers,
+                **loader_kwargs
+            )
+            for name, dataset in self.datasets.items()
+        }
 
-@overload
-def get_split_data(
-    data_cfg: TrackingConfig,
-    use_single_dataset: Literal[True],
-    **kwargs
-) -> Dict[str, Tuple[Dataset, Optional[Any]]]: ...
-@overload
-def get_split_data(
-    data_cfg: TrackingConfig,
-    use_single_dataset: Literal[False] = ...,
-    **kwargs
-) -> Dict[str, Tuple[Dict[str, Dataset], Optional[Any]]]: ...
-@overload
-def get_split_data(
-    data_cfg: TrackingConfig,
-    use_single_dataset: bool,
-    **kwargs
-) -> Dict[str, Tuple[Any, Optional[Any]]]: ...
+    @property
+    def names(self):
+        """Get the names of all datasets."""
+        return list(self.datasets)
+
+    @property
+    def one_dataset(self):
+        """Get the single dataset, ensuring there is exactly one."""
+        if len(self.datasets) != 1:
+            raise ValueError(f"Expected exactly one dataset for `Data`, but got {len(self.datasets)}.")
+        return next(iter(self.datasets.values()))
 
 
-def get_split_data(
-    data_cfg: TrackingConfig,
-    use_single_dataset: bool = False,
-    **kwargs
-) -> Dict[str, Any]:
-    """
-    Returns
-    -------
-    - use_single_dataset is `True`:
-    {
-        `split_name`: (_Dataset_, _collator_),
-        ...
-    }
-    - use_single_dataset is `False`(default):
-    {
-        `split_name`: ({`dataset_name`: _Dataset_, ...}, _collator_),
-        ...
-    }
-    """
-    def _reduce_datasets(datasets: Dict[str, Dataset]):
-        return one_dataset(datasets) if use_single_dataset else datasets
+class SplitData:
+    def __init__(self, data_cfg: TrackingConfig, **kwargs):
+        self.split_data = {
+            split_name: Data.from_cfg(
+                datasets_cfg=split_cfg["datasets"],
+                collator_cfg=split_cfg.get("collator", None),
+                **kwargs
+            )
+            for split_name, split_cfg in data_cfg.items()
+        }
+        logger.info(f"Loaded split data: {list(self.split_data)}")
+        pprint(self.split_data)
 
-    split_data = {
-        split_name: (
-            _reduce_datasets(get_datasets(split_cfg["datasets"], **kwargs)),
-            get_collator(split_cfg.get("collator", None), **kwargs)
-        )
-        for split_name, split_cfg in data_cfg.items()
-    }
-    logger.info(f"Loaded split data: {list(split_data)}")
-    pprint(split_data)
+    def set_split_loader(
+        self,
+        batch_size: int,
+        shuffle: bool = False,
+        num_workers: int = 0,
+        max_samples: Optional[int] = None,
+        seed: int = 42
+    ):
+        """Set the loader configuration for all splits."""
+        for split_data in self.split_data.values():
+            split_data.set_loader(
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=num_workers,
+                max_samples=max_samples,
+                seed=seed
+            )
+        return self
 
-    return split_data
+    def __iter__(self):
+        return iter(self.split_data)
+
+    def __getitem__(self, split: str):
+        return self.split_data[split]
 
 # === Datasets ===
+
 
 def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
     """
@@ -213,6 +160,7 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
     datasets: Dict[str, Dataset] = {}
 
     def _load_dataset(dataset_cfg: TrackingConfig) -> Dataset:
+        """Load a single dataset based on its configuration."""
         dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
         return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
 
@@ -235,6 +183,7 @@ def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
     return datasets
 
 # === Collator ===
+
 
 def get_collator(collator_cfg: Optional[TrackingConfig], **kwargs):
     if collator_cfg is None:

@@ -7,8 +7,7 @@ from functools import wraps
 from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
 from .utils import SUBDATA_SUFFIX
-from data import get_datasets, get_collator, make_loaders
-from data.utils import one_loader
+from data import Data
 from utils.common import load_logs
 from utils.config import reprlib
 
@@ -57,44 +56,27 @@ class UnlearningMetric:
         ]
         if subdata_params or "dataloader" in self.func.params:
             try:
-                # prepare dataloaders
-                loaders = make_loaders(
-                    datasets=self._prepare_datasets(**kwargs),
-                    batch_size=self.cfg_dict.pop("batch_size"),  # type: ignore
-                    collator=self._prepare_collator(**kwargs)
-                )
+                # prepare data
+                data = Data.from_cfg(
+                    datasets_cfg=self.cfg_dict.pop("datasets"),
+                    collator_cfg=self.cfg_dict.pop("collator"),
+                    **kwargs
+                ).set_loader(batch_size=self.cfg_dict.pop("batch_size"))  # type: ignore
 
                 if "dataloader" in self.func.params:
                     # for the whole dataset
-                    self.cfg_dict["dataloader"] = one_loader(loaders)
-
-                for subdata_param in subdata_params:
-                    # for each subdata
-                    sub_name = subdata_param.replace(SUBDATA_SUFFIX, "")
-                    if sub_name not in loaders:
-                        logger.warning(f"Required subdata `{sub_name}` not found while preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.")
-                        continue
-                    self.cfg_dict[subdata_param] = loaders[sub_name]
+                    self.cfg_dict["dataloader"] = data.one_loader()
+                else:
+                    loaders = data.loaders()
+                    for subdata_param in subdata_params:
+                        # for each subdata
+                        sub_name = subdata_param.replace(SUBDATA_SUFFIX, "")
+                        if sub_name not in loaders:
+                            logger.warning(f"Required subdata `{sub_name}` not found while preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.")
+                            continue
+                        self.cfg_dict[subdata_param] = loaders[sub_name]
             except Exception as e:
                 raise RuntimeError(f"Error preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
-
-    def _prepare_datasets(
-        self,
-        tokenizer: Optional[Any],
-        template_args: Optional[TrackingConfig],
-        **kwargs
-    ):
-        return get_datasets(
-            self.cfg_dict.pop("datasets"),
-            tokenizer=tokenizer,
-            template_args=template_args
-        )
-
-    def _prepare_collator(self, tokenizer: Optional[Any], **kwargs):
-        return get_collator(
-            self.cfg_dict.pop("collator"),
-            tokenizer=tokenizer
-        )
 
     def _prepare_reference_logs(self):
         ref_logs = {}

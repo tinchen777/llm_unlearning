@@ -1,24 +1,39 @@
 
 from __future__ import annotations
 import torch
+from functools import wraps
 from transformers import BatchEncoding
-from typing import Any, List, Mapping, Literal, overload, Tuple, TYPE_CHECKING
+from typing import Any, List, Mapping, Literal, overload, Tuple, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
     from transformers.modeling_outputs import CausalLMOutputWithPast
 
+MODEL_INPUT_KEYS = ("input_ids", "attention_mask", "labels")
+
 
 def batch_to_device(batch: Any, device: torch.device):
-    """Move a batch of data to the specified device."""
+    """
+    Move a batch of data to the specified device.
+    Only `torch.Tensor` values will be moved.
+    """
     if isinstance(batch, dict):
-        return {k: v.to(device) for k, v in batch.items()}
+        return {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
     elif isinstance(batch, BatchEncoding):
         return batch.to(device)
     else:
         raise ValueError(
-            f"Expected batch to be a `dict` or `BatchEncoding`, but got {type(batch)}."
+            f"Batch to device error, expected batch to be a `dict` or `BatchEncoding`, but got {type(batch)}."
         )
+
+
+def batch_to_model_device(func):
+    @wraps(func)
+    def wrapper(model: Any, batch: Any, **kwargs):
+        if not (isinstance(batch, BatchEncoding) and batch.device == model.device):
+            batch = batch_to_device(batch, device=model.device)
+        return func(model=model, batch=batch, **kwargs)
+    return wrapper
 
 
 @overload
@@ -27,7 +42,13 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
 def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: Literal[True], grad: bool = ...) -> Tuple[torch.Tensor, CausalLMOutputWithPast]: ...
 
 
-def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: bool = False, grad: bool = True):
+@batch_to_model_device
+def forward_batch(
+    model: Any,
+    batch: Mapping[str, torch.Tensor],
+    ignore_labels: bool = False,
+    grad: bool = True
+):
     """
     Forward a batch through the model.
 
@@ -64,7 +85,7 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
     with torch.set_grad_enabled(grad):
         outputs = model(**batch)
     # logits
-    logits = outputs.logits  # bsz x seq_len x vocab_size
+    logits = outputs.logits  # [bsz, seq_len, vocab_size]
     if logits is None:
         raise ValueError("Model output `logits` is `None`. Ensure the model returns logits.")
     if ignore_labels:
@@ -77,44 +98,109 @@ def forward_batch(model: Any, batch: Mapping[str, torch.Tensor], ignore_labels: 
         return loss, logits, outputs
 
 
-def _cut_off_at_stopwords(s: str, seps: List[str]) -> str:
-    """Cut off the string `s` at the earliest occurrence of any of the stopwords in `seps`."""
+def decode_labels(
+    tokenizer: Any,
+    batch: Mapping[str, torch.Tensor],
+    ignore_index: int = -100,
+) -> List[str]:
+    """Decode non-ignored label tokens for each sample."""
+    labels = batch["labels"]
+    return tokenizer.batch_decode(
+        [label[label != ignore_index] for label in labels],
+        skip_special_tokens=True,
+    )
+
+
+def _cut_off(s: str, stop_strings: List[str]) -> str:
+    """Cut off the string `s` at the earliest occurrence of any of the stop_strings in `seps`."""
     end = len(s)
-    for sep in seps:
+    for sep in stop_strings:
         idx = s.find(sep)
         if idx != -1:
             end = min(end, idx)
     return s[:end].strip()
 
 
-def generate_texts(
+@batch_to_model_device
+def generate_batch(
     model: Any,
+    batch: Mapping[str, torch.Tensor],
     tokenizer: Any,
-    input_ids: torch.Tensor,
-    attention_mask: torch.Tensor,
-    generation_args: TrackingConfig
-) -> List[str]:
-    """Generate for every (left padded) prompt of `input_ids`; returns the new text only, cut off at the stopwords."""
+    generation_args: TrackingConfig,
+    ignore_index: int = -100,
+    with_meta: bool = False
+) -> List[Dict[str, str]]:
+    """
+    Generate texts for a batch of inputs using the model and tokenizer.
+
+    Parameters
+    ----------
+    model : Any
+        The model used for generation.
+    batch : Mapping[str, torch.Tensor]
+        A batch of input tensors.
+    tokenizer : Any
+        The tokenizer used to decode the input and output tensors.
+    generation_args : TrackingConfig
+        The generation arguments.
+    ignore_index : int, default `-100`
+        The index to ignore in the labels.
+
+    Returns
+    -------
+    List[Dict[str, str]]
+        A list of dictionaries containing the input, ground truth, and generated texts.
+    """
+    # input_texts
+    input_ids = batch["input_ids"]
+    input_texts = tokenizer.batch_decode(
+        input_ids,
+        skip_special_tokens=True
+    )
+
+    # ground_truths
+    ground_truths = decode_labels(tokenizer, batch, ignore_index=ignore_index)
+
+    # generate texts
     initial_input_length = input_ids.shape[1]
-
-    generation_kwargs = generation_args.to_dict()
-    assert not generation_kwargs.get("return_dict_in_generate")
-    stopwords = list(generation_kwargs.pop("stopwords", []))
-    if stopwords:
-        generation_kwargs["stop_strings"] = stopwords
-        generation_kwargs["tokenizer"] = tokenizer
-
-    # generate outputs
+    gen_kwargs = generation_args.to_dict()
+    stop_strings = list(gen_kwargs.get("stop_strings") or [])
+    # generate batch outputs
     outputs = model.generate(
         input_ids,
-        attention_mask=attention_mask,
-        **generation_kwargs,
+        attention_mask=batch["attention_mask"],
+        **gen_kwargs,
+        tokenizer=tokenizer,
         pad_token_id=tokenizer.eos_token_id,
     )
     gen_texts = tokenizer.batch_decode(
         outputs[:, initial_input_length:],
         skip_special_tokens=True
     )
+    # cut off at stop_strings and strip
+    gen_texts = [_cut_off(text, stop_strings) for text in gen_texts]
 
-    # cut off at stopwords and strip
-    return [_cut_off_at_stopwords(text, stopwords) for text in gen_texts]
+    def _as_list(values: Any) -> List[Any]:
+        return values.tolist() if isinstance(values, torch.Tensor) else list(values)
+
+    # meta
+    batch_meta = {
+        k: _as_list(v)
+        for k, v in batch.items()
+        if k not in MODEL_INPUT_KEYS
+    } if with_meta else {}
+
+    records: List[Dict[str, str]] = []
+    for i, (input_text, ground_truth, gen_text) in enumerate(zip(input_texts, ground_truths, gen_texts)):
+        record = {
+            "input": input_text,
+            "ground_truth": ground_truth,
+            "generation": gen_text,
+        }
+        # meta
+        for k, v in batch_meta.items():
+            record[k] = v[i]
+
+        records.append(record)
+
+    return records

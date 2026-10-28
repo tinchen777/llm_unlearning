@@ -1,38 +1,31 @@
 
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import logging
 from typing import TYPE_CHECKING
 
-from data import get_split_data
+from data import SplitData
 from model import get_model_and_tokenizer
 from trainer import load_trainer
 from evals import get_evaluators
 from vis import plot_figures
 from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 
 if TYPE_CHECKING:
-    from omegaconf import DictConfig
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(finetune)")
 
 
-@hydra.main(version_base=None, config_path="../configs", config_name="finetune")
-def main(config: DictConfig):
+@hydra_main(config_path="../configs", config_name="finetune")
+def main(cfg: TrackingConfig):
     """Entry point of the code to train models
     Args:
-        config (DictConfig): Config to finetune
+        cfg (TrackingConfig): Config to finetune
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    # config
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     # Set seed for reproducibility
     set_seed(cfg["seed"])
 
@@ -43,13 +36,11 @@ def main(config: DictConfig):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
     # 2. Load Data
     with step_logging(logger, "<2/4>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        data = get_split_data(
+        train_data = SplitData(
             data_cfg,
-            use_single_dataset=True,
             tokenizer=tokenizer,
             template_args=template_args
-        )
-        train_dataset, collator = data["train"]
+        )["train"]
     # 3. Get Evaluators
     with step_logging(logger, "<3/4>", "evaluators", mode="load", cfg=cfg.get("eval", None)) as eval_cfgs:
         if eval_cfgs:
@@ -66,9 +57,9 @@ def main(config: DictConfig):
             trainer_cfg,
             model=model,
             evaluators=evaluators,
-            train_dataset=train_dataset,
+            train_dataset=train_data.one_dataset,
             processing_class=tokenizer,
-            data_collator=collator
+            data_collator=train_data.collator
         )
 
     # ==========

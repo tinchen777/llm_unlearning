@@ -6,12 +6,11 @@ from typing import Any, Callable, Dict, Literal, Tuple, TypeVar
 
 
 def get_decoder_layers(model: Any) -> nn.ModuleList:
-    """The decoder-layer ModuleList, found structurally (works through PEFT/DDP wrappers)."""
-    n_layers = model.config.num_hidden_layers
-    for name, module in model.named_modules():
-        if isinstance(module, nn.ModuleList) and len(module) == n_layers and name.endswith("layers"):
-            return module
-    raise ValueError(f"Cannot find the decoder layers (ModuleList of length {n_layers}) in {type(model).__name__}.")
+    if hasattr(model, "module"):
+        model = model.module
+    if hasattr(model, "get_base_model"):
+        model = model.get_base_model()
+    return model.get_decoder().layers
 
 
 _MLP_OUT_PROJ_NAMES = ("down_proj", "fc2", "c_proj", "dense_4h_to_h")

@@ -4,8 +4,6 @@
 #   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
-# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
@@ -27,46 +25,40 @@
 # ==============================================================================
 
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
 import sys
 from pathlib import Path
-
-# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
-# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import logging
 import torch
-from omegaconf import DictConfig
+from typing import TYPE_CHECKING
 
-from data import make_split_loaders
+from data import SplitData
 from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
 from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import (
     check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
 )
 
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
+
 logger = logging.getLogger("main(r_uv)")
 
 
-@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
-def main(config: DictConfig):
+@hydra_main(config_path="../../../configs", config_name="generate")
+def main(cfg: TrackingConfig):
     """r_UV per forget author, ablated over the number K of neighbours used as reference (no Trainer).
 
         r_UV[K][author] = mean act over the first K neighbours of the author - mean act of the author's forget questions
 
     Args:
-        config (DictConfig): `experiment=generate/NEAR` (uses its `data.forget`, `data.neighbor`, `ruv`)
+        cfg (TrackingConfig): `experiment=generate/NEAR` (uses its `data.forget`, `data.neighbor`, `ruv`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     seed = int(cfg["seed"])
     set_seed(seed)
 
@@ -83,20 +75,20 @@ def main(config: DictConfig):
         model.eval()
     # 2. Dataloaders (forget, neighbor) + check that authors / neighbours are consistent BEFORE any forward pass
     with step_logging(logger, "<2/2>", "dataloaders & neighbour check", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_loaders = make_split_loaders(
+        split_data = SplitData(
             data_cfg,
-            batch_size=ruv_cfg["batch_size"],
-            use_single_loader=True,
-            shuffle=False,
             tokenizer=tokenizer,
             template_args=template_args
+        ).set_split_loader(
+            batch_size=ruv_cfg["batch_size"],
+            shuffle=False
         )
-        forget_loader = split_loaders["forget"]
-        neighbor_loader = split_loaders["neighbor"]
+        forget_data = split_data["forget"]
+        neighbor_data = split_data["neighbor"]
 
-        _neighbor_data = neighbor_loader.dataset.data  # type: ignore  # tokenised HF dataset, extra_keys are columns
+        _neighbor_data = neighbor_data.one_dataset.data  # type: ignore # tokenised HF dataset, extra_keys are columns
         _nb_by_author = neighbors_by_author(_neighbor_data["author_id"], _neighbor_data["neighbor_id"])  # {author_id: [neighbor_id, ...]}
-        forget_author_set = set(forget_authors(range(len(forget_loader.dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
+        forget_author_set = set(forget_authors(range(len(forget_data.one_dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
         check_neighbors(forget_author_set, _nb_by_author, ks)
 
         order = nested_neighbor_order({a: _nb_by_author[a] for a in forget_author_set}, seed=seed)
@@ -119,12 +111,12 @@ def main(config: DictConfig):
         logger.info(f"Hook point: `{collector.point}`, positions: {collector.positions}")
 
         forget_means, forget_counts = collector.group_means(
-            dataloader=forget_loader,
+            dataloader=forget_data.one_loader(),
             group_fn=lambda b: forget_authors(b["index"], qa_per_author, author_offset),
             desc="forget / author"
         )
         neighbor_means, neighbor_counts = collector.group_means(
-            dataloader=neighbor_loader,
+            dataloader=neighbor_data.one_loader(),
             group_fn=lambda b: list(zip(b["author_id"], b["neighbor_id"])),
             desc="neighbor / (author, neighbor)"
         )

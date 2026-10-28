@@ -4,8 +4,6 @@
 #   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
-# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
@@ -27,29 +25,25 @@
 #   w_down.py (wdown.layers=auto, or wdown.layer_selection_path) and scripts/NEAR/4_eval.sh read the selection file
 # ==============================================================================
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
 import sys
 from pathlib import Path
-
-# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
-# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import logging
 import torch
-from omegaconf import DictConfig
+from typing import TYPE_CHECKING
 
-from data import make_split_loaders
+from data import SplitData
 from model import get_model_and_tokenizer
 from model.intervene.steer import Steerer
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import config_dir, forget_authors, selection_path
 from METHOD._common.editing import resolve_candidate_layers
 from METHOD._common.responses import generate_responses, summarize_responses
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(select_layer)")
 
@@ -72,8 +66,8 @@ def unseen_gap(steered: dict, original: dict, unseen: dict, keys=("rougeL_recall
     return sum(gaps) / len(gaps) + abs(steered["refusal_rate"] - unseen["refusal_rate"])
 
 
-@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
-def main(config: DictConfig):
+@hydra_main(config_path="../../../configs", config_name="generate")
+def main(cfg: TrackingConfig):
     """Step 2b: LUNAR-style layer selection, adapted to the neighbour target.
 
     LUNAR modifies the layer where activation redirection is most effective. Here, for every candidate layer l,
@@ -90,11 +84,9 @@ def main(config: DictConfig):
     Candidates: `select.layers` (explicit), else `select.layer_fraction` (window of relative depths), else all layers.
 
     Args:
-        config (DictConfig): `experiment=generate/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
+        cfg (TrackingConfig): `experiment=generate/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     seed = int(cfg["seed"])
     set_seed(seed)
     sel = cfg["select"]

@@ -5,12 +5,12 @@ from __future__ import annotations
 import torch
 from rouge_score import rouge_scorer
 import logging
-from typing import List, Any, Dict, Mapping, TYPE_CHECKING
+from typing import List, Any, Dict, Mapping, Sequence, TYPE_CHECKING
 
 from data.utils import IGNORE_INDEX
-from model.inference.utils import forward_batch, generate_texts
+from model.inference.utils import forward_batch, generate_batch, batch_to_model_device
 from model.inference.ops import per_token_CE
-from .utils import batch_to_model_device, to_np
+from .utils import to_np
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -26,7 +26,7 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
 
     losses, shift_labels_mask = per_token_CE(logits, batch["labels"], ignore_index=IGNORE_INDEX)
 
-    avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1)#.clamp(min=1)
+    avg_losses = losses.sum(dim=-1) / shift_labels_mask.sum(dim=-1)
     normalized_probs = (-avg_losses).exp()  # Convert average loss to probability
 
     return [
@@ -82,65 +82,112 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
     return vocab_logprobs_batch, target_logprobs_batch, labels_batch
 
 
+# TEXT METRICS UTILS
+
+DEFAULT_REFUSAL_PATTERNS = (
+    "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
+    "not familiar with", "no information", "i cannot", "i can't", "i'm not able", "i am not able",
+    "i'm unable", "i am unable", "unable to provide", "i couldn't find", "i could not find",
+    "i'm sorry", "i apologize", "not publicly available", "doesn't exist", "does not exist",
+)
 _ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
 
 
-@batch_to_model_device
-def eval_text_similarity(
-    model: Any,
-    batch: Mapping[str, torch.Tensor],
-    tokenizer: Any,
-    generation_args: TrackingConfig
-):
-    """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
-
-    def _eval_rouge_recall(gen_text: str, ground_truth: str):
-        rouge_scores = _ROUGE_SCORER.score(ground_truth, gen_text)
+def rouge_scores_func():
+    def rouge_scores(input: str, ground_truth: str, generation: str):
+        """Compute ROUGE scores for the generated text against the ground truth."""
+        _rouge_scores = _ROUGE_SCORER.score(ground_truth, generation)
         return {
-            "rouge1_recall": rouge_scores["rouge1"].recall,
-            "rougeL_f1": rouge_scores["rougeL"].fmeasure,
-            "rougeL_recall": rouge_scores["rougeL"].recall
+            "rouge1_recall": _rouge_scores["rouge1"].recall,
+            "rougeL_f1": _rouge_scores["rougeL"].fmeasure,
+            "rougeL_recall": _rouge_scores["rougeL"].recall
         }
+    return rouge_scores
 
 
-    input_ids = batch["input_ids"]
-    labels = batch["labels"]
-    input_texts = tokenizer.batch_decode(
-        input_ids,
-        skip_special_tokens=True
-    )
-    ground_truths = tokenizer.batch_decode(
-        [label[label != IGNORE_INDEX] for label in labels],
-        skip_special_tokens=True
-    )
-
-    # generate outputs (model module), then score them
-    gen_texts = generate_texts(
-        model, tokenizer, input_ids, batch["attention_mask"], generation_args
-    )
-
-    return [
-        {
-            "input": input_text,
-            "ground_truth": ground_truth,
-            "generation": gen_text,
-            **_eval_rouge_recall(gen_text, ground_truth)
-        }
-        for input_text, ground_truth, gen_text in zip(
-            input_texts, ground_truths, gen_texts
-        )
-    ]
+def is_refusal_func(patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS):
+    def is_refusal(input: str, ground_truth: str, generation: str):
+        """Check if the generated text is a refusal based on predefined patterns."""
+        text = generation.lower().replace("’", "'")
+        return {"refusal": any(p in text for p in patterns)}
+    return is_refusal
 
 
-def get_decoded_target_texts(tokenizer: Any, batch: Mapping[str, torch.Tensor]) -> List[str]:
-    """Extract and detokenize text from activated positions in the batch."""
-    labels = batch["labels"]
-    return [
-        tokenizer.decode(elem[elem != IGNORE_INDEX].tolist(), skip_special_tokens=True)
-        for elem in labels
-    ]
+def is_degenerate_func(n: int = 3, min_distinct: float = 0.5):
+    def is_degenerate(input: str, ground_truth: str, generation: str):
+        """Check if the generated text is degenerate based on n-gram repetition and minimum distinctness."""
+        words = generation.split()
+        if not words:
+            degenerate = True
+        elif len(words) < 2 * n:
+            degenerate = False
+        else:
+            grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+            degenerate = len(set(grams)) / len(grams) < min_distinct
+        return {"degenerate": degenerate}
+    return is_degenerate
 
 
-# def get_forget_quality(model_tr, reference_tr):
-#     test_res = sc.stats.ks_2samp(1 / (model_tr + 1e-10), 1 / (reference_tr + 1e-10))
-#     return {"agg_value": test_res.pvalue}
+
+
+
+
+
+
+
+
+
+# @batch_to_model_device
+# def eval_text_similarity(
+#     model: Any,
+#     batch: Mapping[str, torch.Tensor],
+#     tokenizer: Any,
+#     generation_args: TrackingConfig
+# ):
+#     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
+
+#     def _eval_rouge_recall(gen_text: str, ground_truth: str):
+#         rouge_scores = _ROUGE_SCORER.score(ground_truth, gen_text)
+#         return {
+#             "rouge1_recall": rouge_scores["rouge1"].recall,
+#             "rougeL_f1": rouge_scores["rougeL"].fmeasure,
+#             "rougeL_recall": rouge_scores["rougeL"].recall
+#         }
+
+
+#     input_ids = batch["input_ids"]
+#     labels = batch["labels"]
+#     input_texts = tokenizer.batch_decode(
+#         input_ids,
+#         skip_special_tokens=True
+#     )
+#     ground_truths = tokenizer.batch_decode(
+#         [label[label != IGNORE_INDEX] for label in labels],
+#         skip_special_tokens=True
+#     )
+
+#     # generate outputs (model module), then score them
+#     gen_texts = generate_batch(
+#         model, tokenizer, input_ids, batch["attention_mask"], generation_args
+#     )
+
+#     return [
+#         {
+#             "input": input_text,
+#             "ground_truth": ground_truth,
+#             "generation": gen_text,
+#             **_eval_rouge_recall(gen_text, ground_truth)
+#         }
+#         for input_text, ground_truth, gen_text in zip(
+#             input_texts, ground_truths, gen_texts
+#         )
+#     ]
+
+
+# def get_decoded_target_texts(tokenizer: Any, batch: Mapping[str, torch.Tensor]) -> List[str]:
+#     """Extract and detokenize text from activated positions in the batch."""
+#     labels = batch["labels"]
+#     return [
+#         tokenizer.decode(elem[elem != IGNORE_INDEX].tolist(), skip_special_tokens=True)
+#         for elem in labels
+#     ]

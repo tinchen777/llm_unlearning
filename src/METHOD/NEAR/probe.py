@@ -6,8 +6,6 @@
 #                  scripts/NEAR/0_probe.sh : 0_probe/<MODEL>/<FORGET_SPLIT>    (full model;   MODEL = tofu_<BASE>_full)
 #                  scripts/NEAR/4_eval.sh  : probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>   (edited model)
 #                  ->  saves/NEAR/0_probe/tofu_Llama-3.2-1B-Instruct_retain90/  or  saves/NEAR/probe/probe_near_tofu_...
-# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
 # configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
@@ -24,34 +22,29 @@
 # NOTE: the responses live in the sub-folder `responses/` (variable `responses_dir`), the activation files directly in output_dir.
 # ==============================================================================
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
 import sys
 from pathlib import Path
-
-# Run as `python src/METHOD/NEAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
-# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import itertools
 import logging
 import torch
 import torch.nn.functional as F
-from omegaconf import DictConfig
-from typing import Any, Dict, Hashable
+from typing import Any, Dict, Hashable, TYPE_CHECKING
 
-from data import get_split_data
+from data import SplitData
 from data.utils import make_subloader
 from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
 from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 from METHOD._common.activations import unlearning_vector
 from METHOD._common.responses import generate_responses, summarize_responses
 from METHOD.NEAR._utils.activations import mean_diff_auc
+
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(NEAR-probe)")
 
@@ -74,8 +67,8 @@ def sample_group(split: str, index: int, meta: Dict[str, Any], forget_split: str
     return f"{split}:{author}"
 
 
-@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
-def main(config: DictConfig):
+@hydra_main(config_path="../../../configs", config_name="generate")
+def main(cfg: TrackingConfig):
     """Step 1 (+ step 2 diagnostics) of the neighbour experiment: probe ONE model (no Trainer) on the
     forget / neighbor / retain / holdout question sets.
 
@@ -96,13 +89,10 @@ def main(config: DictConfig):
     compare the SAME pair across models (full - retain, `src/METHOD/NEAR/neighbor_compare.py`).
 
     Args:
-        config (DictConfig): `experiment=generate/NEAR`
+        cfg (TrackingConfig): `experiment=generate/NEAR`
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    # config
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     # Set seed for reproducibility
     seed = cfg["seed"]
     set_seed(seed)
@@ -115,9 +105,8 @@ def main(config: DictConfig):
         model.eval()
     # 2. Load Data (left padded, prompt only)
     with step_logging(logger, "<2/2>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_data = get_split_data(
+        split_data = SplitData(
             data_cfg,
-            use_single_dataset=True,
             tokenizer=tokenizer,
             template_args=template_args
         )
@@ -131,6 +120,9 @@ def main(config: DictConfig):
             responses_dir = output_dir / "responses"
             logger.info("Generating model responses for each split...")
             summary = {}
+            
+            
+            
             for split, (dataset, collator) in split_data.items():
                 records = generate_responses(
                     model, tokenizer,

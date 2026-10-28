@@ -125,7 +125,7 @@ def main(config: DictConfig):
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
         split_data = get_split_data(
             data_cfg,
-            use_single_dataset=True,
+            unwrap_single=True,
             tokenizer=tokenizer,
             template_args=template_args
         )

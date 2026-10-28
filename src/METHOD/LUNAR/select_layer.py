@@ -104,7 +104,7 @@ def main(config: DictConfig):
     with step_logging(logger, "<3/4>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
         split_data = get_split_data(
             data_cfg,
-            use_single_dataset=True,
+            unwrap_single=True,
             tokenizer=tokenizer,
             template_args=template_args
         )
@@ -116,7 +116,6 @@ def main(config: DictConfig):
             max_samples=sel.get("max_samples", None),
             seed=seed
         )
-
     # 4. Load sentence embeddings of the target responses
     with step_logging(logger, "<4/4>", "sentence embeddings of the target responses", mode="load", cfg=sel):
         embedder = SentenceEmbedder(str(sel["embedder"]), device=model.device)

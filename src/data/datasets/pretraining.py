@@ -90,4 +90,4 @@ class PretrainingDataset(BaseDataset):
         )["input_ids"]
 
         num_chunks = len(token_seq) // max_length + 1
-        return [token_seq[i * max_length : (i + 1) * max_length] for i in range(num_chunks)]
+        return [token_seq[i * max_length: (i + 1) * max_length] for i in range(num_chunks)]

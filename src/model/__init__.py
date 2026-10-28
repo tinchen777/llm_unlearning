@@ -33,6 +33,7 @@ def get_model_and_tokenizer(model_cfg: TrackingConfig) -> Tuple[Any, Any]:
 
 # === Model ===
 
+
 def _get_model(pretrained_cfg: TrackingConfig, base_name: str = "???"):
     # model handler class
     handler_cls = MODEL_HANDLER_REGISTRY[pretrained_cfg["handler"]]
@@ -62,6 +63,7 @@ def _get_model(pretrained_cfg: TrackingConfig, base_name: str = "???"):
     return model
 
 # === Tokenizer ===
+
 
 def _get_tokenizer(tokenizer_cfg: TrackingConfig, base_name: str = "???"):
     # tokenizer handler class

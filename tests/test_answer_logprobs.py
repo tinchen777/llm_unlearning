@@ -75,7 +75,7 @@ def test_eval_text_similarity_uses_generate_texts(setup):
 
     tokenizer, model = setup
     batch = _batch(tokenizer, True)
-    args = TrackingConfig(OmegaConf.create({"max_new_tokens": 6, "do_sample": False, "stopwords": []}))
+    args = TrackingConfig(OmegaConf.create({"max_new_tokens": 6, "do_sample": False, "stop_strings": []}))
     records = eval_text_similarity(model, batch, tokenizer=tokenizer, generation_args=args)
     texts = generate_texts(model, tokenizer, batch["input_ids"], batch["attention_mask"], args)
     assert [r["generation"] for r in records] == texts

@@ -4,12 +4,9 @@ Utility functions for `evals.metrics` module.
 from __future__ import annotations
 import numpy as np
 import torch
-from functools import wraps
 from tqdm.auto import tqdm
 import logging
-from typing import List, Any, Dict, Callable, Mapping
-
-from model.inference.utils import batch_to_device
+from typing import List, Any, Dict, Callable
 
 SUBDATA_SUFFIX = "_dl"
 
@@ -69,14 +66,6 @@ def run_batchwise_evals(
 
     except Exception as e:
         raise RuntimeError(f"Error during batch-wise evaluation with {eval_name}") from e
-
-
-def batch_to_model_device(func):
-    @wraps(func)
-    def wrapper(model: Any, batch: Mapping[str, torch.Tensor], **kwargs):
-        batch = batch_to_device(batch, model.device)
-        return func(model=model, batch=batch, **kwargs)
-    return wrapper
 
 
 def dict_transpose(evals: Dict[int, Dict[int, Dict[str, Any]]]) -> Dict[int, Dict[str, List[Any]]]:

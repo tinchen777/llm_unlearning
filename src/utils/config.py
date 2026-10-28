@@ -1,16 +1,53 @@
 
 from __future__ import annotations
+import sys
 from collections.abc import Mapping, Iterator, ItemsView
 from omegaconf import DictConfig, open_dict, OmegaConf
+import hydra
+from hydra.core.hydra_config import HydraConfig
 import reprlib
 from functools import wraps
-from typing import Any, Dict
+from typing import Any, Dict, Sequence, Optional, Callable
 
 reprlib.aRepr.maxlist = 5
 reprlib.aRepr.maxstring = 15
 
 _MISSING = object()
 HYDRA_CHOICES: Dict[str, str] = {}
+
+
+def hydra_main(
+    config_path: str,
+    config_name: Optional[str] = None,
+    argv: Optional[Sequence[str]] = None
+) -> Callable[[Callable[..., Any]], Any]:
+    """Decorator for Hydra main functions that wraps the first argument as TrackingConfig.
+
+    Args:
+        config_path (str): Path to the Hydra configuration directory.
+        config_name (str): Name of the Hydra configuration file.
+        argv (Optional[Sequence[str]]): Additional command-line arguments to pass to Hydra.
+
+    Returns:
+        Callable: Decorated function that wraps the first argument as TrackingConfig.
+    """
+    def _decorator(func):
+        @wraps(func)
+        def _task(cfg: DictConfig, *args, **kwargs):
+            """Wrap the first argument as TrackingConfig and initialize Hydra choices."""
+            init_hydra_choices(HydraConfig.get().runtime.choices)
+            return func(TrackingConfig(cfg), *args, **kwargs)
+
+        hydra_main_fn = hydra.main(version_base=None, config_path=config_path, config_name=config_name)(_task)
+
+        @wraps(func)
+        def _entry(*args, **kwargs):
+            """Entry point for Hydra main with TrackingConfig wrapping."""
+            if argv:
+                sys.argv += [a for a in argv if a not in sys.argv]
+            return hydra_main_fn(*args, **kwargs)
+        return _entry
+    return _decorator
 
 
 def init_hydra_choices(choices: Dict[str, str]):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sized
 import torch
 from torch.utils.data import DataLoader, Subset
-from typing import Any, Optional, Dict, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
@@ -34,12 +34,6 @@ def fixed_subset(
     return Subset(dataset, sorted(idx.tolist()))
 
 
-def one_dataset(datasets: Dict[str, Dataset]) -> Dataset:
-    if len(datasets) != 1:
-        raise ValueError(f"Expected exactly one dataset for `dataloader`, but got {len(datasets)}.")
-    return next(iter(datasets.values()))
-
-
 def make_subloader(
     dataset: Dataset,
     batch_size: int,
@@ -57,12 +51,6 @@ def make_subloader(
         collate_fn=collator,
         **loader_kwargs
     )
-
-
-def one_loader(loaders: Dict[str, DataLoader]) -> DataLoader:
-    if len(loaders) != 1:
-        raise ValueError(f"Expected exactly one loader, but got {len(loaders)}.")
-    return next(iter(loaders.values()))
 
 
 def randidx(high: int) -> int:

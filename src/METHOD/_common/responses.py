@@ -19,62 +19,56 @@ from __future__ import annotations
 import math
 import torch
 from tqdm import tqdm
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, TYPE_CHECKING
 
 from evals.metrics.metric_utils import eval_text_similarity
 from model.inference.ops import answer_logprobs
 
+if TYPE_CHECKING:
+    from data import Data
+
 # keys the model / eval function consume; everything else in a batch is per-sample metadata
 MODEL_INPUT_KEYS = ("input_ids", "attention_mask", "labels")
 
-DEFAULT_REFUSAL_PATTERNS = (
-    "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
-    "not familiar with", "no information", "i cannot", "i can't", "i'm not able", "i am not able",
-    "i'm unable", "i am unable", "unable to provide", "i couldn't find", "i could not find",
-    "i'm sorry", "i apologize", "not publicly available", "doesn't exist", "does not exist",
-)
+# DEFAULT_REFUSAL_PATTERNS = (
+#     "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
+#     "not familiar with", "no information", "i cannot", "i can't", "i'm not able", "i am not able",
+#     "i'm unable", "i am unable", "unable to provide", "i couldn't find", "i could not find",
+#     "i'm sorry", "i apologize", "not publicly available", "doesn't exist", "does not exist",
+# )
 
 
-def _as_list(values: Any) -> List[Any]:
-    return values.tolist() if isinstance(values, torch.Tensor) else list(values)
+# def _as_list(values: Any) -> List[Any]:
+#     return values.tolist() if isinstance(values, torch.Tensor) else list(values)
 
 
-def is_refusal(text: str, patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS) -> bool:
-    text = text.lower().replace("’", "'")
-    return any(p in text for p in patterns)
+# def is_refusal(text: str, patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS) -> bool:
+#     text = text.lower().replace("’", "'")
+#     return any(p in text for p in patterns)
 
 
-def is_degenerate(text: str, n: int = 3, min_distinct: float = 0.5) -> bool:
-    """Empty, or (for 2n+ words) fewer than `min_distinct` of its word n-grams are distinct (looping text)."""
-    words = text.split()
-    if not words:
-        return True
-    if len(words) < 2 * n:
-        return False
-    grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
-    return len(set(grams)) / len(grams) < min_distinct
+# def is_degenerate(text: str, n: int = 3, min_distinct: float = 0.5) -> bool:
+#     """Empty, or (for 2n+ words) fewer than `min_distinct` of its word n-grams are distinct (looping text)."""
+#     words = text.split()
+#     if not words:
+#         return True
+#     if len(words) < 2 * n:
+#         return False
+#     grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
+#     return len(set(grams)) / len(grams) < min_distinct
 
 
 class ResponseCollector:
-    """Generate responses of `model` and aggregate them.
-
-    One configuration, then `generate` (records) -> `summarize` (aggregate), or `run` for both.
-
-    Args:
-        generation_args: a `TrackingConfig` (e.g. `cfg["generation_args"]`); see configs/generation/.
-        with_logprob: also compute `answer_logprob` of the ground truth (one extra forward pass per batch).
-        refusal_patterns: lower-case substrings that mark a generation as a refusal.
-        hallucination_rouge: a confident answer with rougeL_recall below this counts as a hallucination.
-    """
-
     def __init__(
         self,
         model: Any,
+        split_data: Data,
         tokenizer: Any,
         generation_args: Any,
         with_logprob: bool = True,
         refusal_patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS,
         hallucination_rouge: float = 0.3,
+    
     ):
         self.model = model
         self.tokenizer = tokenizer
@@ -101,6 +95,7 @@ class ResponseCollector:
             `ground_truth`, `generation`, the ROUGE scores, `answer_logprob`, `refusal` and `degenerate`.
         """
         self.model.eval()
+
         records: List[Dict[str, Any]] = []
         for batch in tqdm(dataloader, desc=f"Generating [{desc}]", unit="batch(es)", colour="blue"):
             if max_samples is not None and len(records) >= max_samples:
@@ -126,7 +121,8 @@ class ResponseCollector:
                 })
         return records[:max_samples] if max_samples is not None else records
 
-    def summarize(self, records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    @staticmethod
+    def summarize(records: Sequence[Mapping[str, Any]], hallucination_rouge: float = 0.3) -> Dict[str, Any]:
         """Aggregate of `generate` records.
 
         `hallucination_rate`: a confident (no refusal, not degenerate) answer that does NOT match the ground truth
@@ -143,7 +139,7 @@ class ResponseCollector:
             "refusal_rate": mean("refusal"),
             "degenerate_rate": mean("degenerate"),
             "hallucination_rate": sum(
-                (not r["refusal"]) and (not r["degenerate"]) and r["rougeL_recall"] < self.hallucination_rouge
+                (not r["refusal"]) and (not r["degenerate"]) and r["rougeL_recall"] < hallucination_rouge
                 for r in records
             ) / n,
             "mean_words": sum(len(str(r["generation"]).split()) for r in records) / n,
@@ -153,13 +149,13 @@ class ResponseCollector:
             out["answer_prob"] = sum(math.exp(r["answer_logprob"]) for r in records) / n
         return out
 
-    def run(
-        self,
-        dataloader: Iterable[Mapping[str, Any]],
-        max_samples: Optional[int] = None,
-        desc: str = "",
-        before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """`generate` + `summarize`: returns `(records, summary)`."""
-        records = self.generate(dataloader, max_samples=max_samples, desc=desc, before_batch=before_batch)
-        return records, self.summarize(records)
+    # def run(
+    #     self,
+    #     dataloader: Iterable[Mapping[str, Any]],
+    #     max_samples: Optional[int] = None,
+    #     desc: str = "",
+    #     before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
+    # ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    #     """`generate` + `summarize`: returns `(records, summary)`."""
+    #     records = self.generate(dataloader, max_samples=max_samples, desc=desc, before_batch=before_batch)
+    #     return records, self.summarize(records)
