@@ -146,8 +146,8 @@ def main(cfg: TrackingConfig):
     with step_logging(logger, "#1", "responses before the edit"):
         responses_before = res_collector.multi_eval(
             splits=list(wd["responses_splits"]),
-            desc_exp=r"before / %{split}s",
-            records_name_exp=r"responses_before_%{split}s",
+            desc_exp=r"before / %(split)s",
+            records_name_exp=r"responses_before_%(split)s",
             summaries_name="responses_before_summary"
         )
 
@@ -158,7 +158,8 @@ def main(cfg: TrackingConfig):
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
 
-        forget_loader = split_data["forget"].one_loader(batch_size=wd["batch_size"])
+        # all forget samples (no subset)
+        forget_loader = split_data["forget"].one_loader(batch_size=wd["batch_size"], max_samples=None)
         forget_tokens = collect_mlp_tokens(model, forget_loader, train_layers, shift_fn=shift_fn, desc="forget (+shift)")
         retain_parts = [
             collect_mlp_tokens(
@@ -218,8 +219,8 @@ def main(cfg: TrackingConfig):
 
         responses_after = res_collector.multi_eval(
                 splits=list(wd["responses_splits"]),
-                desc_exp=r"after / %{split}s",
-                records_name_exp=r"responses_after_%{split}s",
+                desc_exp=r"after / %(split)s",
+                records_name_exp=r"responses_after_%(split)s",
                 summaries_name="responses_after_summary"
             )
         save_logs({

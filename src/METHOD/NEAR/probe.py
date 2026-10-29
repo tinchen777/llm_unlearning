@@ -132,9 +132,9 @@ def main(cfg: TrackingConfig):
                 hallucination_rouge=float(responses_cfg["hallucination_rouge"]),
             )
             summaries = res_collector.multi_eval(
-                desc_exp=r"%{split}s",
+                desc_exp=r"%(split)s",
                 peek=2,
-                records_name_exp=r"responses_%{split}s",
+                records_name_exp=r"responses_%(split)s",
             )
             save_logs(
                 {"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summaries},
@@ -172,6 +172,7 @@ def main(cfg: TrackingConfig):
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
             groups = {}  # {split: [group key per row]}
             for data in split_data:
+                split = data.split
                 acts, meta = act_collector.per_sample(
                     dataloader=data.one_loader(),
                     desc=split,
@@ -201,7 +202,7 @@ def main(cfg: TrackingConfig):
             seen = [s for s in activations_cfg["seen"] if s in pooled]
             unseen = [s for s in activations_cfg["unseen"] if s in pooled]
             pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
-            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data.split_data), 2)]
+            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(split_data.splits, 2)]
 
             def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
                 try:

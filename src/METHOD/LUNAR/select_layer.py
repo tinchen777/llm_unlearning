@@ -35,29 +35,30 @@ from pathlib import Path
 # Run as `python src/METHOD/LUNAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
 # (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import hydra
-from hydra.core.hydra_config import HydraConfig
 import logging
 import torch
-from omegaconf import DictConfig
+from typing import TYPE_CHECKING
 
 from data import SplitData
 from model import get_model_and_tokenizer
-from model.activations import get_decoder_layers
+from model.arch import get_decoder_layers
 from model.intervene.steer import Steerer
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
-from utils.config import TrackingConfig, init_hydra_choices
+from utils.config import hydra_main
 from METHOD._common.editing import resolve_candidate_layers
 from METHOD.LUNAR._utils.embedding import SentenceEmbedder, layer_score, rank_layers
 from METHOD.LUNAR._utils.selection import config_dir, selection_path
 
+if TYPE_CHECKING:
+    from utils.config import TrackingConfig
+
 logger = logging.getLogger("main(select_layer)")
 
 
-@hydra.main(version_base=None, config_path="../../../configs", config_name="generate")
-def main(config: DictConfig):
+@hydra_main(config_path="../../../configs", config_name="generate")
+def main(cfg: TrackingConfig):
     """LUNAR step 2: layer selection (section 3.2, appendix E).
 
     For every candidate layer l the forget prompts are redirected at inference time (`Steerer`: block_out of layer l +=
@@ -69,17 +70,14 @@ def main(config: DictConfig):
     ranking; read it before trusting the automatic choice) and `responses_steer_l<l>.json` (same folder).
 
     Args:
-        config (DictConfig): `experiment=generate/LUNAR` (uses `data.forget`, `select`); needs r_uv.pt of r_uv.py.
+        cfg (TrackingConfig): `experiment=generate/LUNAR` (uses `data.forget`, `select`); needs r_uv.pt of r_uv.py.
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
-    init_hydra_choices(HydraConfig.get().runtime.choices)
-    cfg = TrackingConfig(config)
     seed = int(cfg["seed"])
     set_seed(seed)
     sel = cfg["select"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     coeff, mode, ref_position = float(sel["coeff"]), str(sel["shift_mode"]), int(sel["ref_position"])
-    hallucination_rouge = float(cfg.get("hallucination_rouge", 0.3))
 
     # 1. Load r_UV
     with step_logging(logger, "<1/4>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
@@ -100,19 +98,14 @@ def main(config: DictConfig):
         n_layers = len(get_decoder_layers(model))
         if max(candidates) >= n_layers:
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
-    # 3. Load data
+    # 3. Load data (left padded, prompt only)
     with step_logging(logger, "<3/4>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_data = get_split_data(
+        split_data = SplitData(
             data_cfg,
-            unwrap_single=True,
             tokenizer=tokenizer,
             template_args=template_args
-        )
-        dataset, collator = split_data["forget"]
-        forget_loader = make_subloader(
-            dataset,
+        ).set_split_loader(
             sel["batch_size"],
-            collator=collator,
             max_samples=sel.get("max_samples", None),
             seed=seed
         )
@@ -121,6 +114,13 @@ def main(config: DictConfig):
         embedder = SentenceEmbedder(str(sel["embedder"]), device=model.device)
         desired = embedder([str(x) for x in sel["desired_responses"]])
         unrelated = embedder([str(x) for x in sel["unrelated_responses"]])
+
+    res_collector = ResponseCollector(
+        model, split_data, tokenizer, cfg["generation_args"],
+        output_dir=config_dir(output_dir, coeff, mode),
+        text_metrics="ALL",
+        hallucination_rouge=float(cfg.get("hallucination_rouge", 0.3))
+    )
 
     # ==========
     with step_logging(logger, "#1", "steering per layer"):
@@ -131,10 +131,12 @@ def main(config: DictConfig):
                 def before_batch(batch):
                     steerer.set(r.unsqueeze(0).expand(batch["input_ids"].shape[0], -1, -1),
                                 prompt_len=batch["input_ids"].shape[1])
-                records = generate_responses(model, tokenizer, forget_loader, cfg["generation_args"],
-                                             desc=f"forget / steer layer {layer}", before_batch=before_batch)
-            save_logs(records, config_dir(output_dir, coeff, mode) / f"responses_steer_l{layer}.json")  # type: ignore
-            stats = summarize_responses(records, hallucination_rouge)
+                records, stats = res_collector.eval(
+                    "forget",
+                    desc=f"forget / steer layer {layer}",
+                    before_batch=before_batch,
+                    save_name=f"responses_steer_l{layer}"
+                )
             scores = layer_score(embedder([r_["generation"] for r_ in records]), desired, unrelated,
                                  str(sel["aggregate"]))
             per_layer[layer] = {**scores, **stats}
@@ -154,7 +156,7 @@ def main(config: DictConfig):
             "coeff": coeff, "shift_mode": mode, "ref_position": ref_position, "positions": positions,
             "max_degenerate": float(sel["max_degenerate"]), "aggregate": str(sel["aggregate"]),
             "embedder": str(sel["embedder"]),
-            "per_layer": {str(l): v for l, v in per_layer.items()},
+            "per_layer": {str(_l): v for _l, v in per_layer.items()},
         }, path)  # type: ignore
         logger.info(f"Selected layer {selected} (s1 - s2), ranking {ranking[:5]}; details in {path}")
 

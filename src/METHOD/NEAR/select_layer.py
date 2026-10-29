@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 
 from data import SplitData
 from model import get_model_and_tokenizer
+from model.arch import get_decoder_layers
 from model.intervene.steer import Steerer
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
@@ -113,7 +114,7 @@ def main(cfg: TrackingConfig):
     with step_logging(logger, "<2/3>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
-        n_layers = model.model.config.num_hidden_layers
+        n_layers = len(get_decoder_layers(model))
         if max(candidates) >= n_layers:
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
     # 3. load Data
