@@ -30,9 +30,9 @@ for MODE in "${SHIFT_MODES[@]}"; do
       experiment=generate/NEAR \
       model=${FULL_MODEL} \
       ${SPLITS} \
-      wdown.k=${K} \
-      wdown.coeff=${COEFF} \
-      wdown.shift_mode=${MODE} \
+      basic.k=${K} \
+      basic.coeff=${COEFF} \
+      basic.shift_mode=${MODE} \
       wdown.solver=${SOLVER} \
       wdown.layers=auto \
       task_name=${TASK_NAME}

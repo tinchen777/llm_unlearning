@@ -129,9 +129,9 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     out_root = tmp_path / "out"
     args = common_args(assets, out_root, "NEAR", "smoke")
     args += [f"data.neighbor.datasets.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
-             "ruv.author_offset=5", "ruv.ks=[1,2]", "ruv.batch_size=8",
-             "select.k=2", "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
-             "wdown.k=2", "wdown.epochs=3", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",
+             "basic.author_offset=5", "basic.k=2", "ruv.ks=[1,2]", "ruv.batch_size=8",
+             "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
+             "wdown.epochs=3", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",
              "wdown.retain_max_samples=16"]
     run("NEAR/r_uv.py", args)
     out = out_root / "saves" / "NEAR" / "smoke"

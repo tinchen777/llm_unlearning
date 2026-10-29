@@ -27,8 +27,8 @@ for MODE in "${SHIFT_MODES[@]}"; do
     model=${FULL_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
-    wdown.coeff=${COEFF} \
-    wdown.shift_mode=${MODE} \
+    basic.coeff=${COEFF} \
+    basic.shift_mode=${MODE} \
     task_name=${TASK_NAME}
   echo end select_layer mode=${MODE}
 done

@@ -28,8 +28,8 @@ for MODE in "${SHIFT_MODES[@]}"; do
     model=${FULL_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
-    wdown.coeff=${COEFF} \
-    wdown.shift_mode=${MODE} \
+    basic.coeff=${COEFF} \
+    basic.shift_mode=${MODE} \
     wdown.solver=${SOLVER} \
     wdown.layers=auto \
     task_name=${TASK_NAME}

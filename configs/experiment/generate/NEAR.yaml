@@ -82,8 +82,6 @@ basic:
   shift_mode: eoi  # all | eoi
 
   ref_position: -1 # only for shift_mode=all: which saved position is used
-  # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
-  # holdout is kept out of training as the clean "never seen" control of the evaluation.
 
   hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
 
@@ -148,6 +146,8 @@ wdown:
   coeff: ${basic.coeff}
   shift_mode: ${basic.shift_mode}
   ref_position: ${basic.ref_position}
+  # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
+  # holdout is kept out of training as the clean "never seen" control of the evaluation.
   retain_splits: [retain, neighbor]
   retain_max_samples: 512 # random subset of each retain split (all tokens of a sample are used)
   forget_weight: 1.0

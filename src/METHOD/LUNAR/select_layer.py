@@ -68,18 +68,18 @@ def main(cfg: TrackingConfig):
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
     set_seed(seed)
-    sel = cfg["select"]
+    sel_cfg = cfg["select"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
-    coeff, mode, ref_position = float(sel["coeff"]), str(sel["shift_mode"]), int(sel["ref_position"])
+    coeff, mode, ref_position = float(sel_cfg["coeff"]), str(sel_cfg["shift_mode"]), int(sel_cfg["ref_position"])
 
     # 1. Load r_UV
-    with step_logging(logger, "<1/4>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
+    with step_logging(logger, "<1/4>", "r_UV", mode="load", cfg=sel_cfg["r_uv_path"], ensure_cfg=True) as r_uv_path:
         saved = torch.load(str(r_uv_path), weights_only=False)
         if saved["point"] not in ("block_out", "mlp_out"):
             raise ValueError(f"r_UV was computed at `{saved['point']}`; steering needs the residual stream "
                              "(`block_out` / `mlp_out`).")
         positions = saved["positions"]
-        candidates = resolve_candidate_layers(sel, saved["layers"])
+        candidates = resolve_candidate_layers(sel_cfg, saved["layers"])
         logger.info(f"coeff={coeff}, mode={mode}, positions={positions}, candidate layers={candidates}")
 
     model_cfg = cfg["model"]
@@ -98,21 +98,21 @@ def main(cfg: TrackingConfig):
             tokenizer=tokenizer,
             template_args=template_args
         ).set_split_loader(
-            sel["batch_size"],
-            max_samples=sel.get("max_samples", None),
+            sel_cfg["batch_size"],
+            max_samples=sel_cfg.get("max_samples", None),
             seed=seed
         )
     # 4. Load sentence embeddings of the target responses
-    with step_logging(logger, "<4/4>", "sentence embeddings of the target responses", mode="load", cfg=sel):
-        embedder = SentenceEmbedder(str(sel["embedder"]), device=model.device)
-        desired = embedder([str(x) for x in sel["desired_responses"]])
-        unrelated = embedder([str(x) for x in sel["unrelated_responses"]])
+    with step_logging(logger, "<4/4>", "sentence embeddings of the target responses", mode="load", cfg=sel_cfg):
+        embedder = SentenceEmbedder(str(sel_cfg["embedder"]), device=model.device)
+        desired = embedder([str(x) for x in sel_cfg["desired_responses"]])
+        unrelated = embedder([str(x) for x in sel_cfg["unrelated_responses"]])
 
     res_collector = ResponseCollector(
         model, split_data, tokenizer, cfg["generation_args"],
         output_dir=config_dir(output_dir, coeff, mode),
         text_metrics="ALL",
-        hallucination_rouge=float(cfg.get("hallucination_rouge", 0.3))
+        hallucination_rouge=float(sel_cfg["hallucination_rouge"])
     )
 
     # ==========
@@ -131,7 +131,7 @@ def main(cfg: TrackingConfig):
                     save_name=f"responses_steer_l{layer}"
                 )
             scores = layer_score(embedder([r_["generation"] for r_ in records]), desired, unrelated,
-                                 str(sel["aggregate"]))
+                                 str(sel_cfg["aggregate"]))
             per_layer[layer] = {**scores, **stats}
             logger.info(
                 f"layer {layer:>2}: s1-s2={scores['score']:.3f} (s1={scores['s1']:.3f}, s2={scores['s2']:.3f})  "
@@ -139,7 +139,7 @@ def main(cfg: TrackingConfig):
                 f"degenerate={stats['degenerate_rate']:.2f}"
             )
 
-        ranking = rank_layers(per_layer, float(sel["max_degenerate"]))
+        ranking = rank_layers(per_layer, float(sel_cfg["max_degenerate"]))
         selected = ranking[0]
         path = selection_path(output_dir, coeff, mode)
         save_logs({
@@ -147,8 +147,8 @@ def main(cfg: TrackingConfig):
             "ranking": ranking,  # best first; LUNAR also edits the top layers
             "criterion": "s1 - s2",
             "coeff": coeff, "shift_mode": mode, "ref_position": ref_position, "positions": positions,
-            "max_degenerate": float(sel["max_degenerate"]), "aggregate": str(sel["aggregate"]),
-            "embedder": str(sel["embedder"]),
+            "max_degenerate": float(sel_cfg["max_degenerate"]), "aggregate": str(sel_cfg["aggregate"]),
+            "embedder": str(sel_cfg["embedder"]),
             "per_layer": {str(_l): v for _l, v in per_layer.items()},
         }, path)  # type: ignore
         logger.info(f"Selected layer {selected} (s1 - s2), ranking {ranking[:5]}; details in {path}")

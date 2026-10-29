@@ -56,7 +56,14 @@ data:
 generation_args:
   max_new_tokens: 128
 
-hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination (in the response summaries)
+# ---- shared by the steps below (each step reads only its OWN section; these values are interpolated into them) ----
+basic:
+  coeff: 1.0 # forget target = original MLP output + coeff * r_UV   (LUNAR README: 2.0)
+  # all: every token of a forget prompt gets the SAME r_UV[ref_position] (paper Eq. 4, LUNAR's released code);
+  # eoi: only the end-of-instruction tokens get their own r_UV[position] (the variant of the NEAR experiments)
+  shift_mode: all # all | eoi
+  ref_position: -1 # only for shift_mode=all: which saved position is used
+  hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination (in the response summaries)
 
 # ---- src/METHOD/LUNAR/r_uv.py --------------------------------------------------------------------------
 ruv:
@@ -68,11 +75,12 @@ ruv:
 # ---- src/METHOD/LUNAR/select_layer.py ------------------------------------------------------------------
 select:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/LUNAR/r_uv.py
-  coeff: ${wdown.coeff}
-  shift_mode: ${wdown.shift_mode}
-  ref_position: ${wdown.ref_position}
+  coeff: ${basic.coeff}
+  shift_mode: ${basic.shift_mode}
+  ref_position: ${basic.ref_position}
   layers: null # candidate layers (null -> `layer_fraction`, else every layer of r_uv.pt)
   layer_fraction: [0.4, 0.8] # window of relative depths; LUNAR's selected layers are at 50-75 % of the depth (appendix E)
+  hallucination_rouge: ${basic.hallucination_rouge}
   max_degenerate: 0.1 # layers whose steered answers are degenerate more often are not selected
   max_samples: null # fixed random subset of forget prompts (null -> all of them, LUNAR: the 20 QAs of one author)
   batch_size: 16
@@ -99,11 +107,10 @@ wdown:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/LUNAR/r_uv.py
   layer_selection_path: null # null -> <output_dir>/c<coeff>_<shift_mode>/layer_selection.json of select_layer.py
   layers: auto # auto -> the layer selected by select_layer.py; or explicit, e.g. [16]
-  coeff: 1.0 # forget target = original MLP output + coeff * r_UV   (LUNAR README: 2.0)
-  # all: every token of a forget prompt gets the SAME r_UV[ref_position] (paper Eq. 4, LUNAR's released code);
-  # eoi: only the end-of-instruction tokens get their own r_UV[position] (the variant of the NEAR experiments)
-  shift_mode: all
-  ref_position: -1 # only for shift_mode=all: which saved position is used
+  coeff: ${basic.coeff}
+  shift_mode: ${basic.shift_mode}
+  ref_position: ${basic.ref_position}
+  hallucination_rouge: ${basic.hallucination_rouge}
   retain_splits: [retain]
   retain_max_samples: match_forget # LUNAR: an equal number of random retain samples as forget samples; or an integer
   forget_weight: 1.0
