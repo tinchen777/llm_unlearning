@@ -16,8 +16,7 @@ from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
 from data.collators.nested_data import DataCollatorForNestedData
 from data.datasets.datasets_utils import tok_chat_sample
-from evals.metrics.metric_utils import evaluate_probability
-from model.inference.generation import answer_logprobs
+from evals.metrics.metric_utils import answer_logprobs, evaluate_probability
 
 QA = [
     ("who wrote it ?", "the author is jane doe ."),
@@ -66,10 +65,10 @@ def test_answer_logprobs_matches_eval_probability(setup):
     assert torch.allclose(mine.exp(), torch.tensor([r["prob"] for r in evaluate_probability(model, right)]), atol=1e-5)
 
 
-def test_eval_text_similarity_uses_generate_texts(setup):
-    """The split `eval_text_similarity` = `model.generation.generate_texts` + ground truth + ROUGE."""
+def test_eval_text_similarity_uses_generate_batch(setup):
+    """`eval_text_similarity` = `generate_batch` + ROUGE scores."""
     from evals.metrics.metric_utils import eval_text_similarity
-    from model.inference.generation import generate_texts
+    from model.inference.utils import generate_batch
     from utils.config import TrackingConfig
     from omegaconf import OmegaConf
 
@@ -77,39 +76,39 @@ def test_eval_text_similarity_uses_generate_texts(setup):
     batch = _batch(tokenizer, True)
     args = TrackingConfig(OmegaConf.create({"max_new_tokens": 6, "do_sample": False, "stop_strings": []}))
     records = eval_text_similarity(model, batch, tokenizer=tokenizer, generation_args=args)
-    texts = generate_texts(model, tokenizer, batch["input_ids"], batch["attention_mask"], args)
-    assert [r["generation"] for r in records] == texts
+    generated = generate_batch(model, batch, tokenizer, args)
+    assert [r["generation"] for r in records] == [r["generation"] for r in generated]
     assert all({"input", "ground_truth", "rougeL_recall", "rouge1_recall", "rougeL_f1"} <= set(r) for r in records)
 
 
-def test_append_answers_keeps_prompt_columns_and_counts_positions_from_first_real_token(setup):
-    from model.inference.utils import append_answers
+def test_build_prompt_answer_batch_keeps_prompt_columns_and_counts_positions_from_first_real_token(setup):
+    from data.utils import IGNORE_INDEX
+    from model.inference.ops import build_prompt_answer_batch
 
     tokenizer, _ = setup
     left = _batch(tokenizer, True)
-    inputs, ans, ans_mask = append_answers(left, tokenizer.pad_token_id)
+    full = build_prompt_answer_batch(left, tokenizer.pad_token_id)
     n_prompt = left["input_ids"].shape[1]
-    assert torch.equal(inputs["input_ids"][:, :n_prompt], left["input_ids"])  # prompt columns untouched
-    assert torch.equal(inputs["input_ids"][:, n_prompt:], ans)
-    assert inputs["attention_mask"].shape == inputs["input_ids"].shape == inputs["position_ids"].shape
+    assert torch.equal(full["input_ids"][:, :n_prompt], left["input_ids"])  # prompt columns untouched
+    assert full["attention_mask"].shape == full["input_ids"].shape == full["position_ids"].shape == full["labels"].shape
+    assert bool((full["labels"][:, :n_prompt] == IGNORE_INDEX).all())  # the prompt is not scored
+    answer_mask = full["attention_mask"][:, n_prompt:]
+    scored = full["labels"][:, n_prompt:] != IGNORE_INDEX
+    assert torch.equal(scored.long(), answer_mask.long())  # exactly the real answer tokens are scored
+    assert torch.equal(full["labels"][:, n_prompt:][scored], full["input_ids"][:, n_prompt:][scored])
     for row in range(len(QA)):
         first = int(left["attention_mask"][row].argmax())
-        assert int(inputs["position_ids"][row, first]) == 0  # left padding does not shift the positions
-        assert int(inputs["position_ids"][row, -1]) == int(inputs["attention_mask"][row].sum()) - 1 or ans_mask[row, -1] == 0
+        assert int(full["position_ids"][row, first]) == 0  # left padding does not shift the positions
     with pytest.raises(ValueError):
-        append_answers(_batch(tokenizer, False), tokenizer.pad_token_id)  # right padded batches are rejected
+        build_prompt_answer_batch(_batch(tokenizer, False), tokenizer.pad_token_id)  # right padded batches are rejected
 
 
-def test_mean_answer_logprob_is_the_masked_mean_of_the_answer_token_log_probs():
-    from model.inference.ops import mean_answer_logprob
+def test_tokenwise_logprobs_without_drop_last_is_the_masked_mean_of_evaluate_probability(setup):
+    from evals.metrics.metric_utils import tokenwise_logprobs
 
-    torch.manual_seed(0)
-    logits = torch.randn(2, 7, 11)  # 4 context columns + 3 answer columns
-    ans = torch.randint(0, 11, (2, 3))
-    mask = torch.tensor([[1, 1, 1], [1, 1, 0]])
-    got = mean_answer_logprob(logits, ans, mask)
-    lp = logits.log_softmax(-1)
-    want = torch.stack([
-        sum(lp[b, 3 + j, ans[b, j]] for j in range(int(mask[b].sum()))) / int(mask[b].sum()) for b in range(2)
-    ])
-    torch.testing.assert_close(got, want)
+    tokenizer, model = setup
+    right = _batch(tokenizer, False)
+    _, target_logprobs, _ = tokenwise_logprobs(model, right, drop_last=False)
+    got = torch.stack([lp.mean() for lp in target_logprobs])
+    want = -torch.tensor([r["avg_loss"] for r in evaluate_probability(model, right)])
+    torch.testing.assert_close(got, want, atol=1e-5, rtol=1e-5)

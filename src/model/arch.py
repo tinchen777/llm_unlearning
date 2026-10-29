@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 from torch import nn
+from contextlib import contextmanager
 from functools import wraps
 from typing import Any, Callable, Dict, Literal, Tuple, TypeVar
 
@@ -51,8 +52,8 @@ POINTS: Dict[str, Tuple[str, Literal["input", "output"]]] = {
 }
 
 
-def resolve_point(layer: nn.Module, point: str) -> Tuple[nn.Module, str]:
-    """Returns (module, reads_input) of `point` in a decoder layer.
+def resolve_point(layer: nn.Module, point: str) -> Tuple[nn.Module, Literal["input", "output"]]:
+    """Returns (module, side) of `point` in a decoder layer.
 
     `side` is "input" when the point is the INPUT of the module, "output" when it is its OUTPUT.
     """
@@ -77,17 +78,26 @@ def get_out_proj(model: Any, layer_idx: int) -> nn.Linear:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def eval_mode(func: F) -> F:
-    """Temporarily set the model to evaluation mode."""
+@contextmanager
+def eval_mode(model: Any):
+    """Temporarily set the model to evaluation mode (restores the previous mode on exit)."""
+    was_training = model.training
+    model.eval()
+    try:
+        yield model
+    finally:
+        model.train(was_training)
+
+
+def in_eval_mode(func: F) -> F:
+    """Decorator: run `func(model, ...)` (model = FIRST argument) in evaluation mode.
+
+    Not for generators or methods: use the `eval_mode(model)` context manager inside them instead.
+    """
 
     @wraps(func)
     def wrapper(model: Any, *args, **kwargs):
-        was_training = model.training
-        model.eval()
-
-        try:
+        with eval_mode(model):
             return func(model, *args, **kwargs)
-        finally:
-            model.train(was_training)
 
     return wrapper  # type: ignore[return-value]

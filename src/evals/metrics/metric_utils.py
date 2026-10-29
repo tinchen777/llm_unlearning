@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("eval.metric")
 
+_ROUGE_METRIC = TextMetric("rouge_scores")
+
 
 @batch_to_model_device
 def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[Dict[str, float]]:
@@ -98,7 +100,6 @@ def eval_text_similarity(
         with_meta=False
     )
     # compute rouge scores for each generated record
-    text_metrics = TextMetric(rouge_scores={})
     for record in batch_records:
-        record.update(text_metrics.compute_metrics(record))
+        record.update(_ROUGE_METRIC.compute_metrics(record))
     return batch_records

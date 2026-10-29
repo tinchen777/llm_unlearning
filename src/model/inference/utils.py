@@ -15,10 +15,10 @@ MODEL_INPUT_KEYS = ("input_ids", "attention_mask", "labels")
 def batch_to_device(batch: Any, device: torch.device):
     """
     Move a batch of data to the specified device.
-    Only `torch.Tensor` values will be moved.
+    Only `torch.Tensor` values are moved, other values (e.g. string metadata) are kept as they are.
     """
     if isinstance(batch, dict):
-        return {k: v.to(device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
+        return {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in batch.items()}
     elif isinstance(batch, BatchEncoding):
         return batch.to(device)
     else:
@@ -27,12 +27,21 @@ def batch_to_device(batch: Any, device: torch.device):
         )
 
 
+def get_model_device(model: Any) -> torch.device:
+    """Device of a model; also for wrappers without a `device` attribute (e.g. `DistributedDataParallel`)."""
+    device = getattr(model, "device", None)
+    if device is not None:
+        return device
+    return next(model.parameters()).device
+
+
 def batch_to_model_device(func):
     @wraps(func)
-    def wrapper(model: Any, batch: Any, **kwargs):
-        if not (isinstance(batch, BatchEncoding) and batch.device == model.device):
-            batch = batch_to_device(batch, device=model.device)
-        return func(model=model, batch=batch, **kwargs)
+    def wrapper(model: Any, batch: Any, *args, **kwargs):
+        device = get_model_device(model)
+        if not (isinstance(batch, BatchEncoding) and batch.device == device):
+            batch = batch_to_device(batch, device=device)
+        return func(model, batch, *args, **kwargs)
     return wrapper
 
 
@@ -80,7 +89,7 @@ def forward_batch(
             The output of the model, which includes `logits`, `loss`, etc.
     """
     ignore_keys = ("index", "labels") if ignore_labels else ("index",)
-    batch = {k: v for k, v in batch.items() if k not in ignore_keys}
+    batch = {k: v for k, v in batch.items() if k not in ignore_keys and isinstance(v, torch.Tensor)}
 
     with torch.set_grad_enabled(grad):
         outputs = model(**batch)

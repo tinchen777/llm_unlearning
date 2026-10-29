@@ -42,7 +42,7 @@ class ResponseCollector:
             self.text_metrics = None
         else:
             self.text_metrics = TextMetric(*text_metrics, **text_metrics_args)
-        self.with_logprob = "answer_logprob" in (text_metrics or [])
+        self.with_logprob = text_metrics == "ALL" or "answer_logprob" in (text_metrics or [])
 
     def generate(
         self,
@@ -78,12 +78,10 @@ class ResponseCollector:
             batch_logprobs = answer_logprobs(self.model, batch, self.tokenizer.pad_token_id) if self.with_logprob else None
             # append for each record in the batch
             for i, record in enumerate(batch_records):
-                if batch_logprobs:
+                if batch_logprobs is not None:
                     record["answer_logprob"] = batch_logprobs[i]
-                elif self.text_metrics:
+                if self.text_metrics:
                     record.update(self.text_metrics.compute_metrics(record))
-                else:
-                    break
             all_records.extend(batch_records)
         if self.max_samples is not None:
             all_records = all_records[:self.max_samples]

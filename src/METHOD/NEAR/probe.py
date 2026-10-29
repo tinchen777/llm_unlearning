@@ -171,7 +171,7 @@ def main(cfg: TrackingConfig):
             )
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
             groups = {}  # {split: [group key per row]}
-            for data in split_data:
+            for data in split_data.values():
                 split = data.split
                 acts, meta = act_collector.per_sample(
                     dataloader=data.one_loader(),

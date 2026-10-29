@@ -7,10 +7,8 @@ import zlib
 from typing import Any, Optional, Dict
 
 from .base import Attack
-from ..metric_utils import (
-    evaluate_probability,
-    get_decoded_target_texts
-)
+from model.inference.utils import decode_labels
+from ..metric_utils import evaluate_probability
 
 
 class ZLIBAttack(Attack):
@@ -20,7 +18,7 @@ class ZLIBAttack(Attack):
 
     def compute_batch_values(self, batch):
         """Get loss and text for batch."""
-        texts = get_decoded_target_texts(self.tokenizer, batch)
+        texts = decode_labels(self.tokenizer, batch)
         eval_results = evaluate_probability(self.model, batch)
         return [{"loss": r["avg_loss"], "text": t} for r, t in zip(eval_results, texts)]
 

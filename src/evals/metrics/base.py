@@ -57,6 +57,7 @@ class Metric:
             try:
                 # prepare data
                 data = Data.from_cfg(
+                    split=self.name,
                     datasets_cfg=self.cfg_dict.pop("datasets"),
                     collator_cfg=self.cfg_dict.pop("collator"),
                     **kwargs
@@ -65,7 +66,7 @@ class Metric:
                 if "dataloader" in self.func.params:
                     # for the whole dataset
                     self.cfg_dict["dataloader"] = data.one_loader()
-                else:
+                if subdata_params:
                     loaders = data.loaders()
                     for subdata_param in subdata_params:
                         # for each subdata

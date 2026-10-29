@@ -15,7 +15,8 @@ from omegaconf import OmegaConf
 from tokenizers import Tokenizer, models, pre_tokenizers
 from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
 
-from model.activations import collect_mean_activations, get_out_proj
+from helpers import collect_mean_activations
+from model.arch import get_out_proj
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from METHOD._common.activations import unlearning_vector
 from METHOD._common.editing import resolve_candidate_layers, train_w_down_layers

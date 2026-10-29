@@ -14,10 +14,12 @@ import pytest
 import torch
 from transformers import LlamaConfig, LlamaForCausalLM
 
-from model.activations import capture_activations, collect_sample_activations, gather_positions, get_out_proj
-from METHOD.NEAR._utils.activations import _group_folds, auc, collect_group_means, mean_diff_auc
-from model.inference.generation import answer_logprobs
-from METHOD._common.responses import is_degenerate, is_refusal, summarize_responses
+from helpers import collect_group_means, collect_sample_activations
+from model.arch import get_out_proj
+from model.hooks.utils import capture_activations, gather_positions
+from METHOD.NEAR._utils.activations import _group_folds, auc, mean_diff_auc
+from evals.metrics.metric_utils import answer_logprobs
+from evals.response.text_metric_utils import TextMetric, is_degenerate_func, is_refusal_func
 from model.intervene.edit import (
     apply_w_down, build_shift, collect_mlp_tokens, solve_w_down_closed_form, train_w_down, w_down_mse,
 )
@@ -382,6 +384,9 @@ def test_auc_and_separability():
 
 
 def test_response_flags_and_summary():
+    refusal, degenerate = is_refusal_func()["func"], is_degenerate_func()["func"]
+    is_refusal = lambda text: refusal({"generation": text})["refusal"]
+    is_degenerate = lambda text: degenerate({"generation": text})["degenerate"]
     assert is_refusal("I'm sorry, I don't have that information.") and not is_refusal("She was born in Paris.")
     assert is_refusal("I don’t know.")  # typographic apostrophe
     assert is_degenerate("") and is_degenerate("the cat the cat the cat the cat the cat the cat")
@@ -391,8 +396,8 @@ def test_response_flags_and_summary():
         {"generation": "I don't know.", "rougeL_recall": 0.0, "rouge1_recall": 0.0, "refusal": True, "degenerate": False, "answer_logprob": -4.0},
         {"generation": "Lisbon, tailors.", "rougeL_recall": 0.9, "rouge1_recall": 0.9, "refusal": False, "degenerate": False, "answer_logprob": -0.5},
     ]
-    s = summarize_responses(recs, hallucination_rouge=0.3)
-    assert s["n"] == 3 and abs(s["refusal_rate"] - 1 / 3) < 1e-9 and abs(s["hallucination_rate"] - 1 / 3) < 1e-9
+    s = TextMetric("is_refusal", "is_degenerate", "is_hallucination", "answer_logprob", hallucination_rouge=0.3).compute_summaries(recs)
+    assert abs(s["refusal_rate"] - 1 / 3) < 1e-9 and abs(s["hallucination_rate"] - 1 / 3) < 1e-9
     assert abs(s["answer_logprob"] - (-6.5 / 3)) < 1e-9
 
 
@@ -558,7 +563,7 @@ if __name__ == "__main__":
 
 
 def test_mean_activations_equal_the_mean_of_the_sample_activations(model):
-    from model.activations import collect_mean_activations
+    from helpers import collect_mean_activations
 
     batches = make_batches(make_prompts(7, seed=21), {"index": list(range(7))}, 3)
     mean, layers = collect_mean_activations(model, batches, POSITIONS)

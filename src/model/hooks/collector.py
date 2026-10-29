@@ -5,7 +5,7 @@ from tqdm import tqdm
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Iterator, Tuple, Callable, Hashable
 
 from ..arch import eval_mode
-from ..inference.utils import batch_to_device
+from ..inference.utils import batch_to_device, get_model_device
 from .utils import capture_activations, gather_positions
 
 
@@ -36,7 +36,6 @@ class ActivationCollector:
         self.point = point
 
     @torch.no_grad()
-    @eval_mode
     def _iter(
         self,
         dataloader: Iterable[Mapping[str, Any]],
@@ -45,7 +44,7 @@ class ActivationCollector:
         colour: str,
     ) -> Iterator[Tuple[Mapping[str, Any], torch.Tensor]]:
         """Yields `(batch, batch_acts)` with batch_acts `[bsz, n_pos, n_layers, d]` (model dtype, CPU); restores train/eval mode."""
-        with capture_activations(self.model, self.layers, self.point) as cache:
+        with eval_mode(self.model), capture_activations(self.model, self.layers, self.point) as cache:
             for batch in tqdm(
                 dataloader,
                 desc=f"Collecting `{self.point}` {label} [{desc}]",
@@ -54,7 +53,7 @@ class ActivationCollector:
             ):
                 if "input_ids" not in batch:
                     raise ValueError(f"Expected a flat batch with `input_ids`, got keys {list(batch)}.")
-                inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, self.model.device)
+                inputs = batch_to_device({k: batch[k] for k in ("input_ids", "attention_mask")}, get_model_device(self.model))
                 self.model(**inputs)
 
                 # [bsz, n_pos, n_layers, d]
