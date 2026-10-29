@@ -37,16 +37,19 @@ class Data:
     @classmethod
     def from_cfg(
         cls,
+        split: str,
         datasets_cfg: TrackingConfig,
         collator_cfg: Optional[TrackingConfig] = None,
         **kwargs
     ):
         return cls(
+            split=split,
             datasets=get_datasets(datasets_cfg, **kwargs),
             collator=get_collator(collator_cfg, **kwargs)
         )
 
-    def __init__(self, datasets: Dict[str, Dataset], collator: Optional[Any] = None):
+    def __init__(self, split: str, datasets: Dict[str, Dataset], collator: Optional[Any] = None):
+        self.split = split
         self.datasets = datasets
         self.collator = collator
 
@@ -59,22 +62,20 @@ class Data:
         seed: int = 42
     ):
         """Set the loader configuration for the data."""
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.num_workers = num_workers
-        self.max_samples = max_samples
-        self.seed = seed
+        self.default_args: Dict[str, Any] = dict(
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            max_samples=max_samples,
+            seed=seed
+        )
         return self
 
-    def one_loader(self, **loader_kwargs):
+    def one_loader(self, **loader_kwargs: Any):
         """Get a data loader for the single dataset."""
         return make_subloader(
             self.one_dataset,
-            batch_size=self.batch_size,
-            collator=self.collator,
-            max_samples=self.max_samples,
-            seed=self.seed,
-            **loader_kwargs
+            **(self.default_args | loader_kwargs)
         )
 
     def loaders(self, **loader_kwargs):
@@ -82,13 +83,7 @@ class Data:
         return {
             name: make_subloader(
                 dataset,
-                batch_size=self.batch_size,
-                collator=self.collator,
-                max_samples=self.max_samples,
-                seed=self.seed,
-                shuffle=self.shuffle,
-                num_workers=self.num_workers,
-                **loader_kwargs
+                **(self.default_args | loader_kwargs)
             )
             for name, dataset in self.datasets.items()
         }
@@ -110,6 +105,7 @@ class SplitData:
     def __init__(self, data_cfg: TrackingConfig, **kwargs):
         self.split_data = {
             split_name: Data.from_cfg(
+                split=split_name,
                 datasets_cfg=split_cfg["datasets"],
                 collator_cfg=split_cfg.get("collator", None),
                 **kwargs
@@ -138,8 +134,13 @@ class SplitData:
             )
         return self
 
+    @property
+    def splits(self):
+        """Get the names of all splits."""
+        return list(self.split_data)
+
     def __iter__(self):
-        return iter(self.split_data)
+        return iter(self.split_data.values())
 
     def __getitem__(self, split: str):
         return self.split_data[split]

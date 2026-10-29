@@ -32,15 +32,14 @@ import torch.nn.functional as F
 from typing import Any, Dict, Hashable, TYPE_CHECKING
 
 from data import SplitData
-from data.utils import make_subloader
 from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
 from model.hooks.collector import ActivationCollector
+from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.activations import unlearning_vector
-from METHOD._common.responses import generate_responses, summarize_responses
 from METHOD.NEAR._utils.activations import mean_diff_auc
 
 if TYPE_CHECKING:
@@ -118,45 +117,31 @@ def main(cfg: TrackingConfig):
     with step_logging(logger, "#1", "calculate responses", cfg=probe_cfg.get("responses", None)) as responses_cfg:
         if responses_cfg:
             responses_dir = output_dir / "responses"
-            logger.info("Generating model responses for each split...")
-            summary = {}
-            
-            
-            
-            for split, (dataset, collator) in split_data.items():
-                records = generate_responses(
-                    model, tokenizer,
-                    dataloader=make_subloader(
-                        dataset,
-                        probe_cfg["batch_size"],
-                        collator=collator,
-                        max_samples=responses_cfg.get("max_gen_samples", None),
-                        seed=seed,
-                        shuffle=False,
-                        num_workers=0
-                    ),
-                    generation_args=cfg["generation_args"],
-                    desc=split,
-                    # refusal_patterns=list(responses_cfg["refusal_patterns"])
-                )
-                save_logs(records, responses_dir / f"responses_{split}.json")
-                summary[split] = summarize_responses(
-                    records,
-                    float(responses_cfg["hallucination_rouge"])
-                )
-
-                for record in records[:2]:  # quick peek; read the full set in responses_<split>.json
-                    logger.info(
-                        f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
-                        f"        GT: {record['ground_truth']!r}\n"
-                        f"        A : {record['generation']!r}"
-                    )
+            # set dataloader config
+            split_data.set_split_loader(
+                batch_size=probe_cfg["batch_size"],
+                max_samples=responses_cfg.get("max_gen_samples", None),
+                seed=seed,
+                shuffle=False,
+                num_workers=0
+            )
+            res_collector = ResponseCollector(
+                model, split_data, tokenizer, cfg["generation_args"],
+                output_dir=responses_dir,
+                text_metrics="ALL",
+                hallucination_rouge=float(responses_cfg["hallucination_rouge"]),
+            )
+            summaries = res_collector.multi_eval(
+                desc_exp=r"%{split}s",
+                peek=2,
+                records_name_exp=r"responses_%{split}s",
+            )
             save_logs(
-                {"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summary},
+                {"model": str(model_cfg["pretrained"]["name_or_path"]), "splits": summaries},
                 file_path=responses_dir / "responses_summary.json"
             )
 
-            for split, s in summary.items():
+            for split, s in summaries.items():
                 logger.info(
                     f"[{split:>8}] rougeL_recall={s['rougeL_recall']:.3f}  answer_prob={s.get('answer_prob', float('nan')):.3f}  "
                     f"refusal={s['refusal_rate']:.2f}  hallucination={s['hallucination_rate']:.2f}  degenerate={s['degenerate_rate']:.2f}"
@@ -167,29 +152,28 @@ def main(cfg: TrackingConfig):
         if activations_cfg:
             # collector
             _positions = activations_cfg.get("positions", None)
-            collector = ActivationCollector(
+            act_collector = ActivationCollector(
                 model,
                 positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
                 layers=activations_cfg.get("layers", None),
                 point=activations_cfg.get("point", "block_out")
             )
-            logger.info(f"Hook point: `{collector.point}`, positions: {collector.positions}")
+            logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
             qa_per_author = int(cfg["ruv"]["qa_per_author"])
             author_offset = int(cfg["ruv"]["author_offset"])
             forget, reference = activations_cfg["forget"], activations_cfg["reference"]
 
+            split_data.set_split_loader(
+                probe_cfg["batch_size"],
+                max_samples=activations_cfg.get("max_act_samples", None),
+                seed=seed
+            )
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
             groups = {}  # {split: [group key per row]}
-            for split, (dataset, collator) in split_data.items():
-                acts, meta = collector.per_sample(
-                    dataloader=make_subloader(
-                        dataset,
-                        probe_cfg["batch_size"],
-                        collator=collator,
-                        max_samples=activations_cfg.get("max_act_samples", None),
-                        seed=seed
-                    ),
+            for data in split_data:
+                acts, meta = act_collector.per_sample(
+                    dataloader=data.one_loader(),
                     desc=split,
                     meta_keys=_META_KEYS
                 )
@@ -205,9 +189,9 @@ def main(cfg: TrackingConfig):
                 "means": means,
                 "forget": forget,
                 "reference": reference,
-                "positions": collector.positions,
-                "layers": collector.layers,
-                "point": collector.point,
+                "positions": act_collector.positions,
+                "layers": act_collector.layers,
+                "point": act_collector.point,
                 "num_samples": {split: len(a) for split, a in per_sample.items()},
                 "num_groups": {split: len(set(g)) for split, g in groups.items()},
             }, output_dir / "activations.pt")
@@ -217,7 +201,7 @@ def main(cfg: TrackingConfig):
             seen = [s for s in activations_cfg["seen"] if s in pooled]
             unseen = [s for s in activations_cfg["unseen"] if s in pooled]
             pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
-            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data), 2)]
+            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(split_data.split_data), 2)]
 
             def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
                 try:
@@ -227,7 +211,7 @@ def main(cfg: TrackingConfig):
                     return None
 
             layer_summary = {}
-            for i, layer in enumerate(collector.layers):
+            for i, layer in enumerate(act_collector.layers):
                 cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
                 cat_groups = lambda names: [g for s in names for g in groups[s]]
                 norm_forget = means[forget][:, i].norm(dim=-1).mean().item()

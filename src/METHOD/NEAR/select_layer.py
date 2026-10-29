@@ -35,12 +35,12 @@ from typing import TYPE_CHECKING
 from data import SplitData
 from model import get_model_and_tokenizer
 from model.intervene.steer import Steerer
+from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import config_dir, forget_authors, selection_path
 from METHOD._common.editing import resolve_candidate_layers
-from METHOD._common.responses import generate_responses, summarize_responses
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -93,7 +93,6 @@ def main(cfg: TrackingConfig):
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     k, coeff = int(sel["k"]), float(sel["coeff"])
     mode, ref_position = str(sel["shift_mode"]), int(sel["ref_position"])
-    hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
 
     # 1. Load r_UV of the K-neighbour reference
     with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
@@ -119,27 +118,30 @@ def main(cfg: TrackingConfig):
             raise ValueError(f"Candidate layers {candidates} vs a model with {n_layers} layers: wrong r_uv.pt?")
     # 3. load Data
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_loaders = make_split_loaders(
+        split_data = SplitData(
             data_cfg,
-            batch_size=sel["batch_size"],
-            use_single_loader=True,
-            max_samples=sel.get("max_samples", None),
-            seed=seed,
             tokenizer=tokenizer,
-            template_args=template_args,
+            template_args=template_args
+        ).set_split_loader(
+            sel["batch_size"],
+            max_samples=sel.get("max_samples", None),
+            seed=seed
         )
 
-    def run(split: str, desc: str, before_batch=None):
-        records = generate_responses(
-            model, tokenizer, split_loaders[split], cfg["generation_args"],
-            desc=desc, before_batch=before_batch
-        )
-        return records, summarize_responses(records, hallucination_rouge)
+    res_collector = ResponseCollector(
+        model, split_data, tokenizer, cfg["generation_args"],
+        output_dir=config_dir(output_dir, k, coeff, mode),
+        text_metrics="ALL",
+        hallucination_rouge=float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
+    )
 
     # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
     with step_logging(logger, "#1", "get unsteered reference", cfg=sel["unseen_splits"], ensure_cfg=True) as unseen_splits:
-        _, original = run("forget", "forget / unsteered")
-        unseen_parts = {s: run(s, f"{s} / unsteered")[1] for s in unseen_splits}
+        _, original = res_collector.eval("forget", desc="forget / unsteered")
+        unseen_parts = {
+            s: res_collector.eval(s, desc=f"{s} / unsteered")[1]
+            for s in unseen_splits
+        }
         unseen = {
             key: sum(p[key] for p in unseen_parts.values()) / len(unseen_parts)
             for key in ("rougeL_recall", "answer_logprob", "refusal_rate", "degenerate_rate", "hallucination_rate")
@@ -156,8 +158,12 @@ def main(cfg: TrackingConfig):
                 def before_batch(batch):
                     authors = forget_authors(batch["index"], qa_per_author, author_offset)
                     steerer.set(torch.stack([r_author[a] for a in authors]), prompt_len=batch["input_ids"].shape[1])
-                records, steered = run("forget", f"forget / steer layer {layer}", before_batch)
-            save_logs(records, config_dir(output_dir, k, coeff, mode) / f"responses_steer_l{layer}.json")  # type: ignore
+                _, steered = res_collector.eval(
+                    "forget",
+                    desc=f"forget / steer layer {layer}",
+                    before_batch=before_batch,
+                    save_name=f"responses_steer_l{layer}"
+                )
             steered["unseen_gap"] = unseen_gap(steered, original, unseen)
             per_layer[layer] = steered
             logger.info(

@@ -3,13 +3,13 @@ Evaluation functions for `evals.metrics` module.
 """
 from __future__ import annotations
 import torch
-from rouge_score import rouge_scorer
 import logging
-from typing import List, Any, Dict, Mapping, Sequence, Tuple, TYPE_CHECKING
+from typing import List, Any, Dict, Mapping, Tuple, TYPE_CHECKING
 
 from data.utils import IGNORE_INDEX
-from model.inference.utils import forward_batch, generate_batch, batch_to_model_device
-from model.inference.ops import per_token_CE
+from model.inference.utils import forward_batch, batch_to_model_device, generate_batch
+from model.inference.ops import per_token_CE, build_prompt_answer_batch
+from ..response.text_metric_utils import TextMetric
 from .utils import to_np
 
 if TYPE_CHECKING:
@@ -38,202 +38,67 @@ def evaluate_probability(model: Any, batch: Mapping[str, torch.Tensor]) -> List[
 
 
 @batch_to_model_device
-def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool = False):
-    """Compute token-wise next token prediction logprobs for all labeled tokens for each sample in a batch.
-    `grad` decides whether gradients are turned on
-    Returns
-    - `vocab_logprobs_batch` (List[Tensor]): Tensors of shape [seq_len, vocab_size]
-    - `target_logprobs_batch` (List[Tensor]): Tensors of shape [seq_len]
-    - `labels_batch` (List[Tensor]): Tensors of shape [seq_len]
+def tokenwise_logprobs(
+    model: Any,
+    batch: Mapping[str, torch.Tensor],
+    grad: bool = False,
+    drop_last: bool = True,
+) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+    """Token-wise next-token logprobs of the labeled tokens of every sample.
+
+    Position t of the logits predicts token t+1, so labeled token j is scored by position j-1; token 0 is never
+    a target. `drop_last` skips the last labeled token of each row (the upstream OpenUnlearning behaviour).
+
+    Returns (per sample, `n` = number of scored tokens)
+    - `vocab_logprobs_batch`: List[Tensor[n, vocab_size]] (float32), or `None` if `return_vocab` is False
+    - `target_logprobs_batch`: List[Tensor[n]] (float32)
+    - `labels_batch`: List[Tensor[n]]
     """
-    # forward
     logits, _ = forward_batch(model, batch, ignore_labels=True, grad=grad)
+    labels = batch["labels"][:, 1:]                          # target of position t is token t+1
+    pred_mask = labels != IGNORE_INDEX                       # [bsz, seq_len-1]
+    if drop_last:
+        # sync with OpenUnlearning: drop the last labeled token of each row
+        cols = torch.arange(pred_mask.shape[1], device=pred_mask.device)
+        last = torch.where(pred_mask, cols, -1).max(dim=1).values
+        pred_mask = pred_mask & (cols != last.unsqueeze(1))
 
-    vocab_logprobs = logits.log_softmax(dim=-1)[:, :-1, :]  # shape as [bsz, seq_len-1, vocab_size]
-    vocab_size = vocab_logprobs.shape[-1]
+    rows, cols = pred_mask.nonzero(as_tuple=True)            # only the scored positions
+    vocab_logprobs = logits[:, :-1][rows, cols].float().log_softmax(dim=-1)   # [N, vocab_size]
+    targets = labels[rows, cols]                             # [N]
+    target_logprobs = vocab_logprobs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)  # [N]
 
-    next_tokens = batch["input_ids"][:, 1:].unsqueeze(-1)  # shape as [bsz, seq_len-1, 1]
-    target_logprobs = torch.gather(vocab_logprobs, dim=2, index=next_tokens).squeeze(-1)  # shape as [bsz, seq_len-1]
-
-    vocab_logprobs_batch: List[torch.Tensor] = []
-    target_logprobs_batch: List[torch.Tensor] = []
-    labels_batch: List[torch.Tensor] = []
-    for i, labels in enumerate(batch["labels"]):
-        # only focus on tokens which have loss on them (i.e. used in labels)
-
-        # Ignore the last labeled token because there is no prediction after it.
-        actual_indices = (labels != IGNORE_INDEX).nonzero(as_tuple=True)[0][:-1]
-        if len(actual_indices) == 0:
-            vocab_logprobs_batch.append(vocab_logprobs.new_empty((0, vocab_size)))
-            target_logprobs_batch.append(target_logprobs.new_empty(0))
-            labels_batch.append(labels.new_empty(0))
-            continue
-        start_idx, end_idx = actual_indices[0].item(), actual_indices[-1].item()
-        if start_idx == 0:
-            logger.warning(
-                f"labels[0] is not {IGNORE_INDEX}. "
-                "The first token should not contribute to the next-token prediction loss."
-            )
-        # Return full distribution for each position: shape [seq_len, vocab_size]
-        vocab_logprobs_batch.append(vocab_logprobs[i, start_idx - 1: end_idx])
-        target_logprobs_batch.append(target_logprobs[i, start_idx - 1: end_idx])
-        labels_batch.append(labels[actual_indices])
-
-    return vocab_logprobs_batch, target_logprobs_batch, labels_batch
+    counts = pred_mask.sum(dim=1).tolist()                   # one GPU->CPU sync for the whole batch
+    return (
+        list(vocab_logprobs.split(counts)),
+        list(target_logprobs.split(counts)),
+        list(targets.split(counts)),
+    )
 
 
-# TEXT METRICS UTILS
-# record: Dict[str, Any] containing "input", "ground_truth", and "generation"
-
-DEFAULT_REFUSAL_PATTERNS = (
-    "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
-    "not familiar with", "no information", "i cannot", "i can't", "i'm not able", "i am not able",
-    "i'm unable", "i am unable", "unable to provide", "i couldn't find", "i could not find",
-    "i'm sorry", "i apologize", "not publicly available", "doesn't exist", "does not exist",
-)
-_ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
+@batch_to_model_device
+def answer_logprobs(model: Any, batch: Mapping[str, torch.Tensor], pad_token_id: int) -> List[float]:
+    """Mean per-token log-prob of the ground-truth answer of every row, given its prompt (teacher forcing)."""
+    full_batch = build_prompt_answer_batch(batch, pad_token_id, ignore_index=IGNORE_INDEX)
+    _, target_logprobs, _ = tokenwise_logprobs(model, full_batch, grad=False, drop_last=False)
+    sums = torch.stack([lp.sum() for lp in target_logprobs])
+    counts = torch.tensor([len(lp) for lp in target_logprobs], device=sums.device)
+    return (sums / counts.clamp(min=1)).tolist()
 
 
-def _mean(*record_mean_pairs: Tuple[str, str], ):
-    def float_mean(records: Sequence[Mapping[str, Any]]):
-        result: Dict[str, float] = {}
-        for record_key, mean_key in record_mean_pairs:
-            values = [float(record.get(record_key, 0.0)) for record in records]
-            result[mean_key] = sum(values) / len(values) if values else 0.0
-        return result
-    return float_mean
-
-
-def rouge_scores_func():
-    def rouge_scores(record: Mapping[str, Any]):
-        """
-        Compute ROUGE scores for the generated text against the ground truth.
-        `record` must be a dictionary containing `"ground_truth"`, and `"generation"`.
-        """
-        _rouge_scores = _ROUGE_SCORER.score(record["ground_truth"], record["generation"])
-        return {
-            "rouge1_recall": _rouge_scores["rouge1"].recall,
-            "rougeL_f1": _rouge_scores["rougeL"].fmeasure,
-            "rougeL_recall": _rouge_scores["rougeL"].recall
-        }
-    return {
-        "func": rouge_scores,
-        "summary": _float_mean(
-            ("rouge1_recall", "rouge1_recall"),
-            ("rougeL_f1", "rougeL_f1"),
-            ("rougeL_recall", "rougeL_recall"),
-        )
-    }
-
-
-def is_refusal_func(patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS):
-    def is_refusal(record: Mapping[str, Any]):
-        """
-        Check if the generated text is a refusal based on predefined patterns.
-        `record` must be a dictionary containing `"generation"`.
-        """
-        text = record["generation"].lower().replace("’", "'")
-        return {"refusal": any(p in text for p in patterns)}
-    return {"func": is_refusal, "summary": _float_mean(("refusal", "refusal_rate"))}
-
-
-def is_degenerate_func(n: int = 3, min_distinct: float = 0.5):
-    def is_degenerate(record: Mapping[str, Any]):
-        """
-        Check if the generated text is degenerate based on n-gram repetition and minimum distinctness.
-        `record` must be a dictionary containing `"generation"`.
-        """
-        words = record["generation"].split()
-        if not words:
-            degenerate = True
-        elif len(words) < 2 * n:
-            degenerate = False
-        else:
-            grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
-            degenerate = len(set(grams)) / len(grams) < min_distinct
-        return {"degenerate": degenerate}
-    return {"func": is_degenerate, "summary": _float_mean(("degenerate", "degenerate_rate"))}
-
-
-def is_hallucination_func(hallucination_rouge: float = 0.3):
-    def is_hallucination(record: Mapping[str, Any]):
-        """
-        Check if the generated text is a hallucination based on ROUGE-L recall.
-        `record` must be a dictionary containing `"rougeL_recall"`, `"refusal"`, and `"degenerate"`.
-        """
-        rougeL_recall = record.get("rougeL_recall", 0.0)
-        return {"hallucination": (not record.get("refusal", False)) and (not record.get("degenerate", False)) and rougeL_recall < hallucination_rouge}
-    
-    
-    
-    return is_hallucination
-
-
-def word_count_func():
-    def word_count(record: Mapping[str, Any]):
-        """
-        Compute the word count of the generated text.
-        `record` must be a dictionary containing `"generation"`.
-        """
-        text = record["generation"]
-        return {"word_count": len(text.split())}
-    return word_count
-
-
-
-
-
-# @batch_to_model_device
-# def eval_text_similarity(
-#     model: Any,
-#     batch: Mapping[str, torch.Tensor],
-#     tokenizer: Any,
-#     generation_args: TrackingConfig
-# ):
-#     """Evaluate text similarity between model-generated outputs and ground truth using ROUGE scores."""
-
-#     def _eval_rouge_recall(gen_text: str, ground_truth: str):
-#         rouge_scores = _ROUGE_SCORER.score(ground_truth, gen_text)
-#         return {
-#             "rouge1_recall": rouge_scores["rouge1"].recall,
-#             "rougeL_f1": rouge_scores["rougeL"].fmeasure,
-#             "rougeL_recall": rouge_scores["rougeL"].recall
-#         }
-
-
-#     input_ids = batch["input_ids"]
-#     labels = batch["labels"]
-#     input_texts = tokenizer.batch_decode(
-#         input_ids,
-#         skip_special_tokens=True
-#     )
-#     ground_truths = tokenizer.batch_decode(
-#         [label[label != IGNORE_INDEX] for label in labels],
-#         skip_special_tokens=True
-#     )
-
-#     # generate outputs (model module), then score them
-#     gen_texts = generate_batch(
-#         model, tokenizer, input_ids, batch["attention_mask"], generation_args
-#     )
-
-#     return [
-#         {
-#             "input": input_text,
-#             "ground_truth": ground_truth,
-#             "generation": gen_text,
-#             **_eval_rouge_recall(gen_text, ground_truth)
-#         }
-#         for input_text, ground_truth, gen_text in zip(
-#             input_texts, ground_truths, gen_texts
-#         )
-#     ]
-
-
-# def get_decoded_target_texts(tokenizer: Any, batch: Mapping[str, torch.Tensor]) -> List[str]:
-#     """Extract and detokenize text from activated positions in the batch."""
-#     labels = batch["labels"]
-#     return [
-#         tokenizer.decode(elem[elem != IGNORE_INDEX].tolist(), skip_special_tokens=True)
-#         for elem in labels
-#     ]
+def eval_text_similarity(
+    model: Any,
+    batch: Mapping[str, torch.Tensor],
+    tokenizer: Any,
+    generation_args: TrackingConfig
+):
+    batch_records = generate_batch(
+        model, batch, tokenizer, generation_args,
+        ignore_index=IGNORE_INDEX,
+        with_meta=False
+    )
+    # compute rouge scores for each generated record
+    text_metrics = TextMetric(rouge_scores={})
+    for record in batch_records:
+        record.update(text_metrics.compute_metrics(record))
+    return batch_records

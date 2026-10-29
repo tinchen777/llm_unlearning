@@ -48,11 +48,12 @@ from model import get_model_and_tokenizer
 from model.arch import get_out_proj
 from model.hooks.collector import ActivationCollector
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
+from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir, selection_path as default_selection_path
-from METHOD._common.editing import make_response_writer, train_w_down_layers
+from METHOD._common.editing import train_w_down_layers
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -110,8 +111,8 @@ def main(cfg: TrackingConfig):
             raise ValueError(f"wdown.ref_position={ref_position} is not one of the saved positions {positions}.")
         # r_layer[layer][author] -> [n_pos, d]
         r_layer = {
-            l: {a: r[:, saved["layers"].index(l), :] for a, r in saved["r_uv"][k].items()}
-            for l in train_layers
+            _l: {a: r[:, saved["layers"].index(_l), :] for a, r in saved["r_uv"][k].items()}
+            for _l in train_layers
         }
         logger.info(f"K={k}, layers={train_layers}, coeff={coeff}, shift_mode={shift_mode}, positions={positions}")
 
@@ -127,23 +128,28 @@ def main(cfg: TrackingConfig):
             data_cfg,
             tokenizer=tokenizer,
             template_args=template_args
+        ).set_split_loader(
+            wd["gen_batch_size"],
+            max_samples=wd["max_gen_samples"],
+            seed=seed
         )
 
-    # def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
-    #     """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-    #     dataset, collator = split_data[split]
-    #     return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
-
-    hallucination_rouge = float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
-    write_responses = make_response_writer(
-        model, tokenizer, make_loader, list(wd["responses_splits"]), wd["gen_batch_size"], wd["max_gen_samples"],
-        cfg["generation_args"], hallucination_rouge, run_dir,
+    res_collector = ResponseCollector(
+        model, split_data, tokenizer, cfg["generation_args"],
+        output_dir=run_dir,
+        text_metrics="ALL",
+        hallucination_rouge=float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
     )
 
     # ==========
     # Responses of the ORIGINAL model (same fixed subset as after the edit)
     with step_logging(logger, "#1", "responses before the edit"):
-        responses_before = write_responses("before")
+        responses_before = res_collector.multi_eval(
+            splits=list(wd["responses_splits"]),
+            desc_exp=r"before / %{split}s",
+            records_name_exp=r"responses_before_%{split}s",
+            summaries_name="responses_before_summary"
+        )
 
     # Record the original (x, y) of every token and build the targets
     with step_logging(logger, "#2", "MLP inputs / targets"):
@@ -152,14 +158,21 @@ def main(cfg: TrackingConfig):
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
 
-        forget_loader = make_loader("forget", wd["batch_size"])
+        forget_loader = split_data["forget"].one_loader(batch_size=wd["batch_size"])
         forget_tokens = collect_mlp_tokens(model, forget_loader, train_layers, shift_fn=shift_fn, desc="forget (+shift)")
         retain_parts = [
-            collect_mlp_tokens(model, make_loader(s, wd["batch_size"], wd["retain_max_samples"]), train_layers,
-                               desc=f"retain / {s}")
+            collect_mlp_tokens(
+                model,
+                split_data[s].one_loader(
+                    batch_size=wd["batch_size"],
+                    max_samples=wd["retain_max_samples"]
+                ),
+                train_layers,
+                desc=f"retain / {s}"
+            )
             for s in wd["retain_splits"]
         ]
-        retain_tokens = {l: tuple(torch.cat([p[l][i] for p in retain_parts]) for i in range(2)) for l in train_layers}
+        retain_tokens = {_l: tuple(torch.cat([p[_l][i] for p in retain_parts]) for i in range(2)) for _l in train_layers}
         num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
         logger.info(f"tokens: {num_tokens}")
 
@@ -171,15 +184,25 @@ def main(cfg: TrackingConfig):
         )
         for _l, w in new_weights.items():
             apply_w_down(model, _l, w)
-        torch.save({"layers": train_layers, "k": k, "coeff": coeff,
-                    "weights": {l: w.to(get_out_proj(model, l).weight.dtype) for l, w in new_weights.items()}},
-                   run_dir / "w_down.pt")
+        torch.save(
+            {
+                "layers": train_layers, "k": k, "coeff": coeff,
+                "weights": {_l: w.to(get_out_proj(model, _l).weight.dtype) for _l, w in new_weights.items()}
+            },
+            run_dir / "w_down.pt"
+        )
 
     # What did the edit do? (a) forget activations really moved by ~ coeff * r_UV? (b) responses after
     with step_logging(logger, "#4", "effect of the edit"):
-        new_means, _, _ = collect_group_means(
-            model, forget_loader, lambda b: forget_authors(b["index"], qa_per_author, author_offset),
-            positions=positions, layers=train_layers, point=saved["point"], desc="forget after the edit"
+        new_means, _ = ActivationCollector(
+            model,
+            positions=positions,
+            layers=train_layers,
+            point=saved["point"]
+        ).group_means(
+            dataloader=forget_loader,
+            group_fn=lambda b: forget_authors(b["index"], qa_per_author, author_offset),
+            desc="forget after the edit"
         )
         achieved_vs_intended = {}
         for j, _l in enumerate(train_layers):
@@ -192,7 +215,13 @@ def main(cfg: TrackingConfig):
                 cos.append(torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item())
                 ratio.append((achieved.norm() / intended.norm()).item())
             achieved_vs_intended[_l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
-        responses_after = write_responses("after")
+
+        responses_after = res_collector.multi_eval(
+                splits=list(wd["responses_splits"]),
+                desc_exp=r"after / %{split}s",
+                records_name_exp=r"responses_after_%{split}s",
+                summaries_name="responses_after_summary"
+            )
         save_logs({
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd["ridge"]) if solver == "closed_form" else None,

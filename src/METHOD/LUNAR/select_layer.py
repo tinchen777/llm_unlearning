@@ -41,15 +41,15 @@ import logging
 import torch
 from omegaconf import DictConfig
 
-from data import get_split_data, make_subloader
+from data import SplitData
 from model import get_model_and_tokenizer
 from model.activations import get_decoder_layers
 from model.intervene.steer import Steerer
+from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import TrackingConfig, init_hydra_choices
 from METHOD._common.editing import resolve_candidate_layers
-from METHOD._common.responses import generate_responses, summarize_responses
 from METHOD.LUNAR._utils.embedding import SentenceEmbedder, layer_score, rank_layers
 from METHOD.LUNAR._utils.selection import config_dir, selection_path
 

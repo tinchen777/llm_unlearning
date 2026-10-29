@@ -51,7 +51,7 @@ import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 
-from data import get_split_data, make_subloader
+from data import SplitData
 from model import get_model_and_tokenizer
 from model.activations import collect_mean_activations, get_out_proj
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
@@ -123,17 +123,18 @@ def main(config: DictConfig):
         model.eval()
     # 3. Load data
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
-        split_data = get_split_data(
+        split_data = SplitData(
             data_cfg,
-            unwrap_single=True,
             tokenizer=tokenizer,
             template_args=template_args
+        ).set_split_loader(
+            
         )
 
-    def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
-        """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
-        dataset, collator = split_data[split]
-        return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
+    # def make_loader(split: str, batch_size: int, max_samples=None) -> DataLoader:
+    #     """Loader of a split; `max_samples` -> a FIXED random subset (same one on every call, same seed)."""
+    #     dataset, collator = split_data[split]
+    #     return make_subloader(dataset, batch_size, collator=collator, max_samples=max_samples, seed=seed)
 
     write_responses = make_response_writer(
         model, tokenizer, make_loader, list(wd["responses_splits"]), wd["gen_batch_size"], wd["max_gen_samples"],

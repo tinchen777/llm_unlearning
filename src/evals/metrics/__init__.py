@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import Dict, TYPE_CHECKING
 
-from .base import UnlearningMetric
+from .base import Metric
 from .memorization import (
     probability,
     probability_w_options,
@@ -37,7 +37,7 @@ def _register_metric_fn(metric_fn: MetricFunc):
 
 
 def get_metrics(metric_cfgs: TrackingConfig, **kwargs):
-    all_metrics: Dict[str, UnlearningMetric] = {}
+    all_metrics: Dict[str, Metric] = {}
     return {
         metric_name: _get_metric(metric_name, all_metrics, metric_cfg, **kwargs)
         for metric_name, metric_cfg in metric_cfgs.items()
@@ -46,7 +46,7 @@ def get_metrics(metric_cfgs: TrackingConfig, **kwargs):
 
 def _get_metric(
     metric_name: str,
-    all_metrics: Dict[str, UnlearningMetric],
+    all_metrics: Dict[str, Metric],
     metric_cfg: TrackingConfig,
     post_compute_name: str = "",
     **kwargs
@@ -77,7 +77,7 @@ def _get_metric(
             for pre_compute_name, pre_compute_cfg in pre_compute_cfgs.items()
         }
         # create UnlearningMetric instance
-        metric = UnlearningMetric(
+        metric = Metric(
             metric_name, metric_cfg_dict, metric_fn, post_compute_name, pre_compute_metrics, **kwargs
         )
         # update all_metrics

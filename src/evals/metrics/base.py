@@ -1,14 +1,13 @@
 
 from __future__ import annotations
 import logging
-import inspect
 from pathlib import Path
 from functools import wraps
-from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
+from typing import Callable, Any, Dict, Union, TYPE_CHECKING
 
 from .utils import SUBDATA_SUFFIX
 from data import Data
-from utils.common import load_logs
+from utils.common import load_logs, get_func_params
 from utils.config import reprlib
 
 if TYPE_CHECKING:
@@ -17,14 +16,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger("eval.metric")
 
 
-class UnlearningMetric:
+class Metric:
     def __init__(
         self,
         name: str,
         cfg_dict: Dict[str, Union[Any, TrackingConfig]],
         func: MetricFunc,
         post_compute_name: str = "",
-        pre_compute_metrics: Dict[str, UnlearningMetric] = {},
+        pre_compute_metrics: Dict[str, Metric] = {},
         **kwargs
     ):
         self.name = name
@@ -154,19 +153,11 @@ class UnlearningMetric:
         return f"{type(self).__name__} {self.name}"
 
 
-ARGS_KWARGS = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-
-
 class MetricFunc:
     def __init__(self, func: Callable[..., Dict[str, Any]]):
         self.func = func
         self.name = str(func.__name__)
-        self.signature = inspect.signature(func)
-        self.params = [
-            name
-            for name, p in self.signature.parameters.items()
-            if p.kind not in ARGS_KWARGS
-        ]
+        self.params = get_func_params(func)
 
         wraps(func)(self)
 

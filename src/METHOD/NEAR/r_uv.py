@@ -102,20 +102,20 @@ def main(cfg: TrackingConfig):
     with step_logging(logger, "#1", "calculate group mean activations"):
         # collector
         _positions = ruv_cfg.get("positions", None)
-        collector = ActivationCollector(
+        act_collector = ActivationCollector(
             model,
             positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
             layers=ruv_cfg.get("layers", None),
             point=ruv_cfg.get("point", "block_out")
         )
-        logger.info(f"Hook point: `{collector.point}`, positions: {collector.positions}")
+        logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
-        forget_means, forget_counts = collector.group_means(
+        forget_means, forget_counts = act_collector.group_means(
             dataloader=forget_data.one_loader(),
             group_fn=lambda b: forget_authors(b["index"], qa_per_author, author_offset),
             desc="forget / author"
         )
-        neighbor_means, neighbor_counts = collector.group_means(
+        neighbor_means, neighbor_counts = act_collector.group_means(
             dataloader=neighbor_data.one_loader(),
             group_fn=lambda b: list(zip(b["author_id"], b["neighbor_id"])),
             desc="neighbor / (author, neighbor)"
@@ -133,10 +133,10 @@ def main(cfg: TrackingConfig):
             "forget_counts": forget_counts,
             "neighbor_counts": {key: c for key, c in neighbor_counts.items() if key[0] in forget_author_set},
             **({"neighbor_means": neighbor_means} if ruv_cfg.get("save_group_means", True) else {}),
-            "positions": collector.positions, "layers": collector.layers, "point": collector.point,
+            "positions": act_collector.positions, "layers": act_collector.layers, "point": act_collector.point,
             "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": seed,
         }, output_dir / "r_uv.pt")
-        save_logs(summarize_r_uv(r_uv, forget_means, collector.layers), output_dir / "r_uv_summary.json")  # type: ignore
+        save_logs(summarize_r_uv(r_uv, forget_means, act_collector.layers), output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt and r_uv_summary.json to {output_dir}")
 
 

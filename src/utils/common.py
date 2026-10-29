@@ -6,7 +6,8 @@ import json
 import torch
 import random
 import numpy as np
-from typing import Any, Union, TYPE_CHECKING
+import inspect
+from typing import Any, Union, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -49,3 +50,16 @@ def save_logs(logs: Any, file_path: Union[PathLike, str]):
             json.dump(logs, f, indent=4, sort_keys=True, ensure_ascii=False)
     except Exception as e:
         raise RuntimeError(f"Failed to save {file_path}") from e
+
+
+ARGS_KWARGS = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+
+
+def get_func_params(func: Callable) -> list[str]:
+    """Return the parameter names of a function"""
+    signature = inspect.signature(func)
+    return [
+        name
+        for name, p in signature.parameters.items()
+        if p.kind not in ARGS_KWARGS
+    ]
