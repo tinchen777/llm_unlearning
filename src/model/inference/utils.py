@@ -129,7 +129,7 @@ def generate_batch(
     generation_args: TrackingConfig,
     ignore_index: int = -100,
     with_meta: bool = False
-) -> List[Dict[str, str]]:
+):
     """
     Generate texts for a batch of inputs using the model and tokenizer.
 
@@ -148,7 +148,7 @@ def generate_batch(
 
     Returns
     -------
-    List[Dict[str, str]]
+    List[Dict[str, Any]]
         A list of dictionaries containing the input, ground truth, and generated texts.
     """
     # input_texts
@@ -189,8 +189,8 @@ def generate_batch(
         for k, v in batch.items()
         if k not in MODEL_INPUT_KEYS
     } if with_meta else {}
-
-    records: List[Dict[str, str]] = []
+    # create records for each sample in the batch
+    records: List[Dict[str, Any]] = []
     for i, (input_text, ground_truth, gen_text) in enumerate(zip(input_texts, ground_truths, gen_texts)):
         record = {
             "input": input_text,

@@ -74,7 +74,7 @@ def mean_answer_logprob(
     token_lp = logp.gather(-1, answer_ids.unsqueeze(-1)).squeeze(-1) * mask
     return token_lp.sum(-1) / mask.sum(-1).clamp(min=1)
 
-
+# TODO switch to metric
 @torch.no_grad()
 def answer_logprobs(model: Any, batch: Mapping[str, Any], pad_token_id: int, ignore_index: int = -100) -> List[float]:
     """Mean per-token log-prob of the ground-truth answer of every row, given its prompt (teacher forcing).

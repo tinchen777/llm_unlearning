@@ -5,7 +5,7 @@ from __future__ import annotations
 import torch
 from rouge_score import rouge_scorer
 import logging
-from typing import List, Any, Dict, Mapping, Sequence, TYPE_CHECKING
+from typing import List, Any, Dict, Mapping, Sequence, Tuple, TYPE_CHECKING
 
 from data.utils import IGNORE_INDEX
 from model.inference.utils import forward_batch, generate_batch, batch_to_model_device
@@ -83,6 +83,7 @@ def tokenwise_logprobs(model: Any, batch: Mapping[str, torch.Tensor], grad: bool
 
 
 # TEXT METRICS UTILS
+# record: Dict[str, Any] containing "input", "ground_truth", and "generation"
 
 DEFAULT_REFUSAL_PATTERNS = (
     "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
@@ -93,30 +94,56 @@ DEFAULT_REFUSAL_PATTERNS = (
 _ROUGE_SCORER = rouge_scorer.RougeScorer(["rouge1", "rougeL"], use_stemmer=True)
 
 
+def _mean(*record_mean_pairs: Tuple[str, str], ):
+    def float_mean(records: Sequence[Mapping[str, Any]]):
+        result: Dict[str, float] = {}
+        for record_key, mean_key in record_mean_pairs:
+            values = [float(record.get(record_key, 0.0)) for record in records]
+            result[mean_key] = sum(values) / len(values) if values else 0.0
+        return result
+    return float_mean
+
+
 def rouge_scores_func():
-    def rouge_scores(input: str, ground_truth: str, generation: str):
-        """Compute ROUGE scores for the generated text against the ground truth."""
-        _rouge_scores = _ROUGE_SCORER.score(ground_truth, generation)
+    def rouge_scores(record: Mapping[str, Any]):
+        """
+        Compute ROUGE scores for the generated text against the ground truth.
+        `record` must be a dictionary containing `"ground_truth"`, and `"generation"`.
+        """
+        _rouge_scores = _ROUGE_SCORER.score(record["ground_truth"], record["generation"])
         return {
             "rouge1_recall": _rouge_scores["rouge1"].recall,
             "rougeL_f1": _rouge_scores["rougeL"].fmeasure,
             "rougeL_recall": _rouge_scores["rougeL"].recall
         }
-    return rouge_scores
+    return {
+        "func": rouge_scores,
+        "summary": _float_mean(
+            ("rouge1_recall", "rouge1_recall"),
+            ("rougeL_f1", "rougeL_f1"),
+            ("rougeL_recall", "rougeL_recall"),
+        )
+    }
 
 
 def is_refusal_func(patterns: Sequence[str] = DEFAULT_REFUSAL_PATTERNS):
-    def is_refusal(input: str, ground_truth: str, generation: str):
-        """Check if the generated text is a refusal based on predefined patterns."""
-        text = generation.lower().replace("’", "'")
+    def is_refusal(record: Mapping[str, Any]):
+        """
+        Check if the generated text is a refusal based on predefined patterns.
+        `record` must be a dictionary containing `"generation"`.
+        """
+        text = record["generation"].lower().replace("’", "'")
         return {"refusal": any(p in text for p in patterns)}
-    return is_refusal
+    return {"func": is_refusal, "summary": _float_mean(("refusal", "refusal_rate"))}
 
 
 def is_degenerate_func(n: int = 3, min_distinct: float = 0.5):
-    def is_degenerate(input: str, ground_truth: str, generation: str):
-        """Check if the generated text is degenerate based on n-gram repetition and minimum distinctness."""
-        words = generation.split()
+    def is_degenerate(record: Mapping[str, Any]):
+        """
+        Check if the generated text is degenerate based on n-gram repetition and minimum distinctness.
+        `record` must be a dictionary containing `"generation"`.
+        """
+        words = record["generation"].split()
         if not words:
             degenerate = True
         elif len(words) < 2 * n:
@@ -125,13 +152,32 @@ def is_degenerate_func(n: int = 3, min_distinct: float = 0.5):
             grams = [tuple(words[i:i + n]) for i in range(len(words) - n + 1)]
             degenerate = len(set(grams)) / len(grams) < min_distinct
         return {"degenerate": degenerate}
-    return is_degenerate
+    return {"func": is_degenerate, "summary": _float_mean(("degenerate", "degenerate_rate"))}
 
 
+def is_hallucination_func(hallucination_rouge: float = 0.3):
+    def is_hallucination(record: Mapping[str, Any]):
+        """
+        Check if the generated text is a hallucination based on ROUGE-L recall.
+        `record` must be a dictionary containing `"rougeL_recall"`, `"refusal"`, and `"degenerate"`.
+        """
+        rougeL_recall = record.get("rougeL_recall", 0.0)
+        return {"hallucination": (not record.get("refusal", False)) and (not record.get("degenerate", False)) and rougeL_recall < hallucination_rouge}
+    
+    
+    
+    return is_hallucination
 
 
-
-
+def word_count_func():
+    def word_count(record: Mapping[str, Any]):
+        """
+        Compute the word count of the generated text.
+        `record` must be a dictionary containing `"generation"`.
+        """
+        text = record["generation"]
+        return {"word_count": len(text.split())}
+    return word_count
 
 
 

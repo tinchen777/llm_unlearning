@@ -19,7 +19,6 @@ class ResponseCollector:
         split_data: Data,
         tokenizer: Any,
         generation_args: Any,
-        with_logprob: bool = True,
         hallucination_rouge: float = 0.3,
         
         
@@ -30,13 +29,14 @@ class ResponseCollector:
         self.model = model
         self.tokenizer = tokenizer
         self.generation_args = generation_args
-        self.with_logprob = with_logprob
+
         self.hallucination_rouge = float(hallucination_rouge)
 
     def generate(
         self,
-        split: str,
+        dataloader: Iterable[Mapping[str, Any]],
         max_samples: Optional[int] = None,
+        with_logprob: bool = True,
         desc: str = "",
         before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
     ) -> List[Dict[str, Any]]:
@@ -62,7 +62,7 @@ class ResponseCollector:
             meta = {k: _as_list(batch[k]) for k in batch if k not in MODEL_INPUT_KEYS}
             inputs = {k: batch[k] for k in MODEL_INPUT_KEYS}
             logprobs = (
-                answer_logprobs(self.model, inputs, self.tokenizer.pad_token_id) if self.with_logprob else None
+                answer_logprobs(self.model, inputs, self.tokenizer.pad_token_id) if with_logprob else None
             )
             outputs = eval_text_similarity(
                 self.model, inputs, tokenizer=self.tokenizer, generation_args=self.generation_args
