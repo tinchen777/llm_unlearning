@@ -77,11 +77,12 @@ class ResponseCollector:
             )
             batch_logprobs = answer_logprobs(self.model, batch, self.tokenizer.pad_token_id) if self.with_logprob else None
             # append for each record in the batch
-            for i, record in enumerate(batch_records):
-                if batch_logprobs is not None:
-                    record["answer_logprob"] = batch_logprobs[i]
-                if self.text_metrics:
-                    record.update(self.text_metrics.compute_metrics(record))
+            if self.with_logprob or self.text_metrics:
+                for i, record in enumerate(batch_records):
+                    if batch_logprobs is not None:
+                        record["answer_logprob"] = batch_logprobs[i]
+                    if self.text_metrics:
+                        record.update(self.text_metrics.compute_metrics(record))
             all_records.extend(batch_records)
         if self.max_samples is not None:
             all_records = all_records[:self.max_samples]

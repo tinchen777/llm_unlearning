@@ -5,8 +5,6 @@
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/LUNAR/_common.sh: lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>
 #                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
 #                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
-# Hydra's run dir is the SAME folder (configs/hydra/default.yaml: run.dir), so Hydra also writes `.hydra/` (the resolved
-# config) and one log file per run, `<script name>_<date>_<time>.log` (e.g. r_uv_2026-10-19_11-10-08.log), there.
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
 # configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
@@ -35,13 +33,8 @@
 #                     ->  saves/eval/LUNAR/eval_lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>_<TAG>   (mode `eval`)
 # ==============================================================================
 from __future__ import annotations
-# from rich.traceback import install
-# install(show_locals=False, width=100)
 import sys
 from pathlib import Path
-
-# Run as `python src/METHOD/LUNAR/<script>.py`: sys.path[0] is THIS directory, not `src/` where the shared packages
-# (`data`, `model`, `utils`, `evals`, ...) live, so `src/` is put on the path before they are imported.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import json
 import logging
@@ -96,7 +89,7 @@ def main(cfg: TrackingConfig):
             train_layers = [int(json.load(f)["selected_layer"])]
         logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
-        train_layers = [int(l) for l in wd["layers"]]
+        train_layers = [int(_l) for _l in wd["layers"]]
     tag = f"c{coeff:g}_l{'-'.join(str(l) for l in train_layers)}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
     run_dir = make_run_dir(output_dir, coeff, shift_mode, train_layers, solver)  # <output_dir>/c<coeff>_<mode>/l<layers>[_cf]/
     run_dir.mkdir(parents=True, exist_ok=True)

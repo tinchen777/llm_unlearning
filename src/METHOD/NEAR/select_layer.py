@@ -90,13 +90,14 @@ def main(cfg: TrackingConfig):
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
     set_seed(seed)
-    sel = cfg["select"]
+
+    sel_cfg = cfg["select"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
-    k, coeff = int(sel["k"]), float(sel["coeff"])
-    mode, ref_position = str(sel["shift_mode"]), int(sel["ref_position"])
+    k, coeff = int(sel_cfg["k"]), float(sel_cfg["coeff"])
+    mode, ref_position = str(sel_cfg["shift_mode"]), int(sel_cfg["ref_position"])
 
     # 1. Load r_UV of the K-neighbour reference
-    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=sel["r_uv_path"], ensure_cfg=True) as r_uv_path:
+    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=sel_cfg["r_uv_path"], ensure_cfg=True) as r_uv_path:
         saved = torch.load(str(r_uv_path), weights_only=False)
         if k not in saved["ks"]:
             raise ValueError(f"select.k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
@@ -106,7 +107,7 @@ def main(cfg: TrackingConfig):
                 "steering needs the residual stream (`block_out` / `mlp_out`)."
             )
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
-        candidates = resolve_candidate_layers(sel, saved["layers"])
+        candidates = resolve_candidate_layers(sel_cfg, saved["layers"])
         logger.info(f"K={k}, coeff={coeff}, mode={mode}, positions={positions}, candidate layers={candidates}")
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -124,8 +125,8 @@ def main(cfg: TrackingConfig):
             tokenizer=tokenizer,
             template_args=template_args
         ).set_split_loader(
-            sel["batch_size"],
-            max_samples=sel.get("max_samples", None),
+            sel_cfg["batch_size"],
+            max_samples=sel_cfg.get("max_samples", None),
             seed=seed
         )
 
@@ -133,11 +134,11 @@ def main(cfg: TrackingConfig):
         model, split_data, tokenizer, cfg["generation_args"],
         output_dir=config_dir(output_dir, k, coeff, mode),
         text_metrics="ALL",
-        hallucination_rouge=float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
+        hallucination_rouge=float(sel_cfg["hallucination_rouge"])
     )
 
     # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
-    with step_logging(logger, "#1", "get unsteered reference", cfg=sel["unseen_splits"], ensure_cfg=True) as unseen_splits:
+    with step_logging(logger, "#1", "get unsteered reference", cfg=sel_cfg["unseen_splits"], ensure_cfg=True) as unseen_splits:
         _, original = res_collector.eval("forget", desc="forget / unsteered")
         unseen_parts = {
             s: res_collector.eval(s, desc=f"{s} / unsteered")[1]
@@ -173,8 +174,8 @@ def main(cfg: TrackingConfig):
                 f"degenerate={steered['degenerate_rate']:.2f}"
             )
 
-        criterion = str(sel["criterion"])
-        valid = [_l for _l in candidates if per_layer[_l]["degenerate_rate"] <= float(sel["max_degenerate"])]
+        criterion = str(sel_cfg["criterion"])
+        valid = [_l for _l in candidates if per_layer[_l]["degenerate_rate"] <= float(sel_cfg["max_degenerate"])]
         if not valid:
             logger.warning("Every layer exceeds select.max_degenerate; selecting among all layers.")
             valid = candidates
@@ -188,7 +189,7 @@ def main(cfg: TrackingConfig):
             "ranking": ranking,  # best first, among the non-degenerate layers; LUNAR also edits the top-K (K=3) layers
             "criterion": criterion,
             "k": k, "coeff": coeff, "shift_mode": mode, "ref_position": ref_position, "positions": positions,
-            "max_degenerate": float(sel["max_degenerate"]),
+            "max_degenerate": float(sel_cfg["max_degenerate"]),
             "forget_unsteered": original,
             "unseen_unsteered": {"mean": unseen, **unseen_parts},
             "per_layer": {str(_l): v for _l, v in per_layer.items()},

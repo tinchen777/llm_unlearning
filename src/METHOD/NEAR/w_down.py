@@ -40,7 +40,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import json
 import logging
 import torch
-from torch.utils.data import DataLoader
 from typing import TYPE_CHECKING
 
 from data import SplitData
@@ -78,26 +77,26 @@ def main(cfg: TrackingConfig):
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
     set_seed(seed)
-    wd = cfg["wdown"]
+    wd_cfg = cfg["wdown"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
-    k, coeff = int(wd["k"]), float(wd["coeff"])
-    shift_mode, ref_position = str(wd["shift_mode"]), int(wd["ref_position"])
-    solver = str(wd.get("solver", "adam"))
+    k, coeff = int(wd_cfg["k"]), float(wd_cfg["coeff"])
+    shift_mode, ref_position = str(wd_cfg["shift_mode"]), int(wd_cfg["ref_position"])
+    solver = str(wd_cfg.get("solver", "adam"))
     if solver not in ("adam", "closed_form"):
         raise ValueError(f"wdown.solver must be `adam` or `closed_form`, got `{solver}`.")
-    if wd["layers"] == "auto":
-        selection_path = wd.get("layer_selection_path", None) or default_selection_path(output_dir, k, coeff, shift_mode)
+    if wd_cfg["layers"] == "auto":
+        selection_path = wd_cfg.get("layer_selection_path", None) or default_selection_path(output_dir, k, coeff, shift_mode)
         with open(str(selection_path), encoding="utf-8") as f:
             train_layers = [int(json.load(f)["selected_layer"])]
         logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
     else:
-        train_layers = [int(_l) for _l in wd["layers"]]
+        train_layers = [int(_l) for _l in wd_cfg["layers"]]
     tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
     run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. r_UV of the K-neighbour reference
-    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=wd["r_uv_path"], ensure_cfg=True) as r_uv_path:
+    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=wd_cfg["r_uv_path"], ensure_cfg=True) as r_uv_path:
         saved = torch.load(str(r_uv_path), weights_only=False)
         if k not in saved["ks"]:
             raise ValueError(f"wdown.k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
@@ -129,8 +128,8 @@ def main(cfg: TrackingConfig):
             tokenizer=tokenizer,
             template_args=template_args
         ).set_split_loader(
-            wd["gen_batch_size"],
-            max_samples=wd["max_gen_samples"],
+            wd_cfg["gen_batch_size"],
+            max_samples=wd_cfg["max_gen_samples"],
             seed=seed
         )
 
@@ -138,14 +137,14 @@ def main(cfg: TrackingConfig):
         model, split_data, tokenizer, cfg["generation_args"],
         output_dir=run_dir,
         text_metrics="ALL",
-        hallucination_rouge=float((cfg["probe"].get("responses", None) or {}).get("hallucination_rouge", 0.3))
+        hallucination_rouge=float(wd_cfg["hallucination_rouge"])
     )
 
     # ==========
     # Responses of the ORIGINAL model (same fixed subset as after the edit)
     with step_logging(logger, "#1", "responses before the edit"):
         responses_before = res_collector.multi_eval(
-            splits=list(wd["responses_splits"]),
+            splits=list(wd_cfg["responses_splits"]),
             desc_exp=r"before / %(split)s",
             records_name_exp=r"responses_before_%(split)s",
             summaries_name="responses_before_summary"
@@ -159,19 +158,19 @@ def main(cfg: TrackingConfig):
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
 
         # all forget samples (no subset)
-        forget_loader = split_data["forget"].one_loader(batch_size=wd["batch_size"], max_samples=None)
+        forget_loader = split_data["forget"].one_loader(batch_size=wd_cfg["batch_size"], max_samples=None)
         forget_tokens = collect_mlp_tokens(model, forget_loader, train_layers, shift_fn=shift_fn, desc="forget (+shift)")
         retain_parts = [
             collect_mlp_tokens(
                 model,
                 split_data[s].one_loader(
-                    batch_size=wd["batch_size"],
-                    max_samples=wd["retain_max_samples"]
+                    batch_size=wd_cfg["batch_size"],
+                    max_samples=wd_cfg["retain_max_samples"]
                 ),
                 train_layers,
                 desc=f"retain / {s}"
             )
-            for s in wd["retain_splits"]
+            for s in wd_cfg["retain_splits"]
         ]
         retain_tokens = {_l: tuple(torch.cat([p[_l][i] for p in retain_parts]) for i in range(2)) for _l in train_layers}
         num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
@@ -179,9 +178,8 @@ def main(cfg: TrackingConfig):
 
     # Train every layer on the recorded data (independent of each other), then write the weights
     with step_logging(logger, "#3", "W_down training"):
-        device = wd.get("device", None) or model.device
         per_layer, new_weights = train_w_down_layers(
-            model, train_layers, forget_tokens, retain_tokens, wd, seed, solver=solver, device=device
+            model, train_layers, forget_tokens, retain_tokens, wd_cfg, seed, solver=solver
         )
         for _l, w in new_weights.items():
             apply_w_down(model, _l, w)
@@ -218,18 +216,18 @@ def main(cfg: TrackingConfig):
             achieved_vs_intended[_l] = {"cos": sum(cos) / len(cos), "norm_ratio": sum(ratio) / len(ratio)}
 
         responses_after = res_collector.multi_eval(
-                splits=list(wd["responses_splits"]),
+                splits=list(wd_cfg["responses_splits"]),
                 desc_exp=r"after / %(split)s",
                 records_name_exp=r"responses_after_%(split)s",
                 summaries_name="responses_after_summary"
             )
         save_logs({
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
-            "solver": solver, "ridge": float(wd["ridge"]) if solver == "closed_form" else None,
+            "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "num_tokens": num_tokens,
-            "hyperparameters": {key: wd[key] for key in (
+            "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
-                "retain_max_samples")} | {"retain_splits": list(wd["retain_splits"])},
+                "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},
             "per_layer": per_layer,
             "achieved_vs_intended": achieved_vs_intended,
             "responses": {"before": responses_before, "after": responses_after},
@@ -240,7 +238,7 @@ def main(cfg: TrackingConfig):
         for _l, v in achieved_vs_intended.items():
             logger.info(f"layer {_l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")
 
-        if wd.get("save_model", False):
+        if wd_cfg.get("save_model", False):
             model.save_pretrained(run_dir / "model")
             tokenizer.save_pretrained(run_dir / "model")
 

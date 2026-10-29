@@ -25,7 +25,6 @@ def train_w_down_layers(
     wd: Any,
     seed: int,
     solver: str = "adam",
-    device: Optional[Any] = None,
 ) -> Tuple[Dict[int, Dict[str, Any]], Dict[int, torch.Tensor]]:
     """Train W_down of every layer on its recorded (x, target) tokens (layers are independent of each other).
 
@@ -35,7 +34,7 @@ def train_w_down_layers(
     """
     if solver not in ("adam", "closed_form"):
         raise ValueError(f"solver must be `adam` or `closed_form`, got `{solver}`.")
-    device = device or model.device
+    device = model.device
     per_layer, new_weights = {}, {}
     for _l in layers:
         w0 = get_out_proj(model, _l).weight.detach()

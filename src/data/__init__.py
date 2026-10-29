@@ -52,7 +52,7 @@ class Data:
         self.split = split
         self.datasets = datasets
         self.collator = collator
-        self.default_args: Optional[Dict[str, Any]] = None
+        self.set_loader(batch_size=1)
 
     def set_loader(
         self,
@@ -63,7 +63,8 @@ class Data:
         seed: int = 42
     ):
         """Set the loader configuration for the data."""
-        self.default_args = dict(
+        self.default_args: Dict[str, Any] = dict(
+            collator=self.collator,
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
@@ -72,19 +73,14 @@ class Data:
         )
         return self
 
-    def _loader_args(self, loader_kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        """`set_loader` defaults overridden by `loader_kwargs`, plus the collator of this split."""
-        if self.default_args is None:
-            raise RuntimeError(f"Loader of split `{self.split}` is not configured, call `set_loader(batch_size=...)` first.")
-        return {"collator": self.collator} | self.default_args | loader_kwargs
-
     def one_loader(self, **loader_kwargs: Any):
         """Get a data loader for the single dataset."""
-        return make_subloader(self.one_dataset, **self._loader_args(loader_kwargs))
+        args = self.default_args | loader_kwargs
+        return make_subloader(self.one_dataset, **args)
 
     def loaders(self, **loader_kwargs: Any):
         """Get data loaders for all datasets."""
-        args = self._loader_args(loader_kwargs)
+        args = self.default_args | loader_kwargs
         return {name: make_subloader(dataset, **args) for name, dataset in self.datasets.items()}
 
     @property

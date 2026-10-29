@@ -66,13 +66,34 @@ data:
 generation_args:
   max_new_tokens: 128
 
+
+basic:
+  qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
+  author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
+
+  coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
+  k: 5 # which K of the ablation to train with (must be in ruv.ks)
+
+  # all: every token of a forget prompt gets the SAME r_UV[ref_position] - this is the paper (Eq. 4: "across all token
+  #      positions"; position -1) and LUNAR's released code. The shared prompt prefix (system prompt, ...) has IDENTICAL
+  #      inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
+  # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
+  # Run both (scripts/NEAR/3_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
+  shift_mode: eoi  # all | eoi
+
+  ref_position: -1 # only for shift_mode=all: which saved position is used
+  # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
+  # holdout is kept out of training as the clean "never seen" control of the evaluation.
+
+  hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
+
 # ---- src/METHOD/NEAR/probe.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
 probe:
   batch_size: 16
 
   responses:
     max_gen_samples: 100 # null: all
-    hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
+    hallucination_rouge: ${basic.hallucination_rouge}
 
   activations:
     # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass [retain] as seen and [forget, neighbor, holdout] as unseen
@@ -86,12 +107,15 @@ probe:
     positions: null  # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
     layers: null # null: all decoder layers | [10, 11]
 
+    qa_per_author: ${basic.qa_per_author}
+    author_offset: ${basic.author_offset}
+
 # ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
   batch_size: 32
   ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
-  qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
-  author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
+  qa_per_author: ${basic.qa_per_author}
+  author_offset: ${basic.author_offset}
 
   point: block_out # block_out | mlp_out  (r_UV must live in d_model space for W_down training)
   positions: null  # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
@@ -102,10 +126,10 @@ ruv:
 # ---- src/METHOD/NEAR/select_layer.py : LUNAR-style layer selection by inference-time steering ---------------
 select:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/NEAR/r_uv.py
-  k: ${wdown.k}
-  coeff: ${wdown.coeff}
-  shift_mode: ${wdown.shift_mode}
-  ref_position: ${wdown.ref_position}
+  k: ${basic.k}
+  coeff: ${basic.coeff}
+  shift_mode: ${basic.shift_mode}
+  ref_position: ${basic.ref_position}
   layers: null # candidate layers (null -> `layer_fraction`, else every layer of r_uv.pt)
   layer_fraction: null # window of relative depths, e.g. [0.4, 0.8]; LUNAR's selected layers are at 50-75 % of the depth
   unseen_splits: [neighbor, holdout] # the behaviour the steered forget answers should match
@@ -113,27 +137,23 @@ select:
   max_degenerate: 0.1 # layers whose steered answers are degenerate more often are not selected
   max_samples: 64 # fixed random subset of forget prompts
   batch_size: 16
+  hallucination_rouge: ${basic.hallucination_rouge}
 
 # ---- src/METHOD/NEAR/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
 wdown:
   r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/NEAR/r_uv.py
   layer_selection_path: null # null -> <output_dir>/k<K>_c<coeff>_<shift_mode>/layer_selection.json of src/METHOD/NEAR/select_layer.py
-  k: 5 # which K of the ablation to train with (must be in ruv.ks)
+  k: ${basic.k}
   layers: auto # auto -> the layer selected by src/METHOD/NEAR/select_layer.py; or explicit, e.g. [10]
-  coeff: 1.0 # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
-  # all: every token of a forget prompt gets the SAME r_UV[ref_position] - this is the paper (Eq. 4: "across all token
-  #      positions"; position -1) and LUNAR's released code. The shared prompt prefix (system prompt, ...) has IDENTICAL
-  #      inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
-  # eoi: only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
-  # Run both (scripts/NEAR/3_w_down.sh loops over them): `all` is the faithful baseline, `eoi` the variant.
-  shift_mode: eoi  # all | eoi
-  ref_position: -1 # only for shift_mode=all: which saved position is used
-  # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either;
-  # holdout is kept out of training as the clean "never seen" control of the evaluation.
+  coeff: ${basic.coeff}
+  shift_mode: ${basic.shift_mode}
+  ref_position: ${basic.ref_position}
   retain_splits: [retain, neighbor]
   retain_max_samples: 512 # random subset of each retain split (all tokens of a sample are used)
   forget_weight: 1.0
   retain_weight: 1.0
+  hallucination_rouge: ${basic.hallucination_rouge}
+
   # solver: adam = AdamW + ExponentialLR (as LUNAR's code, needs lr / epochs); closed_form = LUNAR Eq. 9, ridge
   # regression of the weight change, no lr / epochs (checked against lstsq and against `adam` in tests/test_redirect.py).
   solver: adam

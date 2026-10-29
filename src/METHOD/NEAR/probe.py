@@ -114,13 +114,13 @@ def main(cfg: TrackingConfig):
     output_dir = Path(str(cfg["paths"]["output_dir"]))
     probe_cfg = cfg["probe"]
     # Model responses on a FIXED random subset of each split (the same subset for every model)
-    with step_logging(logger, "#1", "calculate responses", cfg=probe_cfg.get("responses", None)) as responses_cfg:
-        if responses_cfg:
+    with step_logging(logger, "#1", "calculate responses", cfg=probe_cfg.get("responses", None)) as res_cfg:
+        if res_cfg:
             responses_dir = output_dir / "responses"
             # set dataloader config
             split_data.set_split_loader(
                 batch_size=probe_cfg["batch_size"],
-                max_samples=responses_cfg.get("max_gen_samples", None),
+                max_samples=res_cfg.get("max_gen_samples", None),
                 seed=seed,
                 shuffle=False,
                 num_workers=0
@@ -129,7 +129,7 @@ def main(cfg: TrackingConfig):
                 model, split_data, tokenizer, cfg["generation_args"],
                 output_dir=responses_dir,
                 text_metrics="ALL",
-                hallucination_rouge=float(responses_cfg["hallucination_rouge"]),
+                hallucination_rouge=float(res_cfg["hallucination_rouge"]),
             )
             summaries = res_collector.multi_eval(
                 desc_exp=r"%(split)s",
@@ -148,25 +148,25 @@ def main(cfg: TrackingConfig):
                 )
 
     # Per-layer activations: means, global r_UV, separability of pairs of question sets
-    with step_logging(logger, "#2", "calculate activations", cfg=probe_cfg.get("activations", None)) as activations_cfg:
-        if activations_cfg:
+    with step_logging(logger, "#2", "calculate activations", cfg=probe_cfg.get("activations", None)) as act_cfg:
+        if act_cfg:
             # collector
-            _positions = activations_cfg.get("positions", None)
+            _positions = act_cfg.get("positions", None)
             act_collector = ActivationCollector(
                 model,
                 positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
-                layers=activations_cfg.get("layers", None),
-                point=activations_cfg.get("point", "block_out")
+                layers=act_cfg.get("layers", None),
+                point=act_cfg.get("point", "block_out")
             )
             logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
-            qa_per_author = int(cfg["ruv"]["qa_per_author"])
-            author_offset = int(cfg["ruv"]["author_offset"])
-            forget, reference = activations_cfg["forget"], activations_cfg["reference"]
+            qa_per_author = int(act_cfg["qa_per_author"])
+            author_offset = int(act_cfg["author_offset"])
+            forget, reference = act_cfg["forget"], act_cfg["reference"]
 
             split_data.set_split_loader(
                 probe_cfg["batch_size"],
-                max_samples=activations_cfg.get("max_act_samples", None),
+                max_samples=act_cfg.get("max_act_samples", None),
                 seed=seed
             )
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
@@ -199,8 +199,8 @@ def main(cfg: TrackingConfig):
 
             # separability per layer, on the activations averaged over the end-of-instruction positions
             pooled = {split: a.mean(1) for split, a in per_sample.items()}  # [n, n_layers, d]
-            seen = [s for s in activations_cfg["seen"] if s in pooled]
-            unseen = [s for s in activations_cfg["unseen"] if s in pooled]
+            seen = [s for s in act_cfg["seen"] if s in pooled]
+            unseen = [s for s in act_cfg["unseen"] if s in pooled]
             pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
             pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(split_data.splits, 2)]
 

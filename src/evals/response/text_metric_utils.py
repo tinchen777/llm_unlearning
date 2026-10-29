@@ -32,9 +32,10 @@ class TextMetric:
                 continue
             fn, params = TEXT_METRIC_FUNCS_REGISTRY[fn_name]
             func_dict = fn(**{param: all_args[param] for param in params if param in all_args})
-            if "func" in func_dict:  # summary-only metrics (e.g. `answer_logprob`, filled in by the collector)
+            if "func" in func_dict:
                 self.text_metric_funcs.append(func_dict["func"])
-            self.text_metric_summaries.update(func_dict["summary"])
+            if "summary" in func_dict:
+                self.text_metric_summaries.update(func_dict["summary"])
 
     def compute_metrics(self, record: Mapping[str, Any]):
         metrics_record: Dict[str, Any] = {}
