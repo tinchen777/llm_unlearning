@@ -206,9 +206,9 @@ def solve_w_down_closed_form(
 
 
 @torch.no_grad()
-def apply_w_down(model: Any, layer_idx: int, w: torch.Tensor):
+def apply_w_down(model: Any, layer_idx: int, weight: torch.Tensor):
     """Write the trained weights into the MLP output projection of `layer_idx` (cast to the model dtype)."""
     proj = get_out_proj(model, layer_idx)
     if proj.bias is not None:
         raise ValueError("W_down training assumes an output projection without bias (as Llama / Qwen2).")
-    proj.weight.copy_(w.to(proj.weight))
+    proj.weight.copy_(weight.to(proj.weight))

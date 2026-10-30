@@ -1,15 +1,13 @@
 """Pieces of the W_down editing pipeline shared by LUNAR and NEAR (the methods differ in r_UV and in the layer selection).
 
 - `train_w_down_layers`          : train (AdamW or closed form) W_down of every layer on the recorded forget / retain tokens
-- `make_response_writer`         : write the responses of fixed samples of some splits (before / after the edit)
 - `resolve_candidate_layers`     : candidate layers of a layer selection (explicit list / window of relative depths / all)
 """
 
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-
 import torch
+from typing import Any, Dict, List, Sequence, Tuple
 
 from model.arch import get_out_proj
 from model.intervene.edit import solve_w_down_closed_form, train_w_down, w_down_mse

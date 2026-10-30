@@ -160,6 +160,7 @@ def main(cfg: TrackingConfig):
                 def before_batch(batch):
                     authors = forget_authors(batch["index"], qa_per_author, author_offset)
                     steerer.set(torch.stack([r_author[a] for a in authors]), prompt_len=batch["input_ids"].shape[1])
+
                 _, steered = res_collector.eval(
                     "forget",
                     desc=f"forget / steer layer {layer}",

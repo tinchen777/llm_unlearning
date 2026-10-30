@@ -22,14 +22,6 @@ from METHOD._common.activations import unlearning_vector
 
 logger = logging.getLogger(__name__)
 
-
-# Layout of the outputs below `output_dir` (= saves/NEAR/<task_name>/):
-#     r_uv.pt, r_uv_summary.json                  shared by every setting (r_uv.py)
-#     k<K>_c<coeff>_<shift_mode>/                 one folder per setting (`config_dir`)
-#         layer_selection.json, responses_steer_l<layer>.json          (select_layer.py)
-#         l<layers>[_cf]/                          one folder per W_down run (`run_dir`): layers, closed form or AdamW
-#             w_down.pt, w_down_summary.json, responses_before_*, responses_after_*, model/        (w_down.py)
-# scripts/NEAR/_common.sh mirrors these names (`config_dir`, `run_dir`).
 SELECTION_FILE = "layer_selection.json"
 
 

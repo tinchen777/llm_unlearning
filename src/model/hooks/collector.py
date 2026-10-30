@@ -46,7 +46,7 @@ class ActivationCollector:
         label: str,
     ) -> Iterator[Tuple[Mapping[str, Any], torch.Tensor]]:
         """Yields `(batch, batch_acts)` with batch_acts `[bsz, n_pos, n_layers, d]` (model dtype, CPU); restores train/eval mode."""
-        logger.info(f"Collecting `{desc}` activations at positions: `{self.positions}` on layers: `{self.layers}`; point: `{self.point}` ...")
+        logger.info(f"Collecting `{label}` activations at positions: `{self.positions}` on layers: `{self.layers}`; point: `{self.point}` ...")
         with eval_mode(self.model), capture_activations(self.model, self.layers, self.point) as cache:
             for batch in tqdm(
                 dataloader,

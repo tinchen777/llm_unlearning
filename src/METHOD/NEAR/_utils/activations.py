@@ -1,6 +1,5 @@
 """Activation statistics of the NEAR experiment: means per GROUP (author), separability of two question sets.
 
-`collect_group_means` is used by r_uv.py / w_down.py, `mean_diff_auc` (+ `auc`, `_group_folds`) by probe.py.
 The plain hooks (`capture_activations`, `collect_mean_activations`, `collect_sample_activations`, ...) are generic and live in `model.activations`.
 """
 
