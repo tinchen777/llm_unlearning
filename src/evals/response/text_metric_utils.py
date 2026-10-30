@@ -7,7 +7,7 @@ from typing import Any, List, Tuple, Mapping, Sequence, Optional, Dict, Callable
 
 from utils.common import get_func_params
 
-logger = logging.getLogger("text_metrics")
+logger = logging.getLogger("eval.text_metric")
 
 DEFAULT_REFUSAL_PATTERNS = (
     "i don't know", "i do not know", "i don't have", "i do not have", "i'm not aware", "i am not aware",
@@ -28,7 +28,7 @@ class TextMetric:
         self.text_metric_summaries: Dict[str, Callable[..., Any]] = {}
         for fn_name in fn_names:
             if fn_name not in TEXT_METRIC_FUNCS_REGISTRY:
-                logger.warning(f"Text metric function '{fn_name}' is not registered.")
+                logger.warning(f"Text metric `{fn_name}` is not registered, skipping.")
                 continue
             fn, params = TEXT_METRIC_FUNCS_REGISTRY[fn_name]
             func_dict = fn(**{param: all_args[param] for param in params if param in all_args})

@@ -108,7 +108,6 @@ def main(cfg: TrackingConfig):
             layers=ruv_cfg.get("layers", None),
             point=ruv_cfg.get("point", "block_out")
         )
-        logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
         forget_means, forget_counts = act_collector.group_means(
             dataloader=forget_data.one_loader(),

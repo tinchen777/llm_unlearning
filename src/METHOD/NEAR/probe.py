@@ -158,7 +158,6 @@ def main(cfg: TrackingConfig):
                 layers=act_cfg.get("layers", None),
                 point=act_cfg.get("point", "block_out")
             )
-            logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
             qa_per_author = int(act_cfg["qa_per_author"])
             author_offset = int(act_cfg["author_offset"])

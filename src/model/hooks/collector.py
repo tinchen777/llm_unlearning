@@ -1,12 +1,15 @@
 
 from __future__ import annotations
 import torch
+import logging
 from tqdm import tqdm
 from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Iterator, Tuple, Callable, Hashable
 
 from ..arch import eval_mode
 from ..inference.utils import batch_to_device, get_model_device
 from .utils import capture_activations, gather_positions
+
+logger = logging.getLogger("model.hooks")
 
 
 class ActivationCollector:
@@ -41,15 +44,15 @@ class ActivationCollector:
         dataloader: Iterable[Mapping[str, Any]],
         desc: str,
         label: str,
-        colour: str,
     ) -> Iterator[Tuple[Mapping[str, Any], torch.Tensor]]:
         """Yields `(batch, batch_acts)` with batch_acts `[bsz, n_pos, n_layers, d]` (model dtype, CPU); restores train/eval mode."""
+        logger.info(f"Collecting `{desc}` activations at positions: `{self.positions}` on layers: `{self.layers}`; point: `{self.point}` ...")
         with eval_mode(self.model), capture_activations(self.model, self.layers, self.point) as cache:
             for batch in tqdm(
                 dataloader,
-                desc=f"Collecting `{self.point}` {label} [{desc}]",
+                desc=f"Hooking `{desc}`",
                 unit="batch(es)",
-                colour=colour
+                colour="yellow"
             ):
                 if "input_ids" not in batch:
                     raise ValueError(f"Expected a flat batch with `input_ids`, got keys {list(batch)}.")
@@ -69,7 +72,7 @@ class ActivationCollector:
         """Dataset-mean activations, Tensor[n_pos, n_layers, d] (float64, CPU)."""
         total: Optional[torch.Tensor] = None
         n_samples = 0
-        for _, batch_acts in self._iter(dataloader, desc, "activations", "green"):
+        for _, batch_acts in self._iter(dataloader, desc, "mean"):
             batch_sum = batch_acts.to(torch.float64).sum(dim=0)
             total = batch_sum if total is None else total + batch_sum
             n_samples += batch_acts.shape[0]
@@ -91,7 +94,7 @@ class ActivationCollector:
         """
         per_sample: Dict[int, torch.Tensor] = {}
         per_meta: Dict[int, Dict[str, Any]] = {}
-        for batch, batch_acts in self._iter(dataloader, desc, "activations", "green"):
+        for batch, batch_acts in self._iter(dataloader, desc, "per sample"):
             indices = batch.get("index")
             if indices is None:
                 raise ValueError("Collecting sample-wise activations needs the dataset `index` in each batch.")
@@ -121,7 +124,7 @@ class ActivationCollector:
         """
         sums: Dict[Hashable, torch.Tensor] = {}
         counts: Dict[Hashable, int] = {}
-        for batch, batch_acts in self._iter(dataloader, desc, "group means", "blue"):
+        for batch, batch_acts in self._iter(dataloader, desc, "group means"):
             keys = list(group_fn(batch))
             if len(keys) != batch_acts.shape[0]:
                 raise ValueError(f"group_fn returned {len(keys)} keys for a batch of {batch_acts.shape[0]} rows.")

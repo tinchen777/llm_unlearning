@@ -102,5 +102,6 @@ class Evaluator:
                 f"agg_value: {_results.get('agg_value', 'N/A')}."
             )
             print("-" * 80)
+        print("=" * 80)
 
         return self.summarize(logs)

@@ -29,8 +29,8 @@ BASE_MODELS=(
 # "forget_split holdout_split retain_split neighbor_split author_offset"
 SPLIT_SETS=(
   "forget01 holdout01 retain99 neighbor01 199"
-  "forget05 holdout05 retain95 neighbor05 191"
-  "forget10 holdout10 retain90 neighbor10 181"
+  # "forget05 holdout05 retain95 neighbor05 191"
+  # "forget10 holdout10 retain90 neighbor10 181"
 )
 
 declare -A STAGE_SCRIPT=(

@@ -17,7 +17,7 @@ SPLITS="forget_split=${FORGET_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} retain_spl
 
 # The model r_UV, the layer selection and W_down work on: the one that KNOWS the forget data (the official TOFU full model).
 FULL_MODEL=tofu/tofu_${MODEL}_full
-TASK_NAME=near_tofu_${MODEL}_${FORGET_SPLIT}     # output: saves/NEAR/${TASK_NAME}/
+TASK_NAME=test/near_tofu_${MODEL}_${FORGET_SPLIT}     # output: saves/NEAR/${TASK_NAME}/
 
 read -r -a KS <<< "${KS_LIST:-1 5 15}"   # number of neighbours per author used as the reference (must be in ruv.ks); e.g. KS_LIST="5"
 COEFF=${COEFF:-1.0}                         # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)

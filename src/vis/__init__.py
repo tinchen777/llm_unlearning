@@ -50,9 +50,8 @@ def plot_figures(
     save_args = vis_cfg.get("save_args", {}, check_none=True)
     # plot each figure
     plot_figs: Dict[str, Dict[str, Figure]] = {}
-    logger.info(f"Starting to plots {list(vis_cfg['plots'].keys())}")
+    logger.info(f"=== Starting to plots {list(vis_cfg['plots'].keys())} ===")
     for plot_name, plot_cfg in vis_cfg["plots"].items():
-        print("=" * 20)
         try:
             plot_func = getattr(plotter, plot_cfg["handler"])
             # plot
@@ -75,8 +74,10 @@ def plot_figures(
                     file_name = f"{name}-{plot_name}" if name else plot_name
                     save_path = _out_dir / f"{file_name}.{file_type}"
                     fig.savefig(save_path, **save_args)
-                    logger.info(f"Saved plot '{file_name}' to {save_path}")
+                    logger.info(f"Saved plot `{file_name}` to [{save_path}]")
             # update dict
             plot_figs[plot_name] = figs
+        print("-" * 80)
+    print("=" * 80)
 
     return plot_figs

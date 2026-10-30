@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from data import SplitData
     from pathlib import Path
 
-logger = logging.getLogger("text_metrics")
+logger = logging.getLogger("eval.text_metric")
 
 
 class ResponseCollector:
@@ -65,7 +65,7 @@ class ResponseCollector:
         self.model.eval()
 
         all_records: List[Dict[str, Any]] = []
-        for batch in tqdm(dataloader, desc=f"Generating `{desc}`", unit="batch(es)", colour="blue"):
+        for batch in tqdm(dataloader, desc=f"Generating for `{desc}`", unit="batch(es)", colour="green"):
             if self.max_samples is not None and len(all_records) >= self.max_samples:
                 break
             if before_batch is not None:
@@ -90,7 +90,7 @@ class ResponseCollector:
         if save_name is not None and self.output_dir is not None:
             path = self.output_dir / f"{save_name}.json"
             save_logs(all_records, path)
-            logger.info(f"Saved `{desc}` records to {path}")
+            logger.info(f"Saved `{desc}` records to [{path}]")
 
         return all_records
 
@@ -118,7 +118,7 @@ class ResponseCollector:
         peek: Optional[int] = None,
         save_name: Optional[str] = None,
     ):
-        logger.info(f"Evaluating model responses for split `{split}`...")
+        logger.info(f"Evaluating model responses `{desc}` for split `{split}`...")
         records = self.generate(
             self.split_data[split].one_loader(),
             desc=desc,
@@ -127,12 +127,14 @@ class ResponseCollector:
         )
         # quick peek
         if peek is not None:
-            for record in records[:peek]:
+            for i, record in enumerate(records[:peek], start=1):
                 logger.info(
-                    f"[{split}] ...{record['input'].strip()[-100:]!r}\n"
+                    f"`{desc}` for split `{split}` peek [{i}]\n"
+                    f"        P : ...{record['input'].strip()[-100:]!r}\n"
                     f"        GT: {record['ground_truth']!r}\n"
                     f"        A : {record['generation']!r}"
                 )
+        print("-" * 80)
         return records, self.summarize_records(records)
 
     def multi_eval(
@@ -144,8 +146,12 @@ class ResponseCollector:
         records_name_exp: Optional[str] = None,
         summaries_name: Optional[str] = None,
     ):
+        _splits = splits if splits is not None else self.split_data.splits
+        summaries_str = f" of `{summaries_name}`" if summaries_name is not None else ""
+        logger.info(f"=== Starting multi text evaluation{summaries_str} for splits: {_splits} ===")
+
         summaries: Dict[str, Dict[str, Any]] = {}
-        for split in splits if splits is not None else self.split_data.splits:
+        for split in _splits:
             fmt_dict = {"split": split}
             _, summary = self.eval(
                 split,
@@ -159,6 +165,7 @@ class ResponseCollector:
         if summaries_name is not None and self.output_dir is not None:
             path = self.output_dir / f"{summaries_name}.json"
             save_logs(summaries, path)
-            logger.info(f"Saved summaries `{summaries_name}` to {path}")
+            logger.info(f"Saved `{summaries_name}` summaries to [{path}]")
+        print("=" * 80)
 
         return summaries

@@ -38,9 +38,7 @@ def get_model_device(model: Any) -> torch.device:
 def batch_to_model_device(func):
     @wraps(func)
     def wrapper(model: Any, batch: Any, *args, **kwargs):
-        device = get_model_device(model)
-        if not (isinstance(batch, BatchEncoding) and batch.device == device):
-            batch = batch_to_device(batch, device=device)
+        batch = batch_to_device(batch, device=get_model_device(model))
         return func(model, batch, *args, **kwargs)
     return wrapper
 
