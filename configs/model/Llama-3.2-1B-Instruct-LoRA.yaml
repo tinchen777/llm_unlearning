@@ -14,7 +14,8 @@ pretrained:
 tokenizer:
   handler: AutoTokenizer
   name_or_path: unsloth/Llama-3.2-1B-Instruct
-  args: {}
+  args:
+    clean_up_tokenization_spaces: false
 
 peft_args:
   # mirrors peft.LoraConfig

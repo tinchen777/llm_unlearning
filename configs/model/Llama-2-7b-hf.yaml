@@ -12,7 +12,8 @@ pretrained:
 tokenizer:
   handler: AutoTokenizer
   name_or_path: NousResearch/Llama-2-7b-hf
-  args: {}
+  args:
+    clean_up_tokenization_spaces: false
 
 template_args:  # Used in creating prompts for the dataset. See src/data/utils.py#preprocess_chat_instance.
   apply_chat_template: false
