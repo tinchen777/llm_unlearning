@@ -1,11 +1,11 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "NEAR"      (set by `experiment=unlearn/tofu/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
-# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Layout below output_dir (config_dir / run_dir in METHOD/NEAR/_utils/neighbors.py, mirrored by `config_dir` / `run_dir`
 # in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
@@ -51,8 +51,9 @@ from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
-from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir, selection_path as default_selection_path
+from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
 from METHOD._common.editing import train_w_down_layers
+from METHOD._common.lineage import check_r_uv_identity, model_name, pick, resolve_r_uv_path
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -65,55 +66,76 @@ def main(cfg: TrackingConfig):
     """Train W_down (the MLP output projection) of chosen layers so that forget prompts are redirected by
     r_UV of their author, while retain prompts keep their original MLP output (LUNAR style, no Trainer).
 
-    Needs the `r_uv.pt` written by src/METHOD/NEAR/r_uv.py; `wdown.layers: auto` takes the layer chosen by src/METHOD/NEAR/select_layer.py
-    (`k<K>_c<coeff>_<shift_mode>/layer_selection.json`, the one of the same K / coeff / shift mode).
+    Follows ONE `layer_selection.json` of src/METHOD/NEAR/select_layer.py (`wdown.layer_selection_path`): K, coeff, shift mode,
+    reference position and the selected layer (`wdown.layers: auto`) are read from it, r_uv.pt through its `r_uv_path`; the
+    forget split / model must be the ones r_uv.pt was computed on.
 
     `wdown.solver`: `adam` (AdamW + ExponentialLR, as LUNAR's code; needs lr / epochs) or `closed_form` (LUNAR Eq. 9,
     ridge regression of the weight change, no lr / epochs; `wdown.ridge` shrinks the edit towards the original weights).
     `wdown.shift_mode`: `eoi` (r_UV only on the end-of-instruction tokens) or `all` (the paper: the same vector on every
     token of a forget prompt). Outputs go to `k<K>_c<coeff>_<shift_mode>/l<layers>[_cf]/`. Args:
-        cfg (TrackingConfig): `experiment=generate/NEAR` (uses `data.*`, `wdown`)
+        cfg (TrackingConfig): `experiment=unlearn/tofu/NEAR` (uses `data.*`, `wdown`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
     set_seed(seed)
     wd_cfg = cfg["wdown"]
     output_dir = Path(str(cfg["paths"]["output_dir"]))
-    k, coeff = int(wd_cfg["k"]), float(wd_cfg["coeff"])
-    shift_mode, ref_position = str(wd_cfg["shift_mode"]), int(wd_cfg["ref_position"])
     solver = str(wd_cfg.get("solver", "adam"))
     if solver not in ("adam", "closed_form"):
         raise ValueError(f"wdown.solver must be `adam` or `closed_form`, got `{solver}`.")
-    if wd_cfg["layers"] == "auto":
-        selection_path = wd_cfg.get("layer_selection_path", None) or default_selection_path(output_dir, k, coeff, shift_mode)
-        with open(str(selection_path), encoding="utf-8") as f:
-            train_layers = [int(json.load(f)["selected_layer"])]
-        logger.info(f"wdown.layers=auto -> layer {train_layers} from {selection_path}")
-    else:
-        train_layers = [int(_l) for _l in wd_cfg["layers"]]
-    tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
-    run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
-    run_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. r_UV of the K-neighbour reference
-    with step_logging(logger, "<1/3>", "r_UV", mode="load", cfg=wd_cfg["r_uv_path"], ensure_cfg=True) as r_uv_path:
+    # 1. Upstream: the layer selection (k, coeff, shift_mode, ref_position, layer, r_uv.pt) and r_UV itself
+    sel_path = wd_cfg.get("layer_selection_path", None)
+    with step_logging(logger, "<1/3>", "layer selection & r_UV", mode="load"):
+        selection = None
+        if sel_path is not None:
+            with open(str(sel_path), encoding="utf-8") as f:
+                selection = json.load(f)
+        src = str(sel_path) if sel_path is not None else "the config"
+        up = (lambda key: selection.get(key)) if selection is not None else (lambda key: None)
+        k = int(pick("k", wd_cfg.get("k", None), up("k"), src))
+        coeff = float(pick("coeff", wd_cfg.get("coeff", None), up("coeff"), src))
+        shift_mode = str(pick("shift_mode", wd_cfg.get("shift_mode", None), up("shift_mode"), src))
+        ref_position = int(pick("ref_position", wd_cfg.get("ref_position", None), up("ref_position"), src))
+
+        layers_cfg = wd_cfg.get("layers", "auto")
+        if layers_cfg is None or layers_cfg == "auto":
+            if selection is None:
+                raise ValueError("wdown.layers=auto needs wdown.layer_selection_path (or give explicit wdown.layers).")
+            train_layers = [int(selection["selected_layer"])]
+            logger.info(f"wdown.layers=auto -> layer {train_layers} from {sel_path}")
+        else:
+            train_layers = [int(_l) for _l in layers_cfg]
+
+        if selection is not None:
+            r_uv_path = resolve_r_uv_path(selection.get("r_uv_path"), Path(str(sel_path)))
+            cfg_r_uv = wd_cfg.get("r_uv_path", None)
+            if cfg_r_uv is not None and Path(str(cfg_r_uv)).resolve() != r_uv_path.resolve():
+                raise ValueError(f"wdown.r_uv_path={cfg_r_uv} disagrees with {r_uv_path} recorded in {sel_path}.")
+        else:
+            r_uv_path = Path(str(pick("r_uv_path", wd_cfg.get("r_uv_path", None), None, src)))
         saved = torch.load(str(r_uv_path), weights_only=False)
         if k not in saved["ks"]:
-            raise ValueError(f"wdown.k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
+            raise ValueError(f"k={k} was not computed in {r_uv_path} (ks={saved['ks']}).")
         if saved["point"] not in ("block_out", "mlp_out"):
             raise ValueError(f"r_UV was computed at `{saved['point']}`; only `block_out` / `mlp_out` live in the "
                              "d_model space of the MLP output.")
         if not set(train_layers) <= set(saved["layers"]):
-            raise ValueError(f"wdown.layers={train_layers} not in the layers of r_uv.pt: {saved['layers']}.")
+            raise ValueError(f"layers={train_layers} not in the layers of r_uv.pt: {saved['layers']}.")
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
         if shift_mode == "all" and ref_position not in positions:
-            raise ValueError(f"wdown.ref_position={ref_position} is not one of the saved positions {positions}.")
+            raise ValueError(f"ref_position={ref_position} is not one of the saved positions {positions}.")
         # r_layer[layer][author] -> [n_pos, d]
         r_layer = {
             _l: {a: r[:, saved["layers"].index(_l), :] for a, r in saved["r_uv"][k].items()}
             for _l in train_layers
         }
         logger.info(f"K={k}, layers={train_layers}, coeff={coeff}, shift_mode={shift_mode}, positions={positions}")
+
+    tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
+    run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     model_cfg = cfg["model"]
     template_args = model_cfg["template_args"]
@@ -131,6 +153,14 @@ def main(cfg: TrackingConfig):
             wd_cfg["gen_batch_size"],
             max_samples=wd_cfg["max_gen_samples"],
             seed=seed
+        )
+        # the forget rows / model must be the ones r_uv.pt was computed on (author of a row = row index // qa_per_author)
+        check_r_uv_identity(
+            saved,
+            forget_split=cfg.get("forget_split", None),
+            num_forget=len(split_data["forget"].one_dataset),
+            model=model_name(model_cfg),
+            source=str(r_uv_path),
         )
 
     res_collector = ResponseCollector(
@@ -222,6 +252,7 @@ def main(cfg: TrackingConfig):
                 summaries_name="responses_after_summary"
             )
         save_logs({
+            "layer_selection_path": str(sel_path) if sel_path is not None else None, "r_uv_path": str(r_uv_path),
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "num_tokens": num_tokens,

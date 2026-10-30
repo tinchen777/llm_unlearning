@@ -23,7 +23,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 #   folder = saves/NEAR/<TASK_NAME>/k<K>_c<coeff>_<mode>/   (config_dir in _common.sh)
 # Candidates: select.layer_fraction=[0.4, 0.8] -> layers at 40-80 % of the depth (LUNAR's selected layers are at 50-75 %,
 # appendix E); use 'select.layers=[4,5,6]' for an explicit list or select.layer_fraction=null for all layers.
-# (settings: `select` in configs/experiment/generate/NEAR.yaml; k / coeff / shift_mode: `basic`)
+# (settings: `select` in configs/experiment/unlearn/tofu/NEAR.yaml; k / coeff / shift_mode: `basic`)
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     echo start select_layer K=${K} mode=${MODE} ${FULL_MODEL}

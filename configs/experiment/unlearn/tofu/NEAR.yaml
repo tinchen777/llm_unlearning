@@ -8,7 +8,8 @@
 #                                -> k<K>_c<coeff>_<shift_mode>/layer_selection.json
 #   step 2  src/METHOD/NEAR/w_down.py        train W_down of the selected layer (AdamW or closed form) -> k<K>_c<coeff>_<mode>/l<layers>[_cf]/model/
 #   step 3  src/eval.py (TOFU metrics) + src/METHOD/NEAR/probe.py on the edited model (scripts/NEAR/4_eval.sh)
-# The chain 1 -> 2 -> 3 needs the same K / coeff / shift_mode (and task_name) in every script.
+# The chain is linked by files: select_layer.py reads r_uv.pt, w_down.py reads layer_selection.json (and through it r_uv.pt),
+# so only `layer_selection_path` has to be passed to w_down.py; the probe of an edited model takes `probe.activations.from_r_uv`.
 
 defaults:
   - /generation@generation_args: default
@@ -116,6 +117,10 @@ probe:
     qa_per_author: ${basic.qa_per_author}
     author_offset: ${basic.author_offset}
 
+    from_r_uv: null
+    # null: positions / layers / point / qa_per_author / author_offset above (analysis of an original model, before any r_UV exists).
+    # path of an r_uv.pt: those are read from it instead (the probe of an edited model, comparable with that run)
+
 # ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
   batch_size: 32
@@ -158,16 +163,21 @@ select:
 
 # ---- src/METHOD/NEAR/w_down.py : train W_down (MLP output projection) of the chosen layers ---------------
 wdown:
-  r_uv_path: ${paths.output_dir}/r_uv.pt
-  # written by src/METHOD/NEAR/r_uv.py
   layer_selection_path: null
-  # null: <output_dir>/k<K>_c<coeff>_<shift_mode>/layer_selection.json of src/METHOD/NEAR/select_layer.py
-  k: ${basic.k}
+  # the layer_selection.json of select_layer.py this run follows: k, coeff, shift_mode, ref_position, the selected layer and
+  # (through its `r_uv_path`) r_uv.pt are READ from it, so they cannot drift apart between the stages.
+  # Required unless layers and all of r_uv_path / k / coeff / shift_mode / ref_position below are given.
   layers: auto
-  # auto: the layer selected by src/METHOD/NEAR/select_layer.py; or explicit, e.g. [10]
-  coeff: ${basic.coeff}
-  shift_mode: ${basic.shift_mode}
-  ref_position: ${basic.ref_position}
+  # auto: the layer selected in `layer_selection_path`; or explicit, e.g. [10] (then only the layer differs from the selection)
+
+  r_uv_path: null
+  k: null
+  coeff: null
+  shift_mode: null
+  ref_position: null
+  # null: taken from `layer_selection_path` (the usual case). Only for a run WITHOUT a selection file; given together with one,
+  # they must agree with it (else an error).
+
   # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either; holdout is kept out of training as the clean "never seen" control of the evaluation.
   retain_splits: [retain, neighbor]
   retain_max_samples: 512

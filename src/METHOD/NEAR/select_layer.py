@@ -1,11 +1,11 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "NEAR"      (set by `experiment=unlearn/tofu/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
-# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Layout below output_dir (config_dir / run_dir in METHOD/NEAR/_utils/neighbors.py, mirrored by `config_dir` / `run_dir`
 # in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
@@ -42,6 +42,7 @@ from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import config_dir, forget_authors, selection_path
 from METHOD._common.editing import resolve_candidate_layers
+from METHOD._common.lineage import check_r_uv_identity, model_name
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -85,7 +86,7 @@ def main(cfg: TrackingConfig):
     Candidates: `select.layers` (explicit), else `select.layer_fraction` (window of relative depths), else all layers.
 
     Args:
-        cfg (TrackingConfig): `experiment=generate/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
+        cfg (TrackingConfig): `experiment=unlearn/tofu/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
@@ -128,6 +129,14 @@ def main(cfg: TrackingConfig):
             sel_cfg["batch_size"],
             max_samples=sel_cfg.get("max_samples", None),
             seed=seed
+        )
+        # the forget rows / model must be the ones r_uv.pt was computed on (author of a row = row index // qa_per_author)
+        check_r_uv_identity(
+            saved,
+            forget_split=cfg.get("forget_split", None),
+            num_forget=len(split_data["forget"].one_dataset),
+            model=model_name(model_cfg),
+            source=str(r_uv_path),
         )
 
     res_collector = ResponseCollector(
@@ -190,6 +199,9 @@ def main(cfg: TrackingConfig):
             "ranking": ranking,  # best first, among the non-degenerate layers; LUNAR also edits the top-K (K=3) layers
             "criterion": criterion,
             "k": k, "coeff": coeff, "shift_mode": mode, "ref_position": ref_position, "positions": positions,
+            # lineage: w_down.py reads everything it needs from here (and from r_uv.pt through `r_uv_path`)
+            "r_uv_path": str(r_uv_path), "forget_split": saved["forget_split"], "num_forget": saved["num_forget"],
+            "model": saved["model"], "candidates": candidates,
             "max_degenerate": float(sel_cfg["max_degenerate"]),
             "forget_unsteered": original,
             "unseen_unsteered": {"mean": unseen, **unseen_parts},

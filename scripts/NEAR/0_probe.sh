@@ -52,7 +52,7 @@ for BASE_MODEL in "${BASE_MODELS[@]}"; do
     SEEN_ARGS=('probe.activations.seen=[retain]' 'probe.activations.unseen=[forget,neighbor,holdout]')
     echo start probe ${MODEL}
     python src/METHOD/NEAR/probe.py \
-        experiment=generate/NEAR \
+        experiment=unlearn/tofu/NEAR \
         model=tofu/${MODEL} \
         forget_split=${FORGET_SPLIT} \
         neighbor_split=${NEIGHBOR_SPLIT} \
@@ -70,7 +70,7 @@ for BASE_MODEL in "${BASE_MODELS[@]}"; do
     MODEL=tofu_${BASE_MODEL}_full
     echo start probe ${MODEL} ${FORGET_SPLIT}
     python src/METHOD/NEAR/probe.py \
-        experiment=generate/NEAR \
+        experiment=unlearn/tofu/NEAR \
         model=tofu/${MODEL} \
         forget_split=${FORGET_SPLIT} \
         neighbor_split=${NEIGHBOR_SPLIT} \

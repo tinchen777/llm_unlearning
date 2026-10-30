@@ -24,12 +24,11 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 for MODE in "${SHIFT_MODES[@]}"; do
   echo start w_down mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
   python src/METHOD/LUNAR/w_down.py \
-    experiment=generate/LUNAR \
+    experiment=unlearn/tofu/LUNAR \
     model=${FULL_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
-    basic.coeff=${COEFF} \
-    basic.shift_mode=${MODE} \
+    wdown.layer_selection_path=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})/layer_selection.json \
     wdown.solver=${SOLVER} \
     wdown.layers=auto \
     task_name=${TASK_NAME}

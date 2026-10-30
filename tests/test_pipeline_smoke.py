@@ -68,7 +68,7 @@ def make_assets(root: Path) -> Path:
 def common_args(assets: Path, out_root: Path, experiment: str, task_name: str):
     a = assets
     args = [
-        f"experiment=generate/{experiment}", "model=tofu/tofu_Llama-3.2-1B-Instruct_full",
+        f"experiment=unlearn/tofu/{experiment}", "model=tofu/tofu_Llama-3.2-1B-Instruct_full",
         f"model.pretrained.name_or_path={a / 'llama'}", f"model.tokenizer.name_or_path={a / 'llama'}",
         "model.pretrained.args.device_map=cpu", "model.pretrained.dtype=float32",
         "model.template_args.apply_chat_template=false",
@@ -121,7 +121,7 @@ def test_lunar_chain_writes_the_documented_layout(assets, tmp_path):
     assert selection["selected_layer"] in range(4) and len(selection["ranking"]) == 4
     assert all((out / "c1_all" / f"responses_steer_l{l}.json").exists() for l in range(4))
 
-    run("LUNAR/w_down.py", args + ["wdown.epochs=3", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4"])
+    run("LUNAR/w_down.py", args + [f"wdown.layer_selection_path={out / 'c1_all' / 'layer_selection.json'}", "wdown.epochs=3", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4"])
     check_run_folder(out / "c1_all" / f"l{selection['selected_layer']}", ["forget", "retain", "holdout"])
 
 
@@ -142,5 +142,5 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     assert selection["selected_layer"] in range(4)
     assert all((out / "k2_c1_eoi" / f"responses_steer_l{l}.json").exists() for l in range(4))
 
-    run("NEAR/w_down.py", args)
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={out / 'k2_c1_eoi' / 'layer_selection.json'}"])
     check_run_folder(out / "k2_c1_eoi" / f"l{selection['selected_layer']}", ["forget", "neighbor", "retain", "holdout"])

@@ -1,13 +1,13 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "NEAR"      (set by `experiment=unlearn/tofu/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/0_probe.sh : 0_probe/<MODEL>                   (retain model;  MODEL = tofu_<BASE>_<retain split>)
 #                  scripts/NEAR/0_probe.sh : 0_probe/<MODEL>/<FORGET_SPLIT>    (full model;   MODEL = tofu_<BASE>_full)
 #                  scripts/NEAR/4_eval.sh  : probe/probe_near_tofu_<MODEL>_<FORGET_SPLIT>_<TAG>   (edited model)
 #                  ->  saves/NEAR/0_probe/tofu_Llama-3.2-1B-Instruct_retain90/  or  saves/NEAR/probe/probe_near_tofu_...
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
-# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Files written below output_dir:
 #   responses/responses_<split>.json   generations + ROUGE + answer_logprob + refusal/degenerate flags, one file per split
@@ -39,6 +39,7 @@ from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
+from METHOD._common.lineage import check_r_uv_identity
 from METHOD._common.activations import unlearning_vector
 from METHOD.NEAR._utils.activations import mean_diff_auc
 
@@ -88,7 +89,7 @@ def main(cfg: TrackingConfig):
     compare the SAME pair across models (full - retain, `src/METHOD/NEAR/neighbor_compare.py`).
 
     Args:
-        cfg (TrackingConfig): `experiment=generate/NEAR`
+        cfg (TrackingConfig): `experiment=unlearn/tofu/NEAR`
     """
     # cuda device check
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
@@ -150,18 +151,43 @@ def main(cfg: TrackingConfig):
     # Per-layer activations: means, global r_UV, separability of pairs of question sets
     with step_logging(logger, "#2", "calculate activations", cfg=probe_cfg.get("activations", None)) as act_cfg:
         if act_cfg:
-            # collector
-            _positions = act_cfg.get("positions", None)
+            forget, reference = act_cfg["forget"], act_cfg["reference"]
+            # hook point / positions / layers / author numbering: of the config (analysis of an original model, before any
+            # r_UV exists), or of an r_uv.pt (`from_r_uv`: the probe of an edited model, to be compared with that run)
+            positions = act_cfg.get("positions", None)
+            layers = act_cfg.get("layers", None)
+            point = act_cfg.get("point", "block_out")
+            qa_per_author, author_offset = int(act_cfg["qa_per_author"]), int(act_cfg["author_offset"])
+            r_uv_path = act_cfg.get("from_r_uv", None)
+            if r_uv_path is not None:
+                ref = torch.load(str(r_uv_path), weights_only=False)
+                check_r_uv_identity(
+                    ref,
+                    forget_split=cfg.get("forget_split", None),
+                    num_forget=len(split_data[forget].one_dataset),
+                    source=str(r_uv_path),
+                )
+                from_file = {
+                    "positions": list(ref["positions"]), "layers": list(ref["layers"]), "point": ref["point"],
+                    "qa_per_author": int(ref["qa_per_author"]), "author_offset": int(ref["author_offset"]),
+                }
+                given = {
+                    "positions": None if positions is None else list(positions),
+                    "layers": None if layers is None else list(layers),
+                    "point": point, "qa_per_author": qa_per_author, "author_offset": author_offset,
+                }
+                for key, value in given.items():
+                    if value is not None and value != from_file[key]:
+                        logger.warning(f"probe.activations.{key}={value} is ignored: {r_uv_path} was computed with {from_file[key]}.")
+                positions, layers, point = from_file["positions"], from_file["layers"], from_file["point"]
+                qa_per_author, author_offset = from_file["qa_per_author"], from_file["author_offset"]
             act_collector = ActivationCollector(
                 model,
-                positions=list(_positions) if _positions is not None else get_eoi_positions(tokenizer, template_args),
-                layers=act_cfg.get("layers", None),
-                point=act_cfg.get("point", "block_out")
+                positions=list(positions) if positions is not None else get_eoi_positions(tokenizer, template_args),
+                layers=layers,
+                point=point
             )
-
-            qa_per_author = int(act_cfg["qa_per_author"])
-            author_offset = int(act_cfg["author_offset"])
-            forget, reference = act_cfg["forget"], act_cfg["reference"]
+            logger.info(f"Hook point: `{act_collector.point}`, positions: {act_collector.positions}")
 
             split_data.set_split_loader(
                 probe_cfg["batch_size"],

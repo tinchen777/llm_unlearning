@@ -1,12 +1,12 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "LUNAR"      (set by `experiment=generate/LUNAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "LUNAR"      (set by `experiment=unlearn/tofu/LUNAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/LUNAR/_common.sh: lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>
 #                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
 #                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
-# configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Layout below output_dir (config_dir / run_dir in METHOD/LUNAR/_utils/selection.py, mirrored by `config_dir` / `run_dir`
 # in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
@@ -22,7 +22,7 @@
 #
 # Read by / reads:
 #   select_layer.py and w_down.py read `<output_dir>/r_uv.pt` through `select.r_uv_path` / `wdown.r_uv_path`
-#   (configs/experiment/generate/LUNAR.yaml: ${paths.output_dir}/r_uv.pt) -> run all three with the same mode / task_name.
+#   (configs/experiment/unlearn/tofu/LUNAR.yaml: ${paths.output_dir}/r_uv.pt) -> run all three with the same mode / task_name.
 # ==============================================================================
 from __future__ import annotations
 import sys
@@ -39,6 +39,7 @@ from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
+from METHOD._common.lineage import model_name
 from METHOD._common.activations import unlearning_vector
 
 if TYPE_CHECKING:
@@ -56,7 +57,7 @@ def main(cfg: TrackingConfig):
     D_forget = `data.forget`, D_ref = `data.ref` (prompt-only reference prompts, configs/data/datasets/LUNAR/).
 
     Args:
-        cfg (TrackingConfig): `experiment=generate/LUNAR` (uses `data.forget`, `data.ref`, `ruv`)
+        cfg (TrackingConfig): `experiment=unlearn/tofu/LUNAR` (uses `data.forget`, `data.ref`, `ruv`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     set_seed(int(cfg["seed"]))
@@ -100,6 +101,9 @@ def main(cfg: TrackingConfig):
             "forget_mean": forget_mean.float(), "ref_mean": ref_mean.float(),
             "positions": act_collector.positions, "layers": act_collector.layers, "point": act_collector.point,
             "num_forget": len(forget_data.one_dataset), "num_ref": len(ref_data.one_dataset),  # type: ignore
+            # identity: what r_UV was computed on (checked by select_layer.py / w_down.py)
+            "forget_split": cfg.get("forget_split", None), "forget_hf_split": cfg.get("forget_hf_split", None),
+            "model": model_name(model_cfg),
         }, output_dir / "r_uv.pt")
         norm, base = r_uv.norm(dim=-1).mean(dim=0), forget_mean.norm(dim=-1).mean(dim=0)  # [n_layers]
         save_logs({

@@ -23,7 +23,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 for MODE in "${SHIFT_MODES[@]}"; do
   echo start select_layer mode=${MODE} ${FULL_MODEL}
   python src/METHOD/LUNAR/select_layer.py \
-    experiment=generate/LUNAR \
+    experiment=unlearn/tofu/LUNAR \
     model=${FULL_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \

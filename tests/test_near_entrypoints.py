@@ -19,7 +19,7 @@ ENTRY_POINTS = ["probe", "r_uv", "select_layer", "w_down"]
 def test_entry_point_runs_from_its_own_directory(script):
     proc = subprocess.run(
         [sys.executable, str(ROOT / "src" / "METHOD" / "NEAR" / f"{script}.py"),
-         "experiment=generate/NEAR", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "task_name=t", "--cfg", "job"],
+         "experiment=unlearn/tofu/NEAR", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "task_name=t", "--cfg", "job"],
         cwd=ROOT, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stderr[-1500:]
@@ -33,5 +33,5 @@ def test_scripts_call_existing_files():
         text = sh.read_text()
         for path in re.findall(r"python (src/\S+\.py)", text):
             assert (ROOT / path).exists(), f"{sh.name}: {path} does not exist"
-        for exp in re.findall(r"experiment=(generate/\S+)", text):
+        for exp in re.findall(r"experiment=(unlearn/tofu/\S+)", text):
             assert (ROOT / "configs" / "experiment" / f"{exp}.yaml").exists(), f"{sh.name}: experiment {exp} does not exist"

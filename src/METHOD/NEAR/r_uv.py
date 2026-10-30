@@ -1,11 +1,11 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "NEAR"      (set by `experiment=generate/NEAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "NEAR"      (set by `experiment=unlearn/tofu/NEAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/NEAR/_common.sh: near_tofu_<MODEL>_<FORGET_SPLIT>
 #                  (MODEL = base name, e.g. Llama-3.2-1B-Instruct)  ->  saves/NEAR/near_tofu_Llama-3.2-1B-Instruct_forget01/
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/NEAR/_common.sh), change `mode` in
-# configs/experiment/generate/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/NEAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Layout below output_dir (config_dir / run_dir in METHOD/NEAR/_utils/neighbors.py, mirrored by `config_dir` / `run_dir`
 # in scripts/NEAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
@@ -21,7 +21,7 @@
 #
 # Read by / reads:
 #   select_layer.py and w_down.py read `<output_dir>/r_uv.pt` through `select.r_uv_path` / `wdown.r_uv_path`
-#   (configs/experiment/generate/NEAR.yaml: ${paths.output_dir}/r_uv.pt) -> run all three with the same mode / task_name.
+#   (configs/experiment/unlearn/tofu/NEAR.yaml: ${paths.output_dir}/r_uv.pt) -> run all three with the same mode / task_name.
 # ==============================================================================
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
+from METHOD._common.lineage import model_name
 from METHOD.NEAR._utils.neighbors import (
     check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
 )
@@ -56,7 +57,7 @@ def main(cfg: TrackingConfig):
         r_UV[K][author] = mean act over the first K neighbours of the author - mean act of the author's forget questions
 
     Args:
-        cfg (TrackingConfig): `experiment=generate/NEAR` (uses its `data.forget`, `data.neighbor`, `ruv`)
+        cfg (TrackingConfig): `experiment=unlearn/tofu/NEAR` (uses its `data.forget`, `data.neighbor`, `ruv`)
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
@@ -134,6 +135,10 @@ def main(cfg: TrackingConfig):
             **({"neighbor_means": neighbor_means} if ruv_cfg.get("save_group_means", True) else {}),
             "positions": act_collector.positions, "layers": act_collector.layers, "point": act_collector.point,
             "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": seed,
+            # identity: what r_UV was computed on (checked by select_layer.py / w_down.py)
+            "forget_split": cfg.get("forget_split", None), "neighbor_split": cfg.get("neighbor_split", None),
+            "num_forget": len(forget_data.one_dataset), "authors": sorted(forget_author_set),
+            "model": model_name(model_cfg),
         }, output_dir / "r_uv.pt")
         save_logs(summarize_r_uv(r_uv, forget_means, act_collector.layers), output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt and r_uv_summary.json to {output_dir}")

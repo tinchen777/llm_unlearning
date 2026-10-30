@@ -22,7 +22,8 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 #   config folder = saves/NEAR/<TASK_NAME>/k<K>_c<coeff>_<mode>/ (the one of the layer selection), `_cf` = closed form
 # Shift modes: `all` = the paper (the same r_UV on every token of a forget prompt), `eoi` = end-of-instruction tokens only.
 # SOLVER (in _common.sh): adam (AdamW, lr / epochs from the config) or closed_form (LUNAR Eq. 9, no lr / epochs).
-# (settings: `wdown` in configs/experiment/generate/NEAR.yaml)
+# (settings: `wdown` in configs/experiment/unlearn/tofu/NEAR.yaml; k / coeff / shift_mode / layer / r_uv.pt are read from the
+#  layer_selection.json of 2_select_layer.sh, so nothing of them is passed here)
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     echo start w_down K=${K} mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
@@ -30,9 +31,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       experiment=unlearn/tofu/NEAR \
       model=${FULL_MODEL} \
       ${SPLITS} \
-      basic.k=${K} \
-      basic.coeff=${COEFF} \
-      basic.shift_mode=${MODE} \
+      wdown.layer_selection_path=saves/NEAR/${TASK_NAME}/$(config_dir ${K} ${MODE})/layer_selection.json \
       wdown.solver=${SOLVER} \
       wdown.layers=auto \
       task_name=${TASK_NAME}

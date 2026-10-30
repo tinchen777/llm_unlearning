@@ -15,10 +15,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # Step 1: the unlearning vector of every layer on the TOFU-full model (needs: python setup/setup_data.py --lunar):
 #   -> r_uv.pt           r_UV = mean(D_ref) - mean(D_forget), [n_pos, n_layers, d], + the forget / reference means
 #   -> r_uv_summary.json per layer: ||r_UV||, ||r_UV|| / ||forget activation||
-# output: saves/LUNAR/<TASK_NAME>/   (settings: `ruv` in configs/experiment/generate/LUNAR.yaml)
+# output: saves/LUNAR/<TASK_NAME>/   (settings: `ruv` in configs/experiment/unlearn/tofu/LUNAR.yaml)
 echo start r_uv ${FULL_MODEL} ${REF_DATASET}
 python src/METHOD/LUNAR/r_uv.py \
-  experiment=generate/LUNAR \
+  experiment=unlearn/tofu/LUNAR \
   model=${FULL_MODEL} \
   "${SPLIT_ARGS[@]}" \
   "data/datasets@data.ref.datasets=${REF_DATASET}" \

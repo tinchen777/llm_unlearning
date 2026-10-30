@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_entry_point_runs_from_its_own_directory(script, ref):
     proc = subprocess.run(
         [sys.executable, str(ROOT / "src" / "METHOD" / "LUNAR" / f"{script}.py"),
-         "experiment=generate/LUNAR", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "task_name=t",
+         "experiment=unlearn/tofu/LUNAR", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "task_name=t",
          f"data/datasets@data.ref.datasets={ref}", "--cfg", "job"],
         cwd=ROOT, capture_output=True, text=True, timeout=300,
     )
@@ -29,7 +29,7 @@ def test_scripts_call_existing_files():
         text = sh.read_text()
         for path in re.findall(r"python (src/\S+\.py)", text):
             assert (ROOT / path).exists(), f"{sh.name}: {path} does not exist"
-        for exp in re.findall(r"experiment=(generate/\S+)", text):
+        for exp in re.findall(r"experiment=(unlearn/tofu/\S+)", text):
             assert (ROOT / "configs" / "experiment" / f"{exp}.yaml").exists(), f"{sh.name}: experiment {exp} does not exist"
 
 
@@ -38,7 +38,7 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     """The shell scripts pass "${SPLIT_ARGS[@]}" of _common.sh: `forget_hf_split=train[:20]` UNQUOTED is rejected by Hydra
     ("mismatched input '[' expecting <EOF>"), so the value must reach the script quoted. Run the same call as the scripts."""
     cmd = (
-        f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=generate/LUNAR '
+        f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=unlearn/tofu/LUNAR '
         'model=${FULL_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.datasets=${REF_DATASET}" '
         'task_name=${TASK_NAME} --cfg job'
     )

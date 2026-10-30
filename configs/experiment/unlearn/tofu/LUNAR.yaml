@@ -8,7 +8,8 @@
 #                                            similarity to desired / unrelated responses) -> c<coeff>_<mode>/layer_selection.json
 #   step 3  src/METHOD/LUNAR/w_down.py       train W_down of the selected layer (AdamW or closed form) -> c<coeff>_<mode>/l<layers>[_cf]/model/
 #   step 4  src/eval.py (TOFU metrics) on the edited model (scripts/LUNAR/4_eval.sh)
-# The chain 1 -> 2 -> 3 needs the same coeff / shift_mode (and task_name) in every script.
+# The chain is linked by files: select_layer.py reads r_uv.pt, w_down.py reads layer_selection.json (and through it r_uv.pt),
+# so only `layer_selection_path` has to be passed to w_down.py.
 # Shared with NEAR (which uses neighbours of every author as D_ref): src/METHOD/_common/, src/model/{edit,steer}.py.
 
 defaults:
@@ -104,12 +105,18 @@ select:
 
 # ---- src/METHOD/LUNAR/w_down.py ------------------------------------------------------------------------
 wdown:
-  r_uv_path: ${paths.output_dir}/r_uv.pt # written by src/METHOD/LUNAR/r_uv.py
-  layer_selection_path: null # null -> <output_dir>/c<coeff>_<shift_mode>/layer_selection.json of select_layer.py
-  layers: auto # auto -> the layer selected by select_layer.py; or explicit, e.g. [16]
-  coeff: ${basic.coeff}
-  shift_mode: ${basic.shift_mode}
-  ref_position: ${basic.ref_position}
+  layer_selection_path: null
+  # the layer_selection.json of select_layer.py this run follows: coeff, shift_mode, ref_position, the selected layer and
+  # (through its `r_uv_path`) r_uv.pt are READ from it, so they cannot drift apart between the stages.
+  # Required unless layers and all of r_uv_path / coeff / shift_mode / ref_position below are given.
+  layers: auto # auto -> the layer selected in `layer_selection_path`; or explicit, e.g. [16]
+
+  r_uv_path: null
+  coeff: null
+  shift_mode: null
+  ref_position: null
+  # null: taken from `layer_selection_path` (the usual case). Only for a run WITHOUT a selection file; given together with one,
+  # they must agree with it (else an error).
   hallucination_rouge: ${basic.hallucination_rouge}
   retain_splits: [retain]
   retain_max_samples: match_forget # LUNAR: an equal number of random retain samples as forget samples; or an integer

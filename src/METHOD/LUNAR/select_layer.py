@@ -1,12 +1,12 @@
 # ==== OUTPUT FILES of this script ====================================================
 # output_dir = ${paths.output_dir} = <root_dir>/saves/<mode>/<task_name>        (configs/paths/default.yaml)
 #   root_dir  : "."
-#   mode      : "LUNAR"      (set by `experiment=generate/LUNAR`; the "generate" of configs/generate.yaml is overridden)
+#   mode      : "LUNAR"      (set by `experiment=unlearn/tofu/LUNAR`; the "generate" of configs/generate.yaml is overridden)
 #   task_name : the `task_name=...` override of the shell script  ->  scripts/LUNAR/_common.sh: lunar_tofu_<MODEL>_<FORGET_SPLIT>_<REF>
 #                  (REF = basename of REF_DATASET: LUNAR_harmful | LUNAR_unverified)
 #                  ->  saves/LUNAR/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/
 # To move the outputs: pass `task_name=...` (or edit TASK_NAME in scripts/LUNAR/_common.sh), change `mode` in
-# configs/experiment/generate/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
+# configs/experiment/unlearn/tofu/LUNAR.yaml, or override `paths.output_dir=...` (configs/paths/default.yaml).
 #
 # Layout below output_dir (config_dir / run_dir in METHOD/LUNAR/_utils/selection.py, mirrored by `config_dir` / `run_dir`
 # in scripts/LUNAR/_common.sh; <coeff> is formatted with `:g`, e.g. c1):
@@ -41,6 +41,7 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.editing import resolve_candidate_layers
+from METHOD._common.lineage import check_r_uv_identity, model_name
 from METHOD.LUNAR._utils.embedding import SentenceEmbedder, layer_score, rank_layers
 from METHOD.LUNAR._utils.selection import config_dir, selection_path
 
@@ -63,7 +64,7 @@ def main(cfg: TrackingConfig):
     ranking; read it before trusting the automatic choice) and `responses_steer_l<l>.json` (same folder).
 
     Args:
-        cfg (TrackingConfig): `experiment=generate/LUNAR` (uses `data.forget`, `select`); needs r_uv.pt of r_uv.py.
+        cfg (TrackingConfig): `experiment=unlearn/tofu/LUNAR` (uses `data.forget`, `select`); needs r_uv.pt of r_uv.py.
     """
     logger.info(f"CUDA_VISIBLE_DEVICES: {get_cuda_visible_devices()}")
     seed = int(cfg["seed"])
@@ -101,6 +102,14 @@ def main(cfg: TrackingConfig):
             sel_cfg["batch_size"],
             max_samples=sel_cfg.get("max_samples", None),
             seed=seed
+        )
+        # the forget rows / model must be the ones r_uv.pt was computed on
+        check_r_uv_identity(
+            saved,
+            forget_split=cfg.get("forget_split", None),
+            num_forget=len(split_data["forget"].one_dataset),
+            model=model_name(model_cfg),
+            source=str(r_uv_path),
         )
     # 4. Load sentence embeddings of the target responses
     with step_logging(logger, "<4/4>", "sentence embeddings of the target responses", mode="load", cfg=sel_cfg):
@@ -147,6 +156,9 @@ def main(cfg: TrackingConfig):
             "ranking": ranking,  # best first; LUNAR also edits the top layers
             "criterion": "s1 - s2",
             "coeff": coeff, "shift_mode": mode, "ref_position": ref_position, "positions": positions,
+            # lineage: w_down.py reads everything it needs from here (and from r_uv.pt through `r_uv_path`)
+            "r_uv_path": str(r_uv_path), "forget_split": saved["forget_split"], "num_forget": saved["num_forget"],
+            "model": saved["model"], "candidates": candidates,
             "max_degenerate": float(sel_cfg["max_degenerate"]), "aggregate": str(sel_cfg["aggregate"]),
             "embedder": str(sel_cfg["embedder"]),
             "per_layer": {str(_l): v for _l, v in per_layer.items()},

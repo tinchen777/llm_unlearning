@@ -44,6 +44,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       model=${FULL_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \
+      probe.activations.from_r_uv=saves/NEAR/${TASK_NAME}/r_uv.pt \
       task_name=probe/test/probe_near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
     echo end eval ${EDITED}
   done
