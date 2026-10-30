@@ -136,6 +136,8 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     run("NEAR/r_uv.py", args)
     out = out_root / "saves" / "NEAR" / "smoke"
     assert (out / "r_uv.pt").exists() and (out / "r_uv_summary.json").exists()
+    saved = torch.load(out / "r_uv.pt", weights_only=False)
+    assert {"forget_split", "num_forget", "authors", "model"} <= set(saved)  # identity, checked by the next stages
 
     run("NEAR/select_layer.py", args)
     selection = json.loads((out / "k2_c1_eoi" / "layer_selection.json").read_text())
@@ -144,3 +146,20 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
 
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={out / 'k2_c1_eoi' / 'layer_selection.json'}"])
     check_run_folder(out / "k2_c1_eoi" / f"l{selection['selected_layer']}", ["forget", "neighbor", "retain", "holdout"])
+
+    # lineage: w_down took everything from the selection file (no k / coeff / shift_mode on its command line)
+    summary = json.loads((out / "k2_c1_eoi" / f"l{selection['selected_layer']}" / "w_down_summary.json").read_text())
+    assert summary["k"] == 2 and summary["layer_selection_path"].endswith("layer_selection.json")
+    assert selection["r_uv_path"].endswith("r_uv.pt") and selection["forget_split"] == saved["forget_split"]
+
+    # a config value that disagrees with the selection file is rejected
+    bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/w_down.py"), *args,
+                          f"wdown.layer_selection_path={out / 'k2_c1_eoi' / 'layer_selection.json'}", "wdown.coeff=7"],
+                         cwd=ROOT, capture_output=True, text=True, timeout=900)
+    assert bad.returncode != 0 and "disagrees" in bad.stdout + bad.stderr
+
+    # the probe of an edited model takes the hook point / positions / layers / author numbering from r_uv.pt
+    run("NEAR/probe.py", args + [f"probe.activations.from_r_uv={out / 'r_uv.pt'}", "probe.batch_size=4", "probe.responses=null",
+                                 "probe.activations.max_act_samples=8", "task_name=smoke_probe"])
+    probe_saved = torch.load(out_root / "saves" / "NEAR" / "smoke_probe" / "activations.pt", weights_only=False)
+    assert probe_saved["positions"] == saved["positions"] and probe_saved["layers"] == saved["layers"]

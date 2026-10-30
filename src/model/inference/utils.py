@@ -171,13 +171,18 @@ def generate_batch(
     # generate texts
     initial_input_length = input_ids.shape[1]
     gen_kwargs = generation_args.to_dict()
-    stop_strings = list(gen_kwargs.get("stop_strings") or [])
+    stop_strings = gen_kwargs.pop("stop_strings", None) or []
+    if isinstance(stop_strings, str):
+        stop_strings = [stop_strings]
+    stop_strings = list(stop_strings)
+    if stop_strings:  # only then HF builds its (vocabulary-sized) stop-string tables, which needs the tokenizer
+        gen_kwargs["stop_strings"] = stop_strings
+        gen_kwargs["tokenizer"] = tokenizer
     # generate batch outputs
     outputs = model.generate(
         input_ids,
         attention_mask=batch["attention_mask"],
         **gen_kwargs,
-        tokenizer=tokenizer,
         pad_token_id=tokenizer.eos_token_id,
     )
     gen_texts = tokenizer.batch_decode(

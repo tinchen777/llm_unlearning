@@ -396,7 +396,9 @@ def test_response_flags_and_summary():
         {"generation": "I don't know.", "rougeL_recall": 0.0, "rouge1_recall": 0.0, "refusal": True, "degenerate": False, "answer_logprob": -4.0},
         {"generation": "Lisbon, tailors.", "rougeL_recall": 0.9, "rouge1_recall": 0.9, "refusal": False, "degenerate": False, "answer_logprob": -0.5},
     ]
-    s = TextMetric("is_refusal", "is_degenerate", "is_hallucination", "answer_logprob", hallucination_rouge=0.3).compute_summaries(recs)
+    metric = TextMetric("is_refusal", "is_degenerate", "is_hallucination", "answer_logprob", hallucination_rouge=0.3)
+    recs = [{**r, **metric.compute_metrics(r)} for r in recs]  # per-record flags first (as the collector does), then the summary
+    s = metric.compute_summaries(recs)
     assert abs(s["refusal_rate"] - 1 / 3) < 1e-9 and abs(s["hallucination_rate"] - 1 / 3) < 1e-9
     assert abs(s["answer_logprob"] - (-6.5 / 3)) < 1e-9
 
