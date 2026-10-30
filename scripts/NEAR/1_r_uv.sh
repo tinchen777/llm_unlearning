@@ -21,7 +21,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 #       `author_id` of the neighbour csv; this is checked (and explained) before any forward pass.
 echo start r_uv ${FULL_MODEL}
 python src/METHOD/NEAR/r_uv.py \
-  experiment=generate/NEAR \
+  experiment=unlearn/tofu/NEAR \
   model=${FULL_MODEL} \
   ${SPLITS} \
   "ruv.ks=[$(IFS=,; echo "${KS[*]}")]" \

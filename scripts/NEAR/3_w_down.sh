@@ -27,7 +27,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     echo start w_down K=${K} mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
     python src/METHOD/NEAR/w_down.py \
-      experiment=generate/NEAR \
+      experiment=unlearn/tofu/NEAR \
       model=${FULL_MODEL} \
       ${SPLITS} \
       basic.k=${K} \

@@ -40,7 +40,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
 
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
     python src/METHOD/NEAR/probe.py \
-      experiment=generate/NEAR \
+      experiment=unlearn/tofu/NEAR \
       model=${FULL_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \

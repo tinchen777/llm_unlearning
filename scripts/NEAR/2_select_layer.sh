@@ -28,7 +28,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     echo start select_layer K=${K} mode=${MODE} ${FULL_MODEL}
     python src/METHOD/NEAR/select_layer.py \
-      experiment=generate/NEAR \
+      experiment=unlearn/tofu/NEAR \
       model=${FULL_MODEL} \
       ${SPLITS} \
       basic.k=${K} \
