@@ -22,10 +22,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # Shift modes: `all` = the paper (the same r_UV on every token of a forget prompt), `eoi` = end-of-instruction tokens only.
 # SOLVER (in _common.sh): adam (AdamW, lr / epochs from the config) or closed_form (LUNAR Eq. 9, no lr / epochs).
 for MODE in "${SHIFT_MODES[@]}"; do
-  echo start w_down mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
+  echo start w_down mode=${MODE} solver=${SOLVER} ${TARGET_MODEL}
   python src/METHOD/LUNAR/w_down.py \
     experiment=unlearn/tofu/LUNAR \
-    model=${FULL_MODEL} \
+    model=${TARGET_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
     wdown.layer_selection_path=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})/layer_selection.json \

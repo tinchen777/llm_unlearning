@@ -91,7 +91,7 @@ def collect_mlp_tokens(
     return {_l: (torch.cat(xs[_l]), torch.cat(ts[_l])) for _l in layers}
 
 
-@torch.no_grad()
+@torch.no_grad(device="cpu" )
 def w_down_mse(w: torch.Tensor, x: torch.Tensor, t: torch.Tensor, chunk: int = 8192) -> float:
     """mean squared error (mean over tokens AND features, like `F.mse_loss`) of `x @ w.T` against `t`."""
     total = 0.0

@@ -2,7 +2,8 @@
 
 set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-source "${SCRIPT_DIR}/_common.sh"   # MODEL, splits, FULL_MODEL, TASK_NAME, KS, COEFF, SHIFT_MODES, SOLVER
+source "${SCRIPT_DIR}/_common.sh"
+# MODEL, SPLITS, TARGET_MODEL, TASK_NAME, KS, SHIFT_MODES, SOLVER
 cd "${SCRIPT_DIR}/../.." || exit 1
 
 export HF_HUB_OFFLINE=1
@@ -26,18 +27,20 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 #  layer_selection.json of 2_select_layer.sh, so nothing of them is passed here)
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
-    echo start w_down K=${K} mode=${MODE} solver=${SOLVER} ${FULL_MODEL}
+    echo "############  START STAGE `[3]` `w_down` | ${MODEL} ${FORGET_SPLIT} | K=${K} MODE=${MODE} SOLVER=${SOLVER}  ############"
+
     python src/METHOD/NEAR/w_down.py \
       experiment=unlearn/tofu/NEAR \
-      model=${FULL_MODEL} \
+      model=${TARGET_MODEL} \
       ${SPLITS} \
       wdown.layer_selection_path=saves/NEAR/${TASK_NAME}/$(config_dir ${K} ${MODE})/layer_selection.json \
       wdown.solver=${SOLVER} \
       wdown.layers=auto \
-      task_name=${TASK_NAME}
+      task_name=${TASK_NAME} \
       # "wdown.layers=[10]" \
       # wdown.lr=5.0e-3 \
       # wdown.ridge=1.0e-3 \
-    echo end w_down K=${K} mode=${MODE}
+
+    echo "############  END STAGE `[3]` `w_down` | ${MODEL} ${FORGET_SPLIT} | K=${K} MODE=${MODE} SOLVER=${SOLVER}  ############"
   done
 done

@@ -19,7 +19,7 @@ SPLIT_ARGS=(
 )
 
 # The model r_UV, the layer selection and W_down work on: the one that KNOWS the forget data (the official TOFU full model).
-FULL_MODEL=tofu/tofu_${MODEL}_full
+TARGET_MODEL=tofu/tofu_${MODEL}_full
 TASK_NAME=lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")     # output: saves/LUNAR/${TASK_NAME}/
 
 COEFF=${COEFF:-2.0}               # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)

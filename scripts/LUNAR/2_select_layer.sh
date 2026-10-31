@@ -21,10 +21,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # The sentence encoder (select.embedder) must be in the local HF cache (HF_HUB_OFFLINE=1).
 # Candidates: select.layer_fraction=[0.4,0.8] (default); 'select.layers=[4,5,6]' for an explicit list.
 for MODE in "${SHIFT_MODES[@]}"; do
-  echo start select_layer mode=${MODE} ${FULL_MODEL}
+  echo start select_layer mode=${MODE} ${TARGET_MODEL}
   python src/METHOD/LUNAR/select_layer.py \
     experiment=unlearn/tofu/LUNAR \
-    model=${FULL_MODEL} \
+    model=${TARGET_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "data/datasets@data.ref.datasets=${REF_DATASET}" \
     basic.coeff=${COEFF} \

@@ -2,7 +2,8 @@
 
 set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-source "${SCRIPT_DIR}/_common.sh"   # MODEL, splits, FULL_MODEL, TASK_NAME, KS, COEFF, SHIFT_MODES, SOLVER
+source "${SCRIPT_DIR}/_common.sh"
+# MODEL, SPLITS, TARGET_MODEL, TASK_NAME, KS, COEFF, SHIFT_MODES
 cd "${SCRIPT_DIR}/../.." || exit 1
 
 export HF_HUB_OFFLINE=1
@@ -26,17 +27,19 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # (settings: `select` in configs/experiment/unlearn/tofu/NEAR.yaml; k / coeff / shift_mode: `basic`)
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
-    echo start select_layer K=${K} mode=${MODE} ${FULL_MODEL}
+    echo "############  START STAGE `[2]` `select_layer` | ${MODEL} ${FORGET_SPLIT} | K=${K} MODE=${MODE}  ############"
+
     python src/METHOD/NEAR/select_layer.py \
       experiment=unlearn/tofu/NEAR \
-      model=${FULL_MODEL} \
+      model=${TARGET_MODEL} \
       ${SPLITS} \
       basic.k=${K} \
       basic.coeff=${COEFF} \
       basic.shift_mode=${MODE} \
-      'select.layer_fraction=[0.4,0.8]' \
-      task_name=${TASK_NAME}
+      select.layer_fraction="[0.4,0.8]" \
+      task_name=${TASK_NAME} \
       # select.criterion=rougeL_recall \
-    echo end select_layer K=${K} mode=${MODE}
+
+    echo "############  END STAGE `[2]` `select_layer` | ${MODEL} ${FORGET_SPLIT} | K=${K} MODE=${MODE}  ############"
   done
 done

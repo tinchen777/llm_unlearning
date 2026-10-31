@@ -29,7 +29,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
   echo start eval ${EDITED}
   python src/eval.py \
     experiment=eval/tofu/default \
-    model=${FULL_MODEL} \
+    model=${TARGET_MODEL} \
     model.pretrained.name_or_path=${EDITED} \
     forget_split=${FORGET_SPLIT} \
     holdout_split=${HOLDOUT_SPLIT} \

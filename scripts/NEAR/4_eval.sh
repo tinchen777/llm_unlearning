@@ -2,7 +2,8 @@
 
 set -e
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
-source "${SCRIPT_DIR}/_common.sh"   # MODEL, splits, FULL_MODEL, TASK_NAME, KS, COEFF, SHIFT_MODES, SOLVER
+source "${SCRIPT_DIR}/_common.sh"
+# MODEL, SPLITS, TARGET_MODEL, TASK_NAME, KS, SHIFT_MODES
 cd "${SCRIPT_DIR}/../.." || exit 1
 
 export HF_HUB_OFFLINE=1
@@ -31,7 +32,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     echo start eval ${EDITED}
     python src/eval.py \
       experiment=eval/tofu/default \
-      model=${FULL_MODEL} \
+      model=${TARGET_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       forget_split=${FORGET_SPLIT} \
       holdout_split=${HOLDOUT_SPLIT} \
@@ -41,7 +42,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
     python src/METHOD/NEAR/probe.py \
       experiment=unlearn/tofu/NEAR \
-      model=${FULL_MODEL} \
+      model=${TARGET_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \
       probe.activations.from_r_uv=saves/NEAR/${TASK_NAME}/r_uv.pt \

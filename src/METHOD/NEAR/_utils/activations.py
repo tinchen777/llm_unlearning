@@ -69,16 +69,13 @@ def mean_diff_auc(
     groups_b: Optional[Sequence[Hashable]] = None,
     min_groups: int = 4,
 ) -> float:
-    """How linearly separable are the activations `a` [n, d] and `b` [m, d]? Cross-validated AUC of the projection
-    on the difference of class means, the direction being fitted on the OTHER folds (0.5 = indistinguishable,
-    1.0 = perfectly separated along a single direction, like r_UV).
+    """
+    How linearly separable are the activations `a` [n, d] and `b` [m, d]?
+    Cross-validated AUC of the projection on the difference of class means, the direction being fitted on the OTHER folds (0.5 = indistinguishable, 1.0 = perfectly separated along a single direction, like r_UV).
 
     `groups_a` / `groups_b` (one key per row): split the folds by group instead of by sample (see `_group_folds`).
-    Without them questions of one author land on both sides of the split and the author's name alone separates the
-    classes; with them only what generalises across authors counts. Both must be given, or neither. With fewer than
-    `min_groups` groups in a class (e.g. forget01 has 2 authors) the direction fitted on the other group(s) cannot
-    generalise and the AUC is ~0 or ~1 by chance (seen on a toy: 0.10 vs 0.80 for two near-identical models), so a
-    ValueError is raised instead of returning a number."""
+    Without them questions of one author land on both sides of the split and the author's name alone separates the classes; with them only what generalises across authors counts. Both must be given, or neither. With fewer than `min_groups` groups in a class (e.g. forget01 has 2 authors) the direction fitted on the other group(s) cannot generalise and the AUC is ~0 or ~1 by chance (seen on a toy: 0.10 vs 0.80 for two near-identical models), so a ValueError is raised instead of returning a number.
+    """
     if (groups_a is None) != (groups_b is None):
         raise ValueError("Give groups for both classes or for neither.")
     if groups_a is not None:
