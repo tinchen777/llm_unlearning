@@ -60,7 +60,7 @@ PROBE_LUNAR = ["NEAR/probe/probe_lunar_tofu_{model}_{forget}_*_{mode}", "LUNAR/p
 EVAL_ORIGINAL = ["eval/TOFU/tofu_{model}_full/evals_{forget}", "eval/tofu_{model}_full/evals_{forget}", "eval/tofu_{model}_full"]
 EVAL_RETAIN = ["eval/TOFU/tofu_{model}_{retain}", "eval/tofu_{model}_{retain}"]
 
-TABLE_METRICS = ["forget_quality", "model_utility", "forget_Q_A_ROUGE", "forget_Q_A_Prob", "forget_truth_ratio", "privleak"]
+TABLE_METRICS = ["forget_quality", "model_utility", "forget_Q_A_ROUGE", "forget_Q_A_Prob", "forget_Truth_Ratio", "privleak"]
 SPLITS = ["forget", "neighbor", "retain", "holdout"]
 PROBE_PAIRS = ["forget | neighbor", "forget | holdout"]
 

@@ -110,7 +110,7 @@ defaults:
 ```yaml
 # forget_quality.yaml：把当前目录(tofu_metrics)的 forget_Truth_Ratio 挂到 pre_compute 下
 defaults:
-  - .@pre_compute.forget_truth_ratio: forget_Truth_Ratio
+  - .@pre_compute.forget_Truth_Ratio: forget_Truth_Ratio
 ```
 
 命令行同样可用，例如换 forget 数据集：`data/datasets@data.forget=TOFU_QA_forget_idk`。

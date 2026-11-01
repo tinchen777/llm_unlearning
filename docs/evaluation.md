@@ -137,7 +137,7 @@ Example 2: Creating the config for TOFU's `forget_quality` ([`configs/eval/tofu_
 ```yaml
 # @package eval.tofu.metrics.forget_quality
 defaults:
-  - .@pre_compute.forget_truth_ratio: forget_Truth_Ratio
+  - .@pre_compute.forget_Truth_Ratio: forget_Truth_Ratio
 
 reference_logs:
  # forget quality is computed by comparing truth_ratio 
@@ -146,12 +146,12 @@ reference_logs:
   retain_model_logs: # name to acess the loaded logs in metric function
     path: ${eval.tofu.retain_logs_path} # path to load the logs
     include: 
-      forget_truth_ratio: # keys to include from the logs
+      forget_Truth_Ratio: # keys to include from the logs
         access_key: retain # name of the key to access it inside metric
       
 # since the forget_quality metric depends on another metric (truth ratio)
 pre_compute:
-  forget_truth_ratio:
+  forget_Truth_Ratio:
     access_key: forget
 
 handler: ks_test # the handler with logic that is registered in code 
@@ -169,7 +169,7 @@ To remove the need for re-computing such metrics, our evaluators support a "prec
 Another example of declaring dependent metrics is `truth_ratio`:
 
 ```yaml
-# @package eval.tofu.metrics.forget_truth_ratio
+# @package eval.tofu.metrics.forget_Truth_Ratio
 
 defaults: # load parent metric configs under the precompute attribute
   - .@pre_compute.forget_Q_A_PARA_Prob: forget_Q_A_PARA_Prob
@@ -181,7 +181,7 @@ pre_compute:
   forget_Q_A_PERT_Prob: # parent metric
     access_key: wrong
 
-handler: forget_truth_ratio
+handler: forget_Truth_Ratio
 ```
 
 The corresponding handler:

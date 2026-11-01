@@ -48,13 +48,13 @@ For all the experiments below, we used the following setup
       <th></th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
     </tr>
   </thead>
   <tbody>
@@ -177,13 +177,13 @@ For all the experiments below, we used the following setup
       <th></th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
       <th>forget_quality</th>
       <th>model_utility</th>
-      <th>forget_truth_ratio</th>
+      <th>forget_Truth_Ratio</th>
     </tr>
   </thead>
   <tbody>
