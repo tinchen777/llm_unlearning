@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 from pprint import pprint
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 
 from .datasets.qa import QADataset, QAwithIdkDataset, QAwithAlternateDataset
 from .datasets.pretraining import PretrainingDataset, CompletionDataset
@@ -37,20 +37,23 @@ class Data:
     @classmethod
     def from_cfg(
         cls,
-        split: str,
-        datasets_cfg: TrackingConfig,
+        dataset_cfg: TrackingConfig,
         collator_cfg: Optional[TrackingConfig] = None,
+        split: str = "???",
         **kwargs
     ):
+        dataset, name = get_dataset(dataset_cfg, **kwargs)
         return cls(
+            name=name,
             split=split,
-            datasets=get_datasets(datasets_cfg, **kwargs),
+            dataset=dataset,
             collator=get_collator(collator_cfg, **kwargs)
         )
 
-    def __init__(self, split: str, datasets: Dict[str, Dataset], collator: Optional[Any] = None):
+    def __init__(self, name: str, dataset: Dataset, collator: Optional[Any] = None, split: str = "???"):
+        self.name = name
         self.split = split
-        self.datasets = datasets
+        self.dataset = dataset
         self.collator = collator
         self.set_loader(batch_size=1)
 
@@ -73,27 +76,13 @@ class Data:
         )
         return self
 
-    def one_loader(self, **loader_kwargs: Any):
-        """Get a data loader for the single dataset."""
+    def loader(self, **loader_kwargs: Any):
+        """Get a data loader for the dataset."""
         args = self.default_args | loader_kwargs
-        return make_subloader(self.one_dataset, **args)
+        return make_subloader(self.dataset, **args)
 
-    def loaders(self, **loader_kwargs: Any):
-        """Get data loaders for all datasets."""
-        args = self.default_args | loader_kwargs
-        return {name: make_subloader(dataset, **args) for name, dataset in self.datasets.items()}
-
-    @property
-    def names(self):
-        """Get the names of all datasets."""
-        return list(self.datasets)
-
-    @property
-    def one_dataset(self):
-        """Get the single dataset, ensuring there is exactly one."""
-        if len(self.datasets) != 1:
-            raise ValueError(f"Expected exactly one dataset for `Data`, but got {len(self.datasets)}.")
-        return next(iter(self.datasets.values()))
+    def __repr__(self) -> str:
+        return f"Data<{self.name}>(dataset={self.dataset}, collator={self.collator})"
 
 
 class SplitData:
@@ -101,7 +90,7 @@ class SplitData:
         self.split_data = {
             split_name: Data.from_cfg(
                 split=split_name,
-                datasets_cfg=split_cfg["datasets"],
+                dataset_cfg=split_cfg["dataset"],
                 collator_cfg=split_cfg.get("collator", None),
                 **kwargs
             )
@@ -151,43 +140,43 @@ class SplitData:
     def __getitem__(self, split: str):
         return self.split_data[split]
 
-# === Datasets ===
+# === Dataset ===
 
 
-def get_datasets(datasets_cfg: TrackingConfig, **kwargs):
+def get_dataset(dataset_cfg: TrackingConfig, **kwargs):
     """
     Returns
     -------
-        {`dataset_name`: `Dataset`, ...}
+        (_Dataset_, _str_)
     """
-    # combine
-    combine_cfg = datasets_cfg.pop("COMBINE", None)
-
-    dataset_cfg_dict = {datasets_cfg["name"]: datasets_cfg} if "handler" in datasets_cfg else datasets_cfg
-    datasets: Dict[str, Dataset] = {}
-
-    def _load_dataset(dataset_cfg: TrackingConfig) -> Dataset:
-        """Load a single dataset based on its configuration."""
-        dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
-        return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs)
-
-    # Load the datasets
-    for dataset_name, item_cfg in dataset_cfg_dict.items():
+    def _load_dataset(dataset_cfg: TrackingConfig) -> Tuple[Dataset, str]:
+        """Load a single dataset based on its configuration and return it along with its name."""
+        name = dataset_cfg.get("name", "???")
         try:
-            datasets[dataset_name] = _load_dataset(item_cfg)
+            dataset_cls = DATASET_REGISTRY[dataset_cfg["handler"]]
+            return dataset_cls(**dataset_cfg.get("args", {}, check_none=True), **kwargs), name
         except Exception as e:
-            raise RuntimeError(f"Error loading dataset `{dataset_name}` in `@{item_cfg.loc_choices}` with {item_cfg}") from e
-    # Combine datasets if necessary
-    if combine_cfg is not None:
-        combine_cls = COMBINED_DATASET_REGISTRY[combine_cfg["handler"]]
-        datasets = {
-            combine_cfg.get("name", combine_cls.__name__): combine_cls(
-                **datasets,
-                **combine_cfg.get("args", {}, check_none=True)
-            )
-        }
+            raise RuntimeError(f"Error loading dataset `{name}` in `@{dataset_cfg.loc_choices}` with {dataset_cfg}") from e
 
-    return datasets
+    if "handler" in dataset_cfg:
+        # single dataset case
+        return _load_dataset(dataset_cfg)
+
+    # combined datasets case
+    combine_cfg = dataset_cfg.pop("COMBINE", None)
+    if combine_cfg is None:
+        raise RuntimeError(f"Missing COMBINE configuration in `@{dataset_cfg.loc_choices}` with {dataset_cfg}")
+
+    datasets = {
+        dataset_name: _load_dataset(item_cfg)[0]
+        for dataset_name, item_cfg in dataset_cfg.items()
+    }
+    combine_cls = COMBINED_DATASET_REGISTRY[combine_cfg["handler"]]
+    combine_dataset = combine_cls(
+        **datasets,
+        **combine_cfg.get("args", {}, check_none=True)
+    )
+    return combine_dataset, combine_cfg.get("name", combine_cls.__name__)
 
 # === Collator ===
 

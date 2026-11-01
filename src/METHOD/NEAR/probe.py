@@ -199,7 +199,7 @@ def main(cfg: TrackingConfig):
             for data in split_data.values():
                 split = data.split
                 acts, meta = act_collector.per_sample(
-                    dataloader=data.one_loader(),
+                    dataloader=data.loader(),
                     desc=split,
                     meta_keys=_META_KEYS
                 )

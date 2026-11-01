@@ -31,7 +31,7 @@ def probability(model: Any, data: Data, **kwargs):
     Compute the probabilities by data points and report aggregated average
     """
     scores_by_index = run_batchwise_evals(
-        model, data.one_loader(),
+        model, data.loader(),
         batch_eval_fn=evaluate_probability,
         eval_name="loss"
     )
@@ -85,7 +85,7 @@ def rouge(
 ):
     """Calculate ROUGE metrics and return the aggregated value along with per-index scores."""
     scores_by_index = run_batchwise_evals(
-        model, data.one_loader(),
+        model, data.loader(),
         batch_eval_fn=eval_text_similarity,
         batch_eval_fn_args=dict(tokenizer=tokenizer, generation_args=generation_args),
         eval_name="text similarity",
@@ -226,7 +226,7 @@ def exact_memorization(model: Any, data: Data, **kwargs):
         return em_batch
 
     scores_by_index = run_batchwise_evals(
-        model, data.one_loader(),
+        model, data.loader(),
         batch_eval_fn=_exact_memorization,
         eval_name="EM"
     )
@@ -290,7 +290,7 @@ def extraction_strength(model: Any, data: Data, **kwargs):
         return es_batch
 
     scores_by_index = run_batchwise_evals(
-        model, data.one_loader(),
+        model, data.loader(),
         batch_eval_fn=_extraction_strength,
         eval_name="ES"
     )

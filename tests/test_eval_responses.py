@@ -33,16 +33,16 @@ class Numbers(Dataset):
 def test_data_loader_uses_the_collator_the_subset_size_and_the_seed():
     collate = lambda samples: {"x": torch.tensor([s["x"] for s in samples]), "marker": True}
     data = Data("s", {"a": Numbers()}, collate)
-    loader = data.set_loader(batch_size=4, max_samples=6, sampling_seed=7).one_loader()
+    loader = data.set_loader(batch_size=4, max_samples=6, sampling_seed=7).loader()
     batches = list(loader)
     assert all(b["marker"] for b in batches), "the collator of the split must reach the DataLoader"
     seen = torch.cat([b["x"] for b in batches]).tolist()
     assert len(seen) == 6 and seen == sorted(seen) and len(set(seen)) == 6
-    again = torch.cat([b["x"] for b in data.set_loader(batch_size=3, max_samples=6, sampling_seed=7).one_loader()]).tolist()
-    other = torch.cat([b["x"] for b in data.set_loader(batch_size=3, max_samples=6, sampling_seed=8).one_loader()]).tolist()
+    again = torch.cat([b["x"] for b in data.set_loader(batch_size=3, max_samples=6, sampling_seed=7).loader()]).tolist()
+    other = torch.cat([b["x"] for b in data.set_loader(batch_size=3, max_samples=6, sampling_seed=8).loader()]).tolist()
     assert again == seen, "the same seed -> the same fixed subset"
     assert other != seen, "another seed -> another subset"
-    assert len(data.set_loader(batch_size=4).one_loader().dataset) == 10  # max_samples=None -> everything
+    assert len(data.set_loader(batch_size=4).loader().dataset) == 10  # max_samples=None -> everything
 
 
 @pytest.fixture(scope="module")

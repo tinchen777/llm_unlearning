@@ -55,7 +55,7 @@ class ResponseCollector:
         elif isinstance(split_or_loader, str):
             if self.split_data is None:
                 raise ValueError("`split_data` is not set.")
-            return self.split_data[split_or_loader].one_loader()
+            return self.split_data[split_or_loader].loader()
         else:
             raise ValueError("`split_or_loader` must be either a DataLoader or a string representing the split.")
 

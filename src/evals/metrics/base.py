@@ -52,7 +52,7 @@ class Metric:
         try:
             self.cfg_dict["data"] = Data.from_cfg(
                 split=self.name,
-                datasets_cfg=self.cfg_dict.pop("datasets"),
+                dataset_cfg=self.cfg_dict.pop("datasets"),
                 collator_cfg=self.cfg_dict.pop("collator"),
                 **kwargs
             ).set_loader(**self.cfg_dict.pop("loader_args"))

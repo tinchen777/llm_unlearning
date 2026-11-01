@@ -93,8 +93,8 @@ def main(cfg: TrackingConfig):
             point=ruv_cfg.get("point", "block_out")
         )
 
-        forget_mean = act_collector.mean(forget_data.one_loader(), desc="forget")
-        ref_mean = act_collector.mean(ref_data.one_loader(), desc="reference")
+        forget_mean = act_collector.mean(forget_data.loader(), desc="forget")
+        ref_mean = act_collector.mean(ref_data.loader(), desc="reference")
         r_uv = unlearning_vector(ref_mean, forget_mean)  # [n_pos, n_layers, d]
         torch.save({
             "r_uv": r_uv.float(),

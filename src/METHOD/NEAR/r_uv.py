@@ -111,12 +111,12 @@ def main(cfg: TrackingConfig):
         )
 
         forget_means, forget_counts = act_collector.group_means(
-            dataloader=forget_data.one_loader(),
+            dataloader=forget_data.loader(),
             group_fn=lambda b: forget_authors(b["index"], qa_per_author, author_offset),
             desc="forget / author"
         )
         neighbor_means, neighbor_counts = act_collector.group_means(
-            dataloader=neighbor_data.one_loader(),
+            dataloader=neighbor_data.loader(),
             group_fn=lambda b: list(zip(b["author_id"], b["neighbor_id"])),
             desc="neighbor / (author, neighbor)"
         )

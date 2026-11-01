@@ -13,12 +13,12 @@
 
 defaults:
   - /generation@generation_args: default
-  - /data/subdataset@data.forget: default_left
-  - /data/subdataset@data.neighbor: default_left
-  - /data/subdataset@data.retain: default_left
-  - /data/subdataset@data.holdout: default_left
+  - /data/packs@data.forget: default_left
+  - /data/packs@data.neighbor: default_left
+  - /data/packs@data.retain: default_left
+  - /data/packs@data.holdout: default_left
   - override /data: null
-  - override /data/datasets@data.neighbor.datasets: TOFU/TOFU_QA_csv
+  - override /data/datasets@data.neighbor.dataset: TOFU/TOFU_QA_csv
 
 mode: NEAR
 forget_split: forget10
@@ -28,14 +28,14 @@ holdout_split: holdout10
 
 data:
   forget:
-    datasets:
+    dataset:
       name: TOFU_gen_QA_forget
       args:
         hf_args:
           name: ${forget_split}
         generation_mode: true
   neighbor:
-    datasets:
+    dataset:
       name: TOFU_gen_QA_neighbor
       args:
         hf_args:
@@ -50,14 +50,14 @@ data:
           - author_id
           - neighbor_id
   retain:
-    datasets:
+    dataset:
       name: TOFU_gen_QA_retain
       args:
         hf_args:
           name: ${retain_split}
         generation_mode: true
   holdout:
-    datasets:
+    dataset:
       name: TOFU_gen_QA_holdout
       args:
         hf_args:

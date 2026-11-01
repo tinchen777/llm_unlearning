@@ -1,0 +1,10 @@
+defaults:
+  - /data/dataset@forget: TOFU/TOFU_QA
+  - /data/dataset@retain: TOFU/TOFU_QA
+
+dataset:
+  COMBINE:
+    name: null
+    handler: BalancedUnlearnDataset
+    args:
+      anchor: forget

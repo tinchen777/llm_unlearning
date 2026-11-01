@@ -188,12 +188,12 @@ def main(cfg: TrackingConfig):
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
 
         # all forget samples (no subset)
-        forget_loader = split_data["forget"].one_loader(batch_size=wd_cfg["batch_size"], max_samples=None)
+        forget_loader = split_data["forget"].loader(batch_size=wd_cfg["batch_size"], max_samples=None)
         forget_tokens = collect_mlp_tokens(model, forget_loader, train_layers, shift_fn=shift_fn, desc="forget (+shift)")
         retain_parts = [
             collect_mlp_tokens(
                 model,
-                split_data[s].one_loader(
+                split_data[s].loader(
                     batch_size=wd_cfg["batch_size"],
                     max_samples=wd_cfg["retain_max_samples"]
                 ),
