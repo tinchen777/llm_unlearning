@@ -43,7 +43,7 @@ class Metric:
                     self._prepare_reference_logs()
                 elif required_param == "tokenizer":
                     self.cfg_dict["tokenizer"] = kwargs["tokenizer"]
-                elif required_param not in ["model", "pre_compute"] and required_param not in self.cfg_dict:
+                elif required_param not in ["model", "pre_compute", "output_dir"] and required_param not in self.cfg_dict:
                     raise KeyError(f"Required parameter `{required_param}` not found.")
             except Exception as e:
                 raise RuntimeError(f"Error preparing `{required_param}` for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
@@ -122,6 +122,7 @@ class Metric:
             cache.pop(self.name, None)
         # prepare pre-compute metrics
         self._prepare_pre_compute(model, cache)
+        self._prepare_output_dir(output_dir)
         # prepare model
         if "model" in self.func.params:
             self.cfg_dict["model"] = model

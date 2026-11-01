@@ -101,7 +101,6 @@ def responses(
     data: Data,
     generation_args: TrackingConfig,
     output_dir: Optional[Path],
-    max_gen_samples: Optional[int],
     text_metrics: Union[Literal["ALL"], List[str]],
     text_metrics_args: Dict[str, Any],
     **kwargs
@@ -109,7 +108,6 @@ def responses(
     """Calculate response metrics and return the aggregated value along with per-index scores."""
     res_collector = ResponseCollector(
         model, tokenizer, generation_args,
-        max_gen_samples=max_gen_samples,
         output_dir=output_dir,
         text_metrics=text_metrics,
         **text_metrics_args,
@@ -125,9 +123,9 @@ def responses(
         summaries[data_name] = summary
 
     if output_dir:
-        path = output_dir / "summaries.json"
+        path = output_dir / "responses_summary.json"
         save_logs(summaries, path)
-        logger.info(f"Saved `summaries` summaries to [{path}]")
+        logger.info(f"Saved response summaries to [{path}]")
 
     return {"agg_value": None}
 

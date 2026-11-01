@@ -5,27 +5,15 @@
 #           src/METHOD/NEAR/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
 
 defaults:
+  - /eval/tofu_metrics:
+    - splits_responses
+    - splits_responses_neighbor
+  # NOTE: Hydra wants every `override` at the END of the defaults list
   - override /model: tofu/tofu_Llama-3.2-1B-Instruct_full
   - override /eval: tofu
-  - /eval/tofu_metrics: splits_responses
 
 mode: eval
 forget_split: forget10
 neighbor_split: neighbor10
 retain_split: retain90
 holdout_split: holdout10
-
-eval:
-  tofu:
-    metrics:
-      splits_responses:
-        datasets:
-          neighbor:
-            name: TOFU_QA_neighbor
-            args:
-              hf_args:
-                data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
-              generation_mode: true
-              extra_keys:
-                - author_id
-                - neighbor_id

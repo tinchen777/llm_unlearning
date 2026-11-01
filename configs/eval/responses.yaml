@@ -1,0 +1,18 @@
+# @package eval.tofu
+# ONLY the response probe (configs/eval/tofu_metrics/splits_responses*.yaml): generations, ROUGE, answer log-prob, refusal /
+# degeneration / hallucination flags of forget / retain / holdout / neighbor. `python src/eval.py eval=responses ...`
+
+defaults:
+  - tofu_metrics:
+    - splits_responses
+    - splits_responses_neighbor
+
+metrics: {}
+handler: TOFUEvaluator
+overwrite: false
+forget_split: forget??
+holdout_split: holdout??
+retain_split: retain??
+output_dir: ${paths.output_dir}
+question_key: question
+batch_size: 8

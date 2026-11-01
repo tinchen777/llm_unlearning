@@ -118,11 +118,11 @@ def main(cfg: TrackingConfig):
         unrelated = embedder([str(x) for x in sel_cfg["unrelated_responses"]])
 
     res_collector = ResponseCollector(
-        model, split_data, tokenizer, cfg["generation_args"],
+        model, tokenizer, cfg["generation_args"],
         output_dir=config_dir(output_dir, coeff, mode),
         text_metrics="ALL",
         hallucination_rouge=float(sel_cfg["hallucination_rouge"])
-    )
+    ).set_split_data(split_data)
 
     # ==========
     with step_logging(logger, "#1", "steering per layer"):

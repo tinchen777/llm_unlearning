@@ -127,11 +127,11 @@ def main(cfg: TrackingConfig):
                 num_workers=0
             )
             res_collector = ResponseCollector(
-                model, split_data, tokenizer, cfg["generation_args"],
+                model, tokenizer, cfg["generation_args"],
                 output_dir=responses_dir,
                 text_metrics="ALL",
                 hallucination_rouge=float(res_cfg["hallucination_rouge"]),
-            )
+            ).set_split_data(split_data)
             summaries = res_collector.multi_eval(
                 desc_exp=r"%(split)s",
                 peek=2,

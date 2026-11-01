@@ -140,11 +140,11 @@ def main(cfg: TrackingConfig):
         )
 
     res_collector = ResponseCollector(
-        model, split_data, tokenizer, cfg["generation_args"],
+        model, tokenizer, cfg["generation_args"],
         output_dir=config_dir(output_dir, k, coeff, mode),
         text_metrics="ALL",
         hallucination_rouge=float(sel_cfg["hallucination_rouge"])
-    )
+    ).set_split_data(split_data)
 
     # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
     with step_logging(logger, "#1", "get unsteered reference", cfg=sel_cfg["unseen_splits"], ensure_cfg=True) as unseen_splits:

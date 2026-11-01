@@ -2,6 +2,7 @@
 from __future__ import annotations
 import logging
 from tqdm import tqdm
+from torch.utils.data import DataLoader
 from typing import Any, Callable, Dict, Union, Literal, List, Mapping, Optional, Sequence, TYPE_CHECKING
 
 from data import SplitData
@@ -12,7 +13,6 @@ from .text_metric_utils import TextMetric
 from ..metrics.metric_utils import answer_logprobs
 
 if TYPE_CHECKING:
-    from torch.utils.data import DataLoader
     from pathlib import Path
 
 logger = logging.getLogger("eval.text_metric")
@@ -24,7 +24,6 @@ class ResponseCollector:
         model: Any,
         tokenizer: Any,
         generation_args: Any,
-        max_gen_samples: Optional[int] = None,
         output_dir: Optional[Path] = None,
         text_metrics: Optional[Union[Literal["ALL"], List[str]]] = None,
         **text_metrics_args: Any,
@@ -32,7 +31,6 @@ class ResponseCollector:
         self.model = model
         self.tokenizer = tokenizer
         self.generation_args = generation_args
-        self.max_gen_samples = max_gen_samples
         self.output_dir = output_dir
         self.split_data = None
 
@@ -49,6 +47,7 @@ class ResponseCollector:
             self.split_data = split_data
         else:
             logger.warning("`split_data` must be an instance of SplitData, ignoring the provided value.")
+        return self
 
     def _get_loader(self, split_or_loader: Union[str, DataLoader]):
         if isinstance(split_or_loader, DataLoader):
@@ -83,8 +82,6 @@ class ResponseCollector:
         all_records: List[Dict[str, Any]] = []
         dataloader = self._get_loader(split_or_loader)
         for batch in tqdm(dataloader, desc=f"Generating for `{desc}`", unit="batch(es)", colour="green"):
-            if self.max_gen_samples is not None and len(all_records) >= self.max_gen_samples:
-                break
             if before_batch is not None:
                 before_batch(batch)
             batch_records = generate_batch(
@@ -101,8 +98,6 @@ class ResponseCollector:
                     if self.text_metrics:
                         record.update(self.text_metrics.compute_metrics(record))
             all_records.extend(batch_records)
-        if self.max_gen_samples is not None:
-            all_records = all_records[:self.max_gen_samples]
         # save
         if save_name is not None and self.output_dir is not None:
             path = self.output_dir / f"{save_name}.json"

@@ -164,11 +164,11 @@ def main(cfg: TrackingConfig):
         )
 
     res_collector = ResponseCollector(
-        model, split_data, tokenizer, cfg["generation_args"],
+        model, tokenizer, cfg["generation_args"],
         output_dir=run_dir,
         text_metrics="ALL",
         hallucination_rouge=float(wd_cfg["hallucination_rouge"])
-    )
+    ).set_split_data(split_data)
 
     # ==========
     # Responses of the ORIGINAL model (same fixed subset as after the edit)

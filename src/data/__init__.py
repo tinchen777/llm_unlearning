@@ -69,7 +69,7 @@ class Data:
             shuffle=shuffle,
             num_workers=num_workers,
             max_samples=max_samples,
-            seed=sampling_seed
+            sampling_seed=sampling_seed
         )
         return self
 

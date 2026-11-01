@@ -16,10 +16,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 # Step 4: evaluate the edited models of 3_w_down.sh
 #   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/TOFU/<task>/TOFU_EVAL.json
-#       RETAIN_LOGS: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (forget quality / privleak reference)
+#       reference of forget quality / privleak: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (eval.tofu.retain_logs_path,
+#       derived from `retain_split`)
 #   (b) the step-1 probe on the edited model: compare its responses/responses_summary.json / activations_summary.json with
 #       the `full` and `retain` probes of 0_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
-RETAIN_LOGS=saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json
 
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
@@ -36,7 +36,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       model.pretrained.name_or_path=${EDITED} \
       forget_split=${FORGET_SPLIT} \
       holdout_split=${HOLDOUT_SPLIT} \
-      retain_logs_path=${RETAIN_LOGS} \
+      retain_split=${RETAIN_SPLIT} \
       task_name=NEAR/test/near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
 
     # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more

@@ -7,6 +7,7 @@ from .memorization import (
     probability,
     probability_w_options,
     rouge,
+    responses,
     truth_ratio,
     extraction_strength,
     exact_memorization,
@@ -95,6 +96,7 @@ def _get_metric(
 _register_metric_fn(probability)
 _register_metric_fn(probability_w_options)
 _register_metric_fn(rouge)
+_register_metric_fn(responses)
 _register_metric_fn(truth_ratio)
 _register_metric_fn(ks_test)
 _register_metric_fn(hm_aggregate)

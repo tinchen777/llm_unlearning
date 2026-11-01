@@ -28,10 +28,10 @@ datasets:
 
 loader_args:
   batch_size: 16
+  max_samples: 100 # fixed random subset of every dataset, null: all
 
 
-handler: rouge
-max_gen_samples: 100 # null: all
+handler: responses
 text_metrics: ALL
 text_metrics_args:
   hallucination_rouge: 0.3

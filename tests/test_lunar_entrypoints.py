@@ -39,7 +39,7 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     ("mismatched input '[' expecting <EOF>"), so the value must reach the script quoted. Run the same call as the scripts."""
     cmd = (
         f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=unlearn/tofu/LUNAR '
-        'model=${FULL_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.datasets=${REF_DATASET}" '
+        'model=${TARGET_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.datasets=${REF_DATASET}" '
         'task_name=${TASK_NAME} --cfg job'
     )
     proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
