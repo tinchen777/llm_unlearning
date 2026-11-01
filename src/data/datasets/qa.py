@@ -26,7 +26,7 @@ class QADataset(BaseDataset):
         answer_key: Optional[str] = "answer",
         few_shot_dataset_hf_args: Optional[TrackingConfig] = None,
         max_length: int = 512,
-        predict_with_generate: bool = False,
+        generation_mode: bool = False,
         map_args: Optional[TrackingConfig] = None,
         extra_keys: Optional[Sequence[str]] = None,
         **kwargs
@@ -47,7 +47,7 @@ class QADataset(BaseDataset):
             template_args=template_args,
             chat_header=chat_header,
             max_length=max_length,
-            predict_with_generate=predict_with_generate
+            generation_mode=generation_mode
         )
 
     def prepare_data(self):

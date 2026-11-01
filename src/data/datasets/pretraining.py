@@ -18,7 +18,7 @@ class CompletionDataset(BaseDataset):
         prefix_key: str = "prompt",
         text_key: str = "text",
         max_length: int = 2048,
-        predict_with_generate: bool = False,
+        generation_mode: bool = False,
         insert_space: bool = False,
         map_args: Optional[TrackingConfig] = None,
         extra_keys: Optional[Sequence[str]] = None,
@@ -33,7 +33,7 @@ class CompletionDataset(BaseDataset):
         self.tok_kwargs = dict(
             tokenizer=tokenizer,
             text_max_length=max_length,
-            predict_with_generate=predict_with_generate,
+            generation_mode=generation_mode,
             insert_space=insert_space
         )
 

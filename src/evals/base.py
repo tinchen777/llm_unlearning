@@ -60,6 +60,7 @@ class Evaluator:
     def evaluate(
         self,
         model: Any,
+        metric_key_prefix: str = "eval",
         output_dir: Optional[Union[PathLike, str]] = None,
         overwrite: Optional[bool] = None
     ):
@@ -88,7 +89,10 @@ class Evaluator:
             logger.info(f"Aggregated evaluations will be summarised in: {eval_summary_path.resolve()}")
         print("-" * 80)
 
+        summaries = {}
         for idx, (metric_name, metric_fn) in enumerate(self.metrics_dict.items(), start=1):
+            # for each metric, evaluate it using the model and update logs
+
             idx_str = f"[{idx}/{len(self.metrics_dict)}]"
             logger.info(f"{cstr(idx_str, fg='y')} Evaluating metric `{metric_name}` ...")
             _results = metric_fn.evaluate(model, logs, overwrite_cache=_overwrite)

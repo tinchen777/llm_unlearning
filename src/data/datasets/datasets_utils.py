@@ -121,14 +121,14 @@ def tok_chat_sample(
     chat_header: Union[str, List[Dict[str, str]]],
     template_args: TrackingConfig,
     max_length: int,
-    predict_with_generate: bool = False,
+    generation_mode: bool = False,
     **kwargs
 ):
     try:
         # multi-answer support
         if isinstance(a, list):
-            if predict_with_generate:
-                raise TypeError("`predict_with_generate=True` does not support multiple answers per question, please provide a single answer string.")
+            if generation_mode:
+                raise TypeError("`generation_mode=True` does not support multiple answers per question, please provide a single answer string.")
             multi_a = a
         elif isinstance(a, str):
             multi_a = [a]
@@ -192,7 +192,7 @@ def tok_chat_sample(
             if chat_ids[-1] != tokenizer.eos_token_id:
                 chat_ids.append(tokenizer.eos_token_id)
             # input idx
-            if predict_with_generate:
+            if generation_mode:
                 # In generation mode, we only want the input_ids to be the prompt.
                 multi_input_ids.append(prompt_ids)
             else:
@@ -216,7 +216,7 @@ def tok_text_sample(
     /, *,
     tokenizer: Any,
     text_max_length: int,
-    predict_with_generate: bool = False,
+    generation_mode: bool = False,
     insert_space: bool = False,
 ):
     _insert_str = " " if insert_space and prompt and text else ""
@@ -232,7 +232,7 @@ def tok_text_sample(
     full_seq_ids = full_seq_ids[: prompt_len + text_max_length]
 
     # input idx
-    input_ids = prompt_ids if predict_with_generate else full_seq_ids
+    input_ids = prompt_ids if generation_mode else full_seq_ids
     # labels
     len_matched = prompt_len
     if len_matched == 0:  # never give loss on index 0, when prefix is empty
@@ -274,7 +274,7 @@ def get_eoi_positions(tokenizer: Any, template_args: Any, chat_header: Any = Non
         chat_header=chat_header,
         template_args=template_args,
         max_length=4096,
-        predict_with_generate=True,
+        generation_mode=True,
     )["input_ids"][0]
     # smallest prefix that still contains the whole question
     prefix_len = len(prompt_ids)

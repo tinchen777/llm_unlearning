@@ -51,6 +51,7 @@ def _get_metric(
     post_compute_name: str = "",
     **kwargs
 ):
+    # metric with same `metric name` already computed, return it directly
     if metric_name in all_metrics:
         return all_metrics[metric_name]
 

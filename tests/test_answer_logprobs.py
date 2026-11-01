@@ -45,7 +45,7 @@ def setup():
 def _batch(tokenizer, generate: bool):
     samples = [
         tok_chat_sample(q, a, i, tokenizer=tokenizer, chat_header="", template_args=TEMPLATE,
-                        max_length=128, predict_with_generate=generate)
+                        max_length=128, generation_mode=generate)
         for i, (q, a) in enumerate(QA)
     ]
     samples = [{"input_ids": s["input_ids"][0], "labels": s["labels"][0], "attention_mask": [1] * len(s["input_ids"][0]),

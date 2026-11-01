@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 # When using custom evaluators without an eval dataset, pass a dummy value
 # to prevent Trainer from raising on eval_dataset=None when eval_strategy is set
-_EVAL_PLACEHOLDER = "_EVAL_PLACEHOLDER"
+_DATASETS_PLACEHOLDER = "_DATASETS_PLACEHOLDER"
 
 
 class FinetuneTrainer(Trainer):
     def __init__(self, evaluators: Optional[Dict[str, Evaluator]] = None, *args, **kwargs):
         self.evaluators = evaluators
         if kwargs.get("eval_dataset") is None and evaluators:
-            kwargs["eval_dataset"] = _EVAL_PLACEHOLDER
+            kwargs["eval_dataset"] = _DATASETS_PLACEHOLDER
         super().__init__(*args, **kwargs)
 
     def evaluate(
@@ -47,12 +47,18 @@ class FinetuneTrainer(Trainer):
 
             eval_metrics = {}
             for evaluator in self.evaluators.values():
-                eval_metrics.update(evaluator.evaluate(self.model, output_dir=output_dir))
+                eval_metrics.update(
+                    evaluator.evaluate(
+                        self.model,
+                        metric_key_prefix=metric_key_prefix,
+                        output_dir=output_dir,
+                    )
+                )
             # NO eval metrics logging in trainer_state.json
             # self.log(eval_metrics)
             return eval_metrics
 
-        if eval_dataset is None or eval_dataset == _EVAL_PLACEHOLDER:
+        if eval_dataset is None or eval_dataset == _DATASETS_PLACEHOLDER:
             return {}
         # Run the default HF Trainer evaluate method when eval dataset is provided
         return super().evaluate(eval_dataset, ignore_keys, metric_key_prefix)

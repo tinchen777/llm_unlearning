@@ -123,7 +123,7 @@ datasets:
     args:
       hf_args:
         path: muse-bench/MUSE-${eval.muse.data_split}
-      predict_with_generate: True
+      generation_mode: True
 collators:
   DataCollatorForNestedData: 
     args:

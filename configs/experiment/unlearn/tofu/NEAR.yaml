@@ -33,14 +33,14 @@ data:
       args:
         hf_args:
           name: ${forget_split}
-        predict_with_generate: true
+        generation_mode: true
   neighbor:
     datasets:
       name: TOFU_QA_neighbor
       args:
         hf_args:
           data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
-        predict_with_generate: true
+        generation_mode: true
         extra_keys:
           - author_id
           - neighbor_id
@@ -55,14 +55,14 @@ data:
       args:
         hf_args:
           name: ${retain_split}
-        predict_with_generate: true
+        generation_mode: true
   holdout:
     datasets:
       name: TOFU_QA_holdout
       args:
         hf_args:
           name: ${holdout_split}
-        predict_with_generate: true
+        generation_mode: true
 
 generation_args:
   max_new_tokens: 128
@@ -175,8 +175,7 @@ wdown:
   coeff: null
   shift_mode: null
   ref_position: null
-  # null: taken from `layer_selection_path` (the usual case). Only for a run WITHOUT a selection file; given together with one,
-  # they must agree with it (else an error).
+  # null: taken from `layer_selection_path` (the usual case). Only for a run WITHOUT a selection file; given together with one, they must agree with it (else an error).
 
   # data whose MLP output must not change. The neighbours are the redirection TARGET, so they must not move either; holdout is kept out of training as the clean "never seen" control of the evaluation.
   retain_splits: [retain, neighbor]

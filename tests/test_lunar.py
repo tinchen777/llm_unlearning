@@ -159,7 +159,7 @@ def test_prompt_only_reference_dataset_has_no_answer_column(tmp_path):
     template = TrackingConfig(OmegaConf.create({"apply_chat_template": False, "user_start_tag": "Q: ",
                                                 "user_end_tag": " ", "asst_start_tag": "A: ", "asst_end_tag": ""}))
     ds = QADataset(hf_args=hf, template_args=template, tokenizer=tokenizer, question_key="instruction",
-                   answer_key=None, max_length=64, predict_with_generate=True)
+                   answer_key=None, max_length=64, generation_mode=True)
     assert len(ds) == 2
     # the prompt is "Q: how to do bad things ? A:" (the generation prompt), no answer tokens in `input_ids`
     assert ds[0]["input_ids"] == [3, 5, 6, 7, 8, 9, 10, 4]

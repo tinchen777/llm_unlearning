@@ -38,21 +38,21 @@ data:
         hf_args:
           name: ${forget_split}
           split: ${forget_hf_split}
-        predict_with_generate: true
+        generation_mode: true
   retain:
     datasets:
       name: TOFU_QA_retain
       args:
         hf_args:
           name: ${retain_split}
-        predict_with_generate: true
+        generation_mode: true
   holdout:
     datasets:
       name: TOFU_QA_holdout
       args:
         hf_args:
           name: ${holdout_split}
-        predict_with_generate: true
+        generation_mode: true
 
 generation_args:
   max_new_tokens: 128
