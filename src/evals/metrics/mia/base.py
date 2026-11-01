@@ -11,6 +11,7 @@ from ..base import MetricFunc
 if TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader
+    from data import Data
 
 
 class Attack(ABC):
@@ -63,12 +64,13 @@ class Attack(ABC):
 
 
 class MetricMIAFunc(MetricFunc):
-    def __call__(self, model, forget_dl, holdout_dl, **kwargs):
-        cls_and_kwargs = self.func(model, forget_dl, holdout_dl, **kwargs)
+    def __call__(self, model: Any, data: Data, **kwargs):
+        cls_and_kwargs = self.func(model, data, **kwargs)
+        loaders = data.loaders()
         return mia_auc(
             model=model,
-            forget_dl=forget_dl,
-            holdout_dl=holdout_dl,
+            forget_dl=loaders["forget"],
+            holdout_dl=loaders["holdout"],
             **cls_and_kwargs
         )
 

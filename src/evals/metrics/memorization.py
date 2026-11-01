@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import torch
 import numpy as np
-from typing import Any, Dict, List, Mapping, TYPE_CHECKING
+from typing import Any, Dict, List, Mapping, Optional, Union, Literal, TYPE_CHECKING
 
+from utils.common import save_logs
 from .utils import aggregate_to_1D, run_batchwise_evals
 from .metric_utils import (
     evaluate_probability,
@@ -12,9 +13,11 @@ from .metric_utils import (
     eval_text_similarity
 )
 from .base import MetricFunc
+from ..response.collector import ResponseCollector
 
 if TYPE_CHECKING:
-    from torch.utils.data import DataLoader
+    from pathlib import Path
+    from data import Data
     from utils.config import TrackingConfig
 
 # Supress the info messages logged while calculating rouge using rouge_scorer
@@ -23,12 +26,12 @@ logger = logging.getLogger("eval.metric")
 
 
 @MetricFunc
-def probability(model: Any, dataloader: DataLoader, **kwargs):
+def probability(model: Any, data: Data, **kwargs):
     """
     Compute the probabilities by data points and report aggregated average
     """
     scores_by_index = run_batchwise_evals(
-        model, dataloader,
+        model, data.one_loader(),
         batch_eval_fn=evaluate_probability,
         eval_name="loss"
     )
@@ -75,20 +78,58 @@ def probability_w_options(pre_compute: Dict[str, Any], **kwargs):
 def rouge(
     model: Any,
     tokenizer: Any,
-    dataloader: DataLoader,
+    data: Data,
     generation_args: TrackingConfig,
     rouge_type: str,
     **kwargs
 ):
     """Calculate ROUGE metrics and return the aggregated value along with per-index scores."""
     scores_by_index = run_batchwise_evals(
-        model, dataloader,
+        model, data.one_loader(),
         batch_eval_fn=eval_text_similarity,
         batch_eval_fn_args=dict(tokenizer=tokenizer, generation_args=generation_args),
         eval_name="text similarity",
     )
     rouge_values = np.array([evals[rouge_type] for evals in scores_by_index.values()])
     return {"agg_value": np.mean(rouge_values), "value_by_index": scores_by_index}
+
+
+@MetricFunc
+def responses(
+    model: Any,
+    tokenizer: Any,
+    data: Data,
+    generation_args: TrackingConfig,
+    output_dir: Optional[Path],
+    max_gen_samples: Optional[int],
+    text_metrics: Union[Literal["ALL"], List[str]],
+    text_metrics_args: Dict[str, Any],
+    **kwargs
+):
+    """Calculate response metrics and return the aggregated value along with per-index scores."""
+    res_collector = ResponseCollector(
+        model, tokenizer, generation_args,
+        max_gen_samples=max_gen_samples,
+        output_dir=output_dir,
+        text_metrics=text_metrics,
+        **text_metrics_args,
+    )
+    summaries: Dict[str, Dict[str, Any]] = {}
+    for data_name, loader in data.loaders().items():
+        _, summary = res_collector.eval(
+            loader,
+            desc=str(data_name),
+            peek=2,
+            save_name=f"responses_{data_name}",
+        )
+        summaries[data_name] = summary
+
+    if output_dir:
+        path = output_dir / "summaries.json"
+        save_logs(summaries, path)
+        logger.info(f"Saved `summaries` summaries to [{path}]")
+
+    return {"agg_value": None}
 
 
 @MetricFunc
@@ -158,7 +199,7 @@ def truth_ratio(aggregator: str, pre_compute: Dict[str, Any], **kwargs):
 
 
 @MetricFunc
-def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
+def exact_memorization(model: Any, data: Data, **kwargs):
     """
     Compute the exact memorization (EM) score for each instance in the dataloader.
 
@@ -187,7 +228,7 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
         return em_batch
 
     scores_by_index = run_batchwise_evals(
-        model, dataloader,
+        model, data.one_loader(),
         batch_eval_fn=_exact_memorization,
         eval_name="EM"
     )
@@ -198,7 +239,7 @@ def exact_memorization(model: Any, dataloader: DataLoader, **kwargs):
 
 
 @MetricFunc
-def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
+def extraction_strength(model: Any, data: Data, **kwargs):
     """
     Compute the extraction strength (ES) score for each instance in the dataloader.
 
@@ -251,7 +292,7 @@ def extraction_strength(model: Any, dataloader: DataLoader, **kwargs):
         return es_batch
 
     scores_by_index = run_batchwise_evals(
-        model, dataloader,
+        model, data.one_loader(),
         batch_eval_fn=_extraction_strength,
         eval_name="ES"
     )

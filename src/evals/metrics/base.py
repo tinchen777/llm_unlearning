@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from functools import wraps
-from typing import Callable, Any, Dict, Union, TYPE_CHECKING
+from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
 
-from .utils import SUBDATA_SUFFIX
 from data import Data
 from utils.common import load_logs, get_func_params
 from utils.config import reprlib
 
 if TYPE_CHECKING:
+    from pathlib import Path
     from utils.config import TrackingConfig
 
 logger = logging.getLogger("eval.metric")
@@ -34,7 +34,8 @@ class Metric:
 
         logger.info(f"Preparing {self.full_name} ...")
         # prepare for dataloaders
-        self._prepare_dataloaders(**kwargs)
+        if "data" in self.func.params:
+            self._prepare_data(**kwargs)
         # prepare for other required parameters
         for required_param in self.func.params:
             try:
@@ -47,36 +48,16 @@ class Metric:
             except Exception as e:
                 raise RuntimeError(f"Error preparing `{required_param}` for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
-    def _prepare_dataloaders(self, **kwargs):
-        subdata_params = [
-            params
-            for params in self.func.params
-            if params.endswith(SUBDATA_SUFFIX)
-        ]
-        if subdata_params or "dataloader" in self.func.params:
-            try:
-                # prepare data
-                data = Data.from_cfg(
-                    split=self.name,
-                    datasets_cfg=self.cfg_dict.pop("datasets"),
-                    collator_cfg=self.cfg_dict.pop("collator"),
-                    **kwargs
-                ).set_loader(batch_size=self.cfg_dict.pop("batch_size"))  # type: ignore
-
-                if "dataloader" in self.func.params:
-                    # for the whole dataset
-                    self.cfg_dict["dataloader"] = data.one_loader()
-                if subdata_params:
-                    loaders = data.loaders()
-                    for subdata_param in subdata_params:
-                        # for each subdata
-                        sub_name = subdata_param.replace(SUBDATA_SUFFIX, "")
-                        if sub_name not in loaders:
-                            logger.warning(f"Required subdata `{sub_name}` not found while preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.")
-                            continue
-                        self.cfg_dict[subdata_param] = loaders[sub_name]
-            except Exception as e:
-                raise RuntimeError(f"Error preparing dataloaders for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
+    def _prepare_data(self, **kwargs):
+        try:
+            self.cfg_dict["data"] = Data.from_cfg(
+                split=self.name,
+                datasets_cfg=self.cfg_dict.pop("datasets"),
+                collator_cfg=self.cfg_dict.pop("collator"),
+                **kwargs
+            ).set_loader(**self.cfg_dict.pop("loader_args"))
+        except Exception as e:
+            raise RuntimeError(f"Error preparing data for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
     def _prepare_reference_logs(self):
         ref_logs = {}
@@ -120,11 +101,16 @@ class Metric:
             for access_name, pre_metric in self.pre_compute_metrics.items()
         }
 
+    def _prepare_output_dir(self, output_dir: Optional[Path]):
+        if "output_dir" in self.func.params:
+            self.cfg_dict["output_dir"] = output_dir
+
     def evaluate(
         self,
         model: Any,
         cache: Dict[str, Dict[str, Any]],
-        overwrite_cache: bool = False
+        overwrite_cache: bool = False,
+        output_dir: Optional[Path] = None
     ):
         """Evaluates a metric including its pre_compute metrics"""
         if self.name in cache and not overwrite_cache:

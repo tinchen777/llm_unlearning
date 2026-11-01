@@ -3,120 +3,29 @@
 #   step 0  src/METHOD/NEAR/probe.py      ANALYSIS of one model: responses of base / full / retain on forget, neighbor, retain,
 #                                holdout + per-layer activation diagnostics. Nothing below reads its outputs.
 #           src/METHOD/NEAR/neighbor_compare.py  full - retain difference of the AUCs (narrows down the candidate layers)
-#   step 1  src/METHOD/NEAR/r_uv.py          r_UV per forget author, for K neighbours (on the FULL model)      -> r_uv.pt
-#           src/METHOD/NEAR/select_layer.py  LUNAR-style layer selection by inference-time steering
-#                                -> k<K>_c<coeff>_<shift_mode>/layer_selection.json
-#   step 2  src/METHOD/NEAR/w_down.py        train W_down of the selected layer (AdamW or closed form) -> k<K>_c<coeff>_<mode>/l<layers>[_cf]/model/
-#   step 3  src/eval.py (TOFU metrics) + src/METHOD/NEAR/probe.py on the edited model (scripts/NEAR/4_eval.sh)
-# The chain is linked by files: select_layer.py reads r_uv.pt, w_down.py reads layer_selection.json (and through it r_uv.pt),
-# so only `layer_selection_path` has to be passed to w_down.py; the probe of an edited model takes `probe.activations.from_r_uv`.
 
 defaults:
-  - /generation@generation_args: default
-  - /data/subdataset@data.forget: default_left
-  - /data/subdataset@data.neighbor: default_left
-  - /data/subdataset@data.retain: default_left
-  - /data/subdataset@data.holdout: default_left
-  - override /data: null
-  - override /data/datasets@data.neighbor.datasets: TOFU/TOFU_QA_csv
+  - override /model: tofu/tofu_Llama-3.2-1B-Instruct_full
+  - override /eval: tofu
+  - /eval/tofu_metrics: splits_responses
 
-mode: NEAR
+mode: eval
 forget_split: forget10
 neighbor_split: neighbor10
 retain_split: retain90
 holdout_split: holdout10
 
-data:
-  forget:
-    datasets:
-      name: TOFU_QA_forget
-      args:
-        hf_args:
-          name: ${forget_split}
-        generation_mode: true
-  neighbor:
-    datasets:
-      name: TOFU_QA_neighbor
-      args:
-        hf_args:
-          data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
-        generation_mode: true
-        extra_keys:
-          - author_id
-          - neighbor_id
-    collator:
-      args:
-        metadata_keys:
-          - author_id
-          - neighbor_id
-  retain:
-    datasets:
-      name: TOFU_QA_retain
-      args:
-        hf_args:
-          name: ${retain_split}
-        generation_mode: true
-  holdout:
-    datasets:
-      name: TOFU_QA_holdout
-      args:
-        hf_args:
-          name: ${holdout_split}
-        generation_mode: true
-
-generation_args:
-  max_new_tokens: 128
-
-
-basic:
-  qa_per_author: 20
-  # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
-
-  author_offset: 0
-  # must make that author numbering equal to `author_id` of the neighbour csv (checked before running)
-
-  coeff: 1.0
-  # forget target = original MLP output + coeff * r_UV[author]   (LUNAR: 2.0)
-
-  k: 5
-  # which K of the ablation to train with (must be in ruv.ks)
-
-  shift_mode: eoi  # all | eoi
-  # all: `the faithful baseline`. every token of a forget prompt gets the SAME r_UV[ref_position] - this is the paper (Eq. 4: "across all token positions"; position -1) and LUNAR's released code. The shared prompt prefix (system prompt, ...) has IDENTICAL inputs in forget and retain prompts but contradicting targets (+r vs +0), which the regression averages.
-  # eoi: `the variant`. only the end-of-instruction tokens get their own r_UV[position], other tokens keep their output (no conflict).
-
-  ref_position: -1
-  # only for shift_mode=all: which saved position is used
-
-  hallucination_rouge: 0.3
-  # confident answer with rougeL_recall below this = hallucination
-
-# ---- src/METHOD/NEAR/probe.py : step 1 probe (+ per-layer diagnostics) ---------------------------------
-probe:
-  batch_size: 16
-
-  responses:
-    max_gen_samples: 100 # null: all
-    hallucination_rouge: ${basic.hallucination_rouge}
-
-  activations:
-    # sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model pass [retain] as seen and [forget, neighbor, holdout] as unseen
-    seen: [forget, retain]
-    unseen: [neighbor, holdout]
-
-    max_act_samples: 200
-    # fixed random subset per split for the activations; null: all
-
-    forget: forget # split name of the data to forget
-    reference: neighbor # split name of the redirection target
-
-    point: block_out # block_out | mlp_out | down_proj_in | resid_mid
-    positions: null  # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
-    layers: null # null: all decoder layers | [10, 11]
-
-    qa_per_author: ${basic.qa_per_author}
-    author_offset: ${basic.author_offset}
-
-    from_r_uv: null
-    # null: positions / layers / point / qa_per_author / author_offset above (analysis of an original model, before any r_UV exists).
-    # path of an r_uv.pt: those are read from it instead (the probe of an edited model, comparable with that run)
+eval:
+  tofu:
+    metrics:
+      splits_responses:
+        datasets:
+          neighbor:
+            name: TOFU_QA_neighbor
+            args:
+              hf_args:
+                data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+              generation_mode: true
+              extra_keys:
+                - author_id
+                - neighbor_id

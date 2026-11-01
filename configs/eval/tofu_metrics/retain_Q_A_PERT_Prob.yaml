@@ -3,10 +3,10 @@
 defaults:
   - /data/datasets/TOFU@datasets: TOFU_QA_retain_pert
   - /data/collators@collator: default_right
+  - /eval@loader_args: tofu_loader
 
 datasets:
   args:
     question_key: ${eval.tofu.question_key}
 
 handler: probability
-batch_size: ${eval.tofu.batch_size}

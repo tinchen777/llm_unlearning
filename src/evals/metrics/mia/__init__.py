@@ -12,38 +12,38 @@ from .zlib import ZLIBAttack
 from .reference import ReferenceAttack
 
 if TYPE_CHECKING:
-    from torch.utils.data import DataLoader
+    from data import Data
 
 logger = logging.getLogger("eval.metric.mia")
 
 
 @MetricMIAFunc
-def mia_loss(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, **kwargs):
+def mia_loss(model: Any, data: Data, **kwargs):
     return dict(attack_cls=LOSSAttack)
 
 
 @MetricMIAFunc
-def mia_min_k(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, k: float, **kwargs):
+def mia_min_k(model: Any, data: Data, k: float, **kwargs):
     return dict(attack_cls=MinKProbAttack, k=k)
 
 
 @MetricMIAFunc
-def mia_min_k_plus_plus(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, k: float, **kwargs):
+def mia_min_k_plus_plus(model: Any, data: Data, k: float, **kwargs):
     return dict(attack_cls=MinKPlusPlusAttack, k=k)
 
 
 @MetricMIAFunc
-def mia_gradnorm(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, p: float, **kwargs):
+def mia_gradnorm(model: Any, data: Data, p: float, **kwargs):
     return dict(attack_cls=GradNormAttack, p=p)
 
 
 @MetricMIAFunc
-def mia_zlib(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, tokenizer: Any, **kwargs):
+def mia_zlib(model: Any, data: Data, tokenizer: Any, **kwargs):
     return dict(attack_cls=ZLIBAttack, tokenizer=tokenizer)
 
 
 @MetricMIAFunc
-def mia_reference(model: Any, forget_dl: DataLoader, holdout_dl: DataLoader, reference_model_path: str, **kwargs):
+def mia_reference(model: Any, data: Data, reference_model_path: str, **kwargs):
     logger.info(f"Loading reference model from `{reference_model_path}`")
     reference_model = AutoModelForCausalLM.from_pretrained(
         reference_model_path,

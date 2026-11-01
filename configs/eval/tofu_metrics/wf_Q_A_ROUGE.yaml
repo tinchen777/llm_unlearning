@@ -4,6 +4,7 @@ defaults:
   - /data/datasets/TOFU@datasets: TOFU_QA_wf
   - /data/collators@collator: default_left
   - /generation@generation_args: default
+  - /eval@loader_args: tofu_loader
 
 datasets:
   args:
@@ -11,4 +12,3 @@ datasets:
 
 handler: rouge
 rouge_type: rougeL_recall
-batch_size: ${eval.tofu.batch_size}

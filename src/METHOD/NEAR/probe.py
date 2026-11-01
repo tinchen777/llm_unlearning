@@ -122,7 +122,7 @@ def main(cfg: TrackingConfig):
             split_data.set_split_loader(
                 batch_size=probe_cfg["batch_size"],
                 max_samples=res_cfg.get("max_gen_samples", None),
-                seed=seed,
+                sampling_seed=seed,
                 shuffle=False,
                 num_workers=0
             )
@@ -192,7 +192,7 @@ def main(cfg: TrackingConfig):
             split_data.set_split_loader(
                 probe_cfg["batch_size"],
                 max_samples=act_cfg.get("max_act_samples", None),
-                seed=seed
+                sampling_seed=seed
             )
             per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
             groups = {}  # {split: [group key per row]}

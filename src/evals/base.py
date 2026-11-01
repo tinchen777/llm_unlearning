@@ -89,13 +89,12 @@ class Evaluator:
             logger.info(f"Aggregated evaluations will be summarised in: {eval_summary_path.resolve()}")
         print("-" * 80)
 
-        summaries = {}
         for idx, (metric_name, metric_fn) in enumerate(self.metrics_dict.items(), start=1):
             # for each metric, evaluate it using the model and update logs
 
             idx_str = f"[{idx}/{len(self.metrics_dict)}]"
             logger.info(f"{cstr(idx_str, fg='y')} Evaluating metric `{metric_name}` ...")
-            _results = metric_fn.evaluate(model, logs, overwrite_cache=_overwrite)
+            _results = metric_fn.evaluate(model, logs, overwrite_cache=_overwrite, output_dir=_output_dir)
             # Update logs
             if eval_detail_path:
                 save_logs(logs, eval_detail_path)

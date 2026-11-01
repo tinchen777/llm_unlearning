@@ -8,8 +8,6 @@ from tqdm.auto import tqdm
 import logging
 from typing import List, Any, Dict, Callable
 
-SUBDATA_SUFFIX = "_dl"
-
 logger = logging.getLogger("eval.metric")
 
 

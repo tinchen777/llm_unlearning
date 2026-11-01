@@ -3,6 +3,7 @@
 defaults:
   - /data/datasets/TOFU@datasets: TOFU_QA_MIA
   - /data/collators@collator: default_right
+  - /eval@loader_args: tofu_loader
 
 datasets:
   forget:
@@ -17,4 +18,3 @@ datasets:
         name: ${eval.tofu.holdout_split}
 
 handler: mia_loss
-batch_size: ${eval.tofu.batch_size}

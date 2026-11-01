@@ -60,7 +60,7 @@ class Data:
         shuffle: bool = False,
         num_workers: int = 0,
         max_samples: Optional[int] = None,
-        seed: int = 42
+        sampling_seed: int = 42
     ):
         """Set the loader configuration for the data."""
         self.default_args: Dict[str, Any] = dict(
@@ -69,7 +69,7 @@ class Data:
             shuffle=shuffle,
             num_workers=num_workers,
             max_samples=max_samples,
-            seed=seed
+            seed=sampling_seed
         )
         return self
 
@@ -116,7 +116,7 @@ class SplitData:
         shuffle: bool = False,
         num_workers: int = 0,
         max_samples: Optional[int] = None,
-        seed: int = 42
+        sampling_seed: int = 42
     ):
         """Set the loader configuration for all splits."""
         for split_data in self.split_data.values():
@@ -125,7 +125,7 @@ class SplitData:
                 shuffle=shuffle,
                 num_workers=num_workers,
                 max_samples=max_samples,
-                seed=seed
+                sampling_seed=sampling_seed
             )
         return self
 

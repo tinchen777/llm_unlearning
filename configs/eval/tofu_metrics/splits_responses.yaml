@@ -1,9 +1,10 @@
-# @package eval.tofu.metrics.forget_Q_A_ROUGE
+# @package eval.tofu.metrics.splits_responses
 
 defaults:
   - /data/datasets/TOFU@datasets: TOFU_QA_ALL_SPLIT
   - /data/collators@collator: default_left
   - /generation@generation_args: default
+  - /eval@loader_args: tofu_loader
 
 datasets:
   forget:
@@ -25,8 +26,13 @@ datasets:
       question_key: ${eval.tofu.question_key}
       generation_mode: true
 
+loader_args:
+  batch_size: 16
+
+
 handler: rouge
-batch_size: ${eval.tofu.batch_size}
 max_gen_samples: 100 # null: all
-hallucination_rouge: 0.3
-# confident answer with rougeL_recall below this = hallucination
+text_metrics: ALL
+text_metrics_args:
+  hallucination_rouge: 0.3
+  # confident answer with rougeL_recall below this = hallucination

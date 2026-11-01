@@ -2,8 +2,9 @@
 from __future__ import annotations
 import logging
 from tqdm import tqdm
-from typing import Any, Callable, Dict, Iterable, Union, Literal, List, Mapping, Optional, Sequence, TYPE_CHECKING
+from typing import Any, Callable, Dict, Union, Literal, List, Mapping, Optional, Sequence, TYPE_CHECKING
 
+from data import SplitData
 from data.datasets.datasets_utils import IGNORE_INDEX
 from model.inference.utils import generate_batch
 from utils.common import save_logs
@@ -11,7 +12,7 @@ from .text_metric_utils import TextMetric
 from ..metrics.metric_utils import answer_logprobs
 
 if TYPE_CHECKING:
-    from data import SplitData
+    from torch.utils.data import DataLoader
     from pathlib import Path
 
 logger = logging.getLogger("eval.text_metric")
@@ -21,20 +22,19 @@ class ResponseCollector:
     def __init__(
         self,
         model: Any,
-        split_data: SplitData,
         tokenizer: Any,
         generation_args: Any,
-        max_samples: Optional[int] = None,
+        max_gen_samples: Optional[int] = None,
         output_dir: Optional[Path] = None,
         text_metrics: Optional[Union[Literal["ALL"], List[str]]] = None,
         **text_metrics_args: Any,
     ):
         self.model = model
-        self.split_data = split_data
         self.tokenizer = tokenizer
         self.generation_args = generation_args
-        self.max_samples = max_samples
+        self.max_gen_samples = max_gen_samples
         self.output_dir = output_dir
+        self.split_data = None
 
         if text_metrics == "ALL":
             self.text_metrics = TextMetric.use_all(**text_metrics_args)
@@ -44,9 +44,25 @@ class ResponseCollector:
             self.text_metrics = TextMetric(*text_metrics, **text_metrics_args)
         self.with_logprob = text_metrics == "ALL" or "answer_logprob" in (text_metrics or [])
 
+    def set_split_data(self, split_data: SplitData):
+        if isinstance(split_data, SplitData):
+            self.split_data = split_data
+        else:
+            logger.warning("`split_data` must be an instance of SplitData, ignoring the provided value.")
+
+    def _get_loader(self, split_or_loader: Union[str, DataLoader]):
+        if isinstance(split_or_loader, DataLoader):
+            return split_or_loader
+        elif isinstance(split_or_loader, str):
+            if self.split_data is None:
+                raise ValueError("`split_data` is not set.")
+            return self.split_data[split_or_loader].one_loader()
+        else:
+            raise ValueError("`split_or_loader` must be either a DataLoader or a string representing the split.")
+
     def generate(
         self,
-        dataloader: Iterable[Mapping[str, Any]],
+        split_or_loader: Union[str, DataLoader],
         desc: str = "",
         before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
         save_name: Optional[str] = None,
@@ -65,8 +81,9 @@ class ResponseCollector:
         self.model.eval()
 
         all_records: List[Dict[str, Any]] = []
+        dataloader = self._get_loader(split_or_loader)
         for batch in tqdm(dataloader, desc=f"Generating for `{desc}`", unit="batch(es)", colour="green"):
-            if self.max_samples is not None and len(all_records) >= self.max_samples:
+            if self.max_gen_samples is not None and len(all_records) >= self.max_gen_samples:
                 break
             if before_batch is not None:
                 before_batch(batch)
@@ -84,8 +101,8 @@ class ResponseCollector:
                     if self.text_metrics:
                         record.update(self.text_metrics.compute_metrics(record))
             all_records.extend(batch_records)
-        if self.max_samples is not None:
-            all_records = all_records[:self.max_samples]
+        if self.max_gen_samples is not None:
+            all_records = all_records[:self.max_gen_samples]
         # save
         if save_name is not None and self.output_dir is not None:
             path = self.output_dir / f"{save_name}.json"
@@ -112,15 +129,17 @@ class ResponseCollector:
 
     def eval(
         self,
-        split: str,
+        split_or_loader: Union[str, DataLoader],
         desc: str = "",
         before_batch: Optional[Callable[[Mapping[str, Any]], None]] = None,
         peek: Optional[int] = None,
         save_name: Optional[str] = None,
     ):
-        logger.info(f"Evaluating model responses `{desc}` for split `{split}`...")
+        dataloader = self._get_loader(split_or_loader)
+        split_str = f" for split `{split_or_loader}`" if isinstance(split_or_loader, str) else ""
+        logger.info(f"Evaluating model responses `{desc}`{split_str}...")
         records = self.generate(
-            self.split_data[split].one_loader(),
+            dataloader,
             desc=desc,
             before_batch=before_batch,
             save_name=save_name
@@ -129,7 +148,7 @@ class ResponseCollector:
         if peek is not None:
             for i, record in enumerate(records[:peek], start=1):
                 logger.info(
-                    f"`{desc}` for split `{split}` peek [{i}]\n"
+                    f"`{desc}`{split_str} peek [{i}]\n"
                     f"        P : ...{record['input'].strip()[-100:]!r}\n"
                     f"        GT: {record['ground_truth']!r}\n"
                     f"        A : {record['generation']!r}"
@@ -146,6 +165,8 @@ class ResponseCollector:
         records_name_exp: Optional[str] = None,
         summaries_name: Optional[str] = None,
     ):
+        if self.split_data is None:
+            raise ValueError("`split_data` is not set.")
         _splits = splits if splits is not None else self.split_data.splits
         summaries_str = f" of `{summaries_name}`" if summaries_name is not None else ""
         logger.info(f"=== Starting multi text evaluation{summaries_str} for splits: {_splits} ===")

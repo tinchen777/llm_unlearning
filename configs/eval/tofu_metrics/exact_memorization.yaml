@@ -3,6 +3,7 @@
 defaults:
   - /data/datasets/TOFU@datasets: TOFU_QA
   - /data/collators@collator: default_right
+  - /eval@loader_args: tofu_loader
 
 datasets:
   name: TOFU_QA_perturbed_forget
@@ -11,7 +12,4 @@ datasets:
       name: ${eval.tofu.forget_split}_perturbed
     question_key: ${eval.tofu.question_key}
 
-loader
-
 handler: exact_memorization
-batch_size: ${eval.tofu.batch_size}

@@ -146,7 +146,7 @@ def main(cfg: TrackingConfig):
         ).set_split_loader(
             wd_cfg["gen_batch_size"],
             max_samples=wd_cfg["max_gen_samples"],
-            seed=seed
+            sampling_seed=seed
         )
         # the forget rows / model must be the ones r_uv.pt was computed on
         check_r_uv_identity(

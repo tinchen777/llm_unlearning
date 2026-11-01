@@ -16,7 +16,7 @@ IGNORE_INDEX = -100
 def fixed_subset(
     dataset: Dataset,
     max_samples: Optional[int] = None,
-    seed: int = 42
+    sampling_seed: int = 42
 ) -> Dataset:
     """
     A FIXED random subset of `max_samples` samples (sorted indices; the same for every call / model given `seed`),
@@ -29,7 +29,7 @@ def fixed_subset(
 
     idx = torch.randperm(
         dataset_size,
-        generator=torch.Generator().manual_seed(seed)
+        generator=torch.Generator().manual_seed(sampling_seed)
     )[:int(max_samples)]
     return Subset(dataset, sorted(idx.tolist()))
 
@@ -39,14 +39,14 @@ def make_subloader(
     batch_size: int,
     collator: Optional[Any] = None,
     max_samples: Optional[int] = None,
-    seed: int = 42,
+    sampling_seed: int = 42,
     **loader_kwargs
 ) -> DataLoader:
     """
     Unshuffled loader of the single dataset on a fixed subset.
     """
     return DataLoader(
-        fixed_subset(dataset, max_samples=max_samples, seed=seed),
+        fixed_subset(dataset, max_samples=max_samples, sampling_seed=sampling_seed),
         batch_size=batch_size,
         collate_fn=collator,
         **loader_kwargs
