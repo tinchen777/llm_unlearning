@@ -4,8 +4,8 @@ defaults:
   - override /model: Llama-2-7b-hf
   - override /trainer: GradAscent
   - override /data: unlearn
-  - override /data/datasets@data.train.datasets.forget: MUSE/MUSE_forget_scal
-  - override /data/datasets@data.train.datasets.retain: MUSE/MUSE_retain
+  - override /data/datasets@data.train.dataset.forget: MUSE/MUSE_forget_scal
+  - override /data/datasets@data.train.dataset.retain: MUSE/MUSE_retain
   - override /eval: muse
 
 data_split: News
@@ -19,7 +19,7 @@ model:
 
 data:
   train:
-    datasets:
+    dataset:
       forget:
         args:
           hf_args:

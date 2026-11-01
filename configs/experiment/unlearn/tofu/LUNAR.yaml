@@ -14,14 +14,14 @@
 
 defaults:
   - /generation@generation_args: default
-  - /data/subdataset@data.forget: default_left
-  - /data/subdataset@data.ref: default_left
-  - /data/subdataset@data.retain: default_left
-  - /data/subdataset@data.holdout: default_left
+  - /data/packs@data.forget: default_left
+  - /data/packs@data.ref: default_left
+  - /data/packs@data.retain: default_left
+  - /data/packs@data.holdout: default_left
   - override /data: null
   # D_ref: LUNAR_harmful (safety-aligned base models refuse them; best for the fine-tuned TOFU models) or
   # LUNAR_unverified (fictitious entities; for unlearning pre-trained data). python setup/setup_data.py --lunar
-  - override /data/datasets@data.ref.datasets: LUNAR/LUNAR_harmful
+  - override /data/datasets@data.ref.dataset: LUNAR/LUNAR_harmful
 
 mode: LUNAR
 forget_split: forget01
@@ -32,7 +32,7 @@ forget_hf_split: "train[:20]"
 
 data:
   forget:
-    datasets:
+    dataset:
       name: TOFU_QA_forget
       args:
         hf_args:
@@ -40,14 +40,14 @@ data:
           split: ${forget_hf_split}
         generation_mode: true
   retain:
-    datasets:
+    dataset:
       name: TOFU_QA_retain
       args:
         hf_args:
           name: ${retain_split}
         generation_mode: true
   holdout:
-    datasets:
+    dataset:
       name: TOFU_QA_holdout
       args:
         hf_args:

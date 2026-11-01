@@ -1,0 +1,47 @@
+# @package eval.tofu.metrics.neighbor_responses
+# Responses of the model to the questions of the `neighbor` split: generations, ROUGE, ground-truth answer log-prob,
+# refusal / degeneration / hallucination flags. The metric itself has no `agg_value`: it keeps one record per sample
+# (`value_by_index`) and the mean of every text metric (`summary`); `expose` publishes the listed keys of that summary as
+# metrics of their own (`neighbor_<key>`), at the same level as the other metrics.
+
+defaults:
+  # a csv, not the hub dataset of the pack: the collator and the dataset are listed one by one
+  - /data/collators@data.train.collator: default_left
+  - /data/datasets@data.train.dataset: TOFU/TOFU_QA_csv
+  - /generation@generation_args: default
+  - /eval@loader_args: tofu_loader
+
+data:
+  train:
+    dataset:
+      name: TOFU_QA_neighbor
+      args:
+        hf_args:
+          data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
+        extra_keys:
+          - author_id
+          - neighbor_id
+    collator:
+      args:
+        metadata_keys:
+          - author_id
+          - neighbor_id
+
+loader_args:
+  batch_size: 16
+  max_samples: 100 # fixed random subset of the questions, null: all
+
+handler: responses
+text_metrics: ALL # ALL | [rouge_scores, is_refusal, is_degenerate, is_hallucination, word_count, answer_logprob]
+text_metrics_args:
+  hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
+
+expose_prefix: neighbor
+expose:
+  - rougeL_recall
+  - answer_prob
+  - refusal_rate
+  - degenerate_rate
+  - hallucination_rate

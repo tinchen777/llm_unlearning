@@ -164,7 +164,7 @@ def main(cfg: TrackingConfig):
                 check_r_uv_identity(
                     ref,
                     forget_split=cfg.get("forget_split", None),
-                    num_forget=len(split_data[forget].one_dataset),
+                    num_forget=len(split_data[forget].dataset),
                     source=str(r_uv_path),
                 )
                 from_file = {

@@ -4,7 +4,7 @@ defaults:
   - override /model: tofu/tofu_Llama-3.2-1B-Instruct_full
   - override /trainer: DPO
   - override /data: unlearn
-  - override /data/datasets@data.train.datasets.forget: TOFU/TOFU_QA_forget_idk
+  - override /data/datasets@data.train.dataset.forget: TOFU/TOFU_QA_forget_idk
   - override /eval: tofu
 
 forget_split: forget10
@@ -21,7 +21,7 @@ eval:
 
 data:
   train:
-    datasets:
+    dataset:
       forget:
         args:
           hf_args:

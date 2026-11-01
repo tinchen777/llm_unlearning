@@ -6,8 +6,10 @@
 
 defaults:
   - /eval/tofu_metrics:
-    - splits_responses
-    - splits_responses_neighbor
+    - forget_responses
+    - retain_responses
+    - holdout_responses
+    - neighbor_responses
   # NOTE: Hydra wants every `override` at the END of the defaults list
   - override /model: tofu/tofu_Llama-3.2-1B-Instruct_full
   - override /eval: tofu

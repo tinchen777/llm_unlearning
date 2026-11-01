@@ -1,14 +1,16 @@
 # @package eval.tofu.metrics.wf_Q_A_ROUGE
 
 defaults:
-  - /data/datasets/TOFU@datasets: TOFU_QA_wf
-  - /data/collators@collator: default_left
+  - /data/packs@data.train: default_left
+  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_wf
   - /generation@generation_args: default
   - /eval@loader_args: tofu_loader
 
-datasets:
-  args:
-    generation_mode: true
+data:
+  train:
+    dataset:
+      args:
+        generation_mode: true
 
 handler: rouge
 rouge_type: rougeL_recall

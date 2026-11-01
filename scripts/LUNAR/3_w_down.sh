@@ -27,7 +27,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     experiment=unlearn/tofu/LUNAR \
     model=${TARGET_MODEL} \
     "${SPLIT_ARGS[@]}" \
-    "data/datasets@data.ref.datasets=${REF_DATASET}" \
+    "data/datasets@data.ref.dataset=${REF_DATASET}" \
     wdown.layer_selection_path=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})/layer_selection.json \
     wdown.solver=${SOLVER} \
     wdown.layers=auto \

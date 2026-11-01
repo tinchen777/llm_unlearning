@@ -87,9 +87,9 @@ def main(cfg: TrackingConfig):
         forget_data = split_data["forget"]
         neighbor_data = split_data["neighbor"]
 
-        _neighbor_data = neighbor_data.one_dataset.data  # type: ignore # tokenised HF dataset, extra_keys are columns
+        _neighbor_data = neighbor_data.dataset.data  # type: ignore # tokenised HF dataset, extra_keys are columns
         _nb_by_author = neighbors_by_author(_neighbor_data["author_id"], _neighbor_data["neighbor_id"])  # {author_id: [neighbor_id, ...]}
-        forget_author_set = set(forget_authors(range(len(forget_data.one_dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
+        forget_author_set = set(forget_authors(range(len(forget_data.dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
         check_neighbors(forget_author_set, _nb_by_author, ks)
 
         order = nested_neighbor_order({a: _nb_by_author[a] for a in forget_author_set}, seed=seed)
@@ -137,7 +137,7 @@ def main(cfg: TrackingConfig):
             "qa_per_author": qa_per_author, "author_offset": author_offset, "seed": seed,
             # identity: what r_UV was computed on (checked by select_layer.py / w_down.py)
             "forget_split": cfg.get("forget_split", None), "neighbor_split": cfg.get("neighbor_split", None),
-            "num_forget": len(forget_data.one_dataset), "authors": sorted(forget_author_set),
+            "num_forget": len(forget_data.dataset), "authors": sorted(forget_author_set),
             "model": model_name(model_cfg),
         }, output_dir / "r_uv.pt")
         save_logs(summarize_r_uv(r_uv, forget_means, act_collector.layers), output_dir / "r_uv_summary.json")  # type: ignore

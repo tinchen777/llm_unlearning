@@ -1,19 +1,24 @@
 # @package eval.muse.metrics.mia_gradnorm
 
 defaults:
-  - /data/datasets/MUSE@datasets: MUSE_MIA
-  - /data/collators@collator: default_right
+  - /data/packs@data.forget: default_right
+  - /data/datasets/MUSE@data.forget.dataset: MUSE_MIA_forget
+  - /data/packs@data.holdout: default_right
+  - /data/datasets/MUSE@data.holdout.dataset: MUSE_MIA_holdout
 
-datasets:
-  holdout:
-    args:
-      hf_args:
-        path: muse-bench/MUSE-${eval.muse.data_split}
+data:
   forget:
-    args:
-      hf_args:
-        path: muse-bench/MUSE-${eval.muse.data_split}
+    dataset:
+      args:
+        hf_args:
+          path: muse-bench/MUSE-${eval.muse.data_split}
+  holdout:
+    dataset:
+      args:
+        hf_args:
+          path: muse-bench/MUSE-${eval.muse.data_split}
 
 handler: mia_gradnorm
-batch_size: 1
+loader_args:
+  batch_size: 1
 p: 2

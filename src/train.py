@@ -57,7 +57,7 @@ def main(cfg: TrackingConfig):
             trainer_cfg,
             model=model,
             evaluators=evaluators,
-            train_dataset=train_data.one_dataset,
+            train_dataset=train_data.dataset,
             processing_class=tokenizer,
             data_collator=train_data.collator
         )

@@ -17,7 +17,7 @@ def test_entry_point_runs_from_its_own_directory(script, ref):
     proc = subprocess.run(
         [sys.executable, str(ROOT / "src" / "METHOD" / "LUNAR" / f"{script}.py"),
          "experiment=unlearn/tofu/LUNAR", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "task_name=t",
-         f"data/datasets@data.ref.datasets={ref}", "--cfg", "job"],
+         f"data/datasets@data.ref.dataset={ref}", "--cfg", "job"],
         cwd=ROOT, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stderr[-1500:]
@@ -39,7 +39,7 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     ("mismatched input '[' expecting <EOF>"), so the value must reach the script quoted. Run the same call as the scripts."""
     cmd = (
         f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=unlearn/tofu/LUNAR '
-        'model=${TARGET_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.datasets=${REF_DATASET}" '
+        'model=${TARGET_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.dataset=${REF_DATASET}" '
         'task_name=${TASK_NAME} --cfg job'
     )
     proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)

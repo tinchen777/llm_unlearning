@@ -1,19 +1,22 @@
 # @package eval.muse.metrics.forget_verbmem_ROUGE
 
 defaults:
-  - /data/datasets/MUSE@datasets: MUSE_forget_verbmem
-  - /data/collators@collator: default_left
+  - /data/packs@data.train: default_left
+  - /data/datasets/MUSE@data.train.dataset: MUSE_forget_verbmem
   - /generation@generation_args: default
 
-datasets:
-  args:
-    hf_args:
-      path: muse-bench/MUSE-${eval.muse.data_split}
-    generation_mode: true
+data:
+  train:
+    dataset:
+      args:
+        hf_args:
+          path: muse-bench/MUSE-${eval.muse.data_split}
+        generation_mode: true
 
 generation_args:
   max_new_tokens: 128
 
 handler: rouge
 rouge_type: rougeL_f1
-batch_size: ${eval.muse.batch_size}
+loader_args:
+  batch_size: ${eval.muse.batch_size}

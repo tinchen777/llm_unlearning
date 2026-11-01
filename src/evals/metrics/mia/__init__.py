@@ -12,38 +12,38 @@ from .zlib import ZLIBAttack
 from .reference import ReferenceAttack
 
 if TYPE_CHECKING:
-    from data import Data
+    from data import SplitData
 
 logger = logging.getLogger("eval.metric.mia")
 
 
 @MetricMIAFunc
-def mia_loss(model: Any, data: Data, **kwargs):
+def mia_loss(model: Any, split_data: SplitData, **kwargs):
     return dict(attack_cls=LOSSAttack)
 
 
 @MetricMIAFunc
-def mia_min_k(model: Any, data: Data, k: float, **kwargs):
+def mia_min_k(model: Any, split_data: SplitData, k: float, **kwargs):
     return dict(attack_cls=MinKProbAttack, k=k)
 
 
 @MetricMIAFunc
-def mia_min_k_plus_plus(model: Any, data: Data, k: float, **kwargs):
+def mia_min_k_plus_plus(model: Any, split_data: SplitData, k: float, **kwargs):
     return dict(attack_cls=MinKPlusPlusAttack, k=k)
 
 
 @MetricMIAFunc
-def mia_gradnorm(model: Any, data: Data, p: float, **kwargs):
+def mia_gradnorm(model: Any, split_data: SplitData, p: float, **kwargs):
     return dict(attack_cls=GradNormAttack, p=p)
 
 
 @MetricMIAFunc
-def mia_zlib(model: Any, data: Data, tokenizer: Any, **kwargs):
+def mia_zlib(model: Any, split_data: SplitData, tokenizer: Any, **kwargs):
     return dict(attack_cls=ZLIBAttack, tokenizer=tokenizer)
 
 
 @MetricMIAFunc
-def mia_reference(model: Any, data: Data, reference_model_path: str, **kwargs):
+def mia_reference(model: Any, split_data: SplitData, reference_model_path: str, **kwargs):
     logger.info(f"Loading reference model from `{reference_model_path}`")
     reference_model = AutoModelForCausalLM.from_pretrained(
         reference_model_path,

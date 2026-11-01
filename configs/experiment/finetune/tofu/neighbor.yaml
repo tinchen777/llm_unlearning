@@ -1,12 +1,12 @@
 # @package _global_
 # TODO
 defaults:
-  - /data/subdataset@data.neighbor: default
+  - /data/packs@data.neighbor: default_right
   - override /model: Llama-3.2-1B-Instruct
   - override /trainer: finetune
   - override /data: default
-  - override /data/datasets@data.train.datasets: TOFU/TOFU_QA
-  - override /data/datasets@data.neighbor.datasets: TOFU/TOFU_QA_csv
+  - override /data/datasets@data.train.dataset: TOFU/TOFU_QA
+  - override /data/datasets@data.neighbor.dataset: TOFU/TOFU_QA_csv
   - override /eval: tofu
 
 mode: neighbor
@@ -36,14 +36,14 @@ eval:
 
 data:
   train:
-    datasets:
+    dataset:
       TOFU_QA_forget:
         args:
           hf_args:
             name: ${forget_split}
         generation_mode: true
   neighbor:
-    datasets:
+    dataset:
       TOFU_QA_neighbor:
         args:
           hf_args:

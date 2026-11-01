@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from functools import wraps
-from typing import Callable, Any, Dict, Union, Optional, TYPE_CHECKING
+from typing import Callable, Any, Dict, List, Union, Optional, TYPE_CHECKING
 
-from data import Data
+from data import SplitData
 from utils.common import load_logs, get_func_params
 from utils.config import reprlib
 
@@ -31,10 +31,12 @@ class Metric:
         self.func = func
         self.pre_compute_metrics = pre_compute_metrics
         self.cfg_dict = cfg_dict
+        # scalars of this metric published as metrics of their own (`expose` in the config), see `ExposedMetric`
+        self.exposed: List[ExposedMetric] = []
 
         logger.info(f"Preparing {self.full_name} ...")
-        # prepare for dataloaders
-        if "data" in self.func.params:
+        # prepare for data: `data` (a `Data`, the config has exactly ONE split) or `split_data` (a `SplitData`, any number)
+        if "data" in self.func.params or "split_data" in self.func.params:
             self._prepare_data(**kwargs)
         # prepare for other required parameters
         for required_param in self.func.params:
@@ -43,6 +45,8 @@ class Metric:
                     self._prepare_reference_logs()
                 elif required_param == "tokenizer":
                     self.cfg_dict["tokenizer"] = kwargs["tokenizer"]
+                elif required_param == "metric_name":
+                    self.cfg_dict["metric_name"] = self.name
                 elif required_param not in ["model", "pre_compute", "output_dir"] and required_param not in self.cfg_dict:
                     raise KeyError(f"Required parameter `{required_param}` not found.")
             except Exception as e:
@@ -50,12 +54,13 @@ class Metric:
 
     def _prepare_data(self, **kwargs):
         try:
-            self.cfg_dict["data"] = Data.from_cfg(
-                split=self.name,
-                dataset_cfg=self.cfg_dict.pop("datasets"),
-                collator_cfg=self.cfg_dict.pop("collator"),
-                **kwargs
-            ).set_loader(**self.cfg_dict.pop("loader_args"))
+            split_data = SplitData(self.cfg_dict.pop("data"), **kwargs).set_split_loader(**self.cfg_dict.pop("loader_args"))
+            if "split_data" in self.func.params:
+                self.cfg_dict["split_data"] = split_data
+            if "data" in self.func.params:
+                if len(split_data) != 1:
+                    raise ValueError(f"`data` needs exactly one split in the config, got {split_data.splits}; use `split_data` for several.")
+                self.cfg_dict["data"] = next(iter(split_data.values()))
         except Exception as e:
             raise RuntimeError(f"Error preparing data for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
@@ -136,6 +141,42 @@ class Metric:
         cache[self.name] = results
 
         return results
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__} {self.name}"
+
+
+class ExposedMetric:
+    """A scalar taken from the `summary` of another metric (`expose: [key, ...]` in its config).
+
+    The parent is computed ONCE (its result keeps the per-sample `value_by_index` and the whole `summary`); every exposed
+    key is a metric of its own, at the same level as the others: `{"agg_value": summary[key]}` in the logs and in the
+    summary file, named `<expose_prefix or parent name>_<key>`.
+    """
+
+    def __init__(self, name: str, parent: Metric, key: str):
+        self.name = name
+        self.parent = parent
+        self.key = key
+        self.full_name = f"`{name}`(`{key}` of `{parent.name}`)"
+
+    def evaluate(
+        self,
+        model: Any,
+        cache: Dict[str, Dict[str, Any]],
+        overwrite_cache: bool = False,
+        output_dir: Optional[Path] = None
+    ):
+        if self.name in cache and not overwrite_cache:
+            logger.info(f"Skipping {self.full_name}, already evaluated.")
+            return cache[self.name]
+        # never recompute the parent here: it is evaluated (and overwritten) at its own turn, just before its exposed metrics
+        parent_results = self.parent.evaluate(model, cache, overwrite_cache=False, output_dir=output_dir)
+        summary = parent_results.get("summary") or {}
+        if self.key not in summary:
+            raise KeyError(f"`{self.key}` is not in the summary of `{self.parent.name}`, available: {sorted(summary)}.")
+        cache[self.name] = {"agg_value": summary[self.key]}
+        return cache[self.name]
 
     def __repr__(self) -> str:
         return f"{type(self).__name__} {self.name}"

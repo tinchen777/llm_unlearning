@@ -1,12 +1,14 @@
 # @package eval.tofu.metrics.retain_Q_A_Prob
 
 defaults:
-  - /data/datasets/TOFU@datasets: TOFU_QA_retain_eval
-  - /data/collators@collator: default_right
+  - /data/packs@data.train: default_right
+  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_retain_eval
   - /eval@loader_args: tofu_loader
 
-datasets:
-  args:
-    question_key: ${eval.tofu.question_key}
+data:
+  train:
+    dataset:
+      args:
+        question_key: ${eval.tofu.question_key}
 
 handler: probability

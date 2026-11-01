@@ -100,7 +100,7 @@ def main(cfg: TrackingConfig):
             "r_uv": r_uv.float(),
             "forget_mean": forget_mean.float(), "ref_mean": ref_mean.float(),
             "positions": act_collector.positions, "layers": act_collector.layers, "point": act_collector.point,
-            "num_forget": len(forget_data.one_dataset), "num_ref": len(ref_data.one_dataset),  # type: ignore
+            "num_forget": len(forget_data.dataset), "num_ref": len(ref_data.dataset),  # type: ignore
             # identity: what r_UV was computed on (checked by select_layer.py / w_down.py)
             "forget_split": cfg.get("forget_split", None), "forget_hf_split": cfg.get("forget_hf_split", None),
             "model": model_name(model_cfg),

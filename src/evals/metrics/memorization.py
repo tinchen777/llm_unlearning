@@ -5,7 +5,6 @@ import torch
 import numpy as np
 from typing import Any, Dict, List, Mapping, Optional, Union, Literal, TYPE_CHECKING
 
-from utils.common import save_logs
 from .utils import aggregate_to_1D, run_batchwise_evals
 from .metric_utils import (
     evaluate_probability,
@@ -101,33 +100,30 @@ def responses(
     data: Data,
     generation_args: TrackingConfig,
     output_dir: Optional[Path],
+    metric_name: str,
     text_metrics: Union[Literal["ALL"], List[str]],
     text_metrics_args: Dict[str, Any],
     **kwargs
 ):
-    """Calculate response metrics and return the aggregated value along with per-index scores."""
+    """Generate the responses to the questions of ONE split and score them (ROUGE, ground-truth answer log-prob, refusal /
+    degeneration / hallucination flags, ...).
+
+    Returns `value_by_index` (one record per sample) and `summary` (the mean of every text metric). It has no `agg_value`
+    of its own: list the keys of `summary` to publish in `expose` of the config, each one becomes a metric
+    `<expose_prefix>_<key>`. The records are also written to `<output_dir>/<metric name>.json`.
+    """
     res_collector = ResponseCollector(
         model, tokenizer, generation_args,
         output_dir=output_dir,
         text_metrics=text_metrics,
         **text_metrics_args,
     )
-    summaries: Dict[str, Dict[str, Any]] = {}
-    for data_name, loader in data.loaders().items():
-        _, summary = res_collector.eval(
-            loader,
-            desc=str(data_name),
-            peek=2,
-            save_name=f"responses_{data_name}",
-        )
-        summaries[data_name] = summary
-
-    if output_dir:
-        path = output_dir / "responses_summary.json"
-        save_logs(summaries, path)
-        logger.info(f"Saved response summaries to [{path}]")
-
-    return {"agg_value": None}
+    records, summary = res_collector.eval(data.loader(), desc=metric_name, peek=2, save_name=metric_name)
+    return {
+        "agg_value": None,
+        "value_by_index": {str(record["index"]): record for record in records},
+        "summary": summary,
+    }
 
 
 @MetricFunc

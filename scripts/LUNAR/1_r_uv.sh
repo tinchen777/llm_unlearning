@@ -21,6 +21,6 @@ python src/METHOD/LUNAR/r_uv.py \
   experiment=unlearn/tofu/LUNAR \
   model=${TARGET_MODEL} \
   "${SPLIT_ARGS[@]}" \
-  "data/datasets@data.ref.datasets=${REF_DATASET}" \
+  "data/datasets@data.ref.dataset=${REF_DATASET}" \
   task_name=${TASK_NAME}
 echo end r_uv ${TARGET_MODEL}

@@ -1,15 +1,17 @@
 # @package eval.tofu.metrics.retain_Q_A_ROUGE
 
 defaults:
-  - /data/datasets/TOFU@datasets: TOFU_QA_retain_eval
-  - /data/collators@collator: default_left
+  - /data/packs@data.train: default_left
+  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_retain_eval
   - /generation@generation_args: default
   - /eval@loader_args: tofu_loader
 
-datasets:
-  args:
-    question_key: ${eval.tofu.question_key}
-    generation_mode: true
+data:
+  train:
+    dataset:
+      args:
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
 
 handler: rouge
 rouge_type: rougeL_recall

@@ -26,7 +26,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     experiment=unlearn/tofu/LUNAR \
     model=${TARGET_MODEL} \
     "${SPLIT_ARGS[@]}" \
-    "data/datasets@data.ref.datasets=${REF_DATASET}" \
+    "data/datasets@data.ref.dataset=${REF_DATASET}" \
     basic.coeff=${COEFF} \
     basic.shift_mode=${MODE} \
     task_name=${TASK_NAME}

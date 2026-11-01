@@ -78,9 +78,9 @@ def common_args(assets: Path, out_root: Path, experiment: str, task_name: str):
         "generation_args.max_new_tokens=6", f"paths.root_dir={out_root}", f"task_name={task_name}",
     ]
     for split in ("forget", "retain", "holdout"):
-        args += [f"data.{split}.datasets.args.hf_args.path=json", f"~data.{split}.datasets.args.hf_args.name",
-                 f"+data.{split}.datasets.args.hf_args.data_files={a / 'data' / (split + '.json')}"]
-    args += ["data.retain.datasets.args.hf_args.split=train", "data.holdout.datasets.args.hf_args.split=train"]
+        args += [f"data.{split}.dataset.args.hf_args.path=json", f"~data.{split}.dataset.args.hf_args.name",
+                 f"+data.{split}.dataset.args.hf_args.data_files={a / 'data' / (split + '.json')}"]
+    args += ["data.retain.dataset.args.hf_args.split=train", "data.holdout.dataset.args.hf_args.split=train"]
     return args
 
 
@@ -107,7 +107,7 @@ def assets(tmp_path_factory):
 def test_lunar_chain_writes_the_documented_layout(assets, tmp_path):
     out_root = tmp_path / "out"
     args = common_args(assets, out_root, "LUNAR", "smoke")
-    args += ["data/datasets@data.ref.datasets=LUNAR/LUNAR_harmful", f"data.ref.datasets.args.hf_args.data_files={assets / 'data' / 'ref.json'}",
+    args += ["data/datasets@data.ref.dataset=LUNAR/LUNAR_harmful", f"data.ref.dataset.args.hf_args.data_files={assets / 'data' / 'ref.json'}",
              "forget_hf_split='train[:20]'"]
     run("LUNAR/r_uv.py", args + ["ruv.batch_size=8"])
     out = out_root / "saves" / "LUNAR" / "smoke"
@@ -128,7 +128,7 @@ def test_lunar_chain_writes_the_documented_layout(assets, tmp_path):
 def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     out_root = tmp_path / "out"
     args = common_args(assets, out_root, "NEAR", "smoke")
-    args += [f"data.neighbor.datasets.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+    args += [f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
              "basic.author_offset=5", "basic.k=2", "ruv.ks=[1,2]", "ruv.batch_size=8",
              "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
              "wdown.epochs=3", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",

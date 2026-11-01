@@ -1,8 +1,8 @@
 
 from __future__ import annotations
-from typing import Dict, TYPE_CHECKING
+from typing import Any, Dict, TYPE_CHECKING
 
-from .base import Metric
+from .base import Metric, ExposedMetric
 from .memorization import (
     probability,
     probability_w_options,
@@ -39,10 +39,14 @@ def _register_metric_fn(metric_fn: MetricFunc):
 
 def get_metrics(metric_cfgs: TrackingConfig, **kwargs):
     all_metrics: Dict[str, Metric] = {}
-    return {
-        metric_name: _get_metric(metric_name, all_metrics, metric_cfg, **kwargs)
-        for metric_name, metric_cfg in metric_cfgs.items()
-    }
+    metrics: Dict[str, Any] = {}
+    for metric_name, metric_cfg in metric_cfgs.items():
+        metric = _get_metric(metric_name, all_metrics, metric_cfg, **kwargs)
+        metrics[metric_name] = metric
+        # scalars exposed by the metric (`expose` in its config) are metrics of the same level, right after it
+        for exposed in metric.exposed:
+            metrics[exposed.name] = exposed
+    return metrics
 
 
 def _get_metric(
@@ -68,6 +72,9 @@ def _get_metric(
             raise KeyError(f"`'handler'` `{handler}` is not registered.")
         # prepare pre-compute metrics
         pre_compute_cfgs = metric_cfg_dict.pop("pre_compute", {})
+        # scalars of the `summary` of this metric to publish as metrics of their own, named `<expose_prefix>_<key>`
+        expose = [str(key) for key in (metric_cfg_dict.pop("expose", None) or [])]
+        expose_prefix = str(metric_cfg_dict.pop("expose_prefix", None) or metric_name)
         pre_compute_metrics = {
             pre_compute_cfg.get("access_key", pre_compute_name, check_none=True): _get_metric(
                 pre_compute_name,
@@ -84,6 +91,13 @@ def _get_metric(
         )
         # update all_metrics
         all_metrics[metric_name] = metric
+        for key in expose:
+            exposed_name = f"{expose_prefix}_{key}"
+            if exposed_name in all_metrics:
+                raise ValueError(f"Exposed metric `{exposed_name}` of `{metric_name}` has the name of another metric.")
+            exposed = ExposedMetric(exposed_name, metric, key)
+            all_metrics[exposed_name] = exposed
+            metric.exposed.append(exposed)
         return metric
 
     except Exception as e:

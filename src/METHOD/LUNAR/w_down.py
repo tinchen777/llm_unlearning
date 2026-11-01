@@ -152,7 +152,7 @@ def main(cfg: TrackingConfig):
         check_r_uv_identity(
             saved,
             forget_split=cfg.get("forget_split", None),
-            num_forget=len(split_data["forget"].one_dataset),
+            num_forget=len(split_data["forget"].dataset),
             model=model_name(model_cfg),
             source=str(r_uv_path),
         )
