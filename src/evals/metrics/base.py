@@ -10,7 +10,6 @@ from utils.common import load_logs, get_func_params
 from utils.config import reprlib
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from utils.config import TrackingConfig
 
 logger = logging.getLogger("eval.metric")
@@ -145,7 +144,7 @@ class Metric:
     def __repr__(self) -> str:
         return f"{type(self).__name__} {self.name}"
 
-
+# TODO
 class ExposedMetric:
     """A scalar taken from the `summary` of another metric (`expose: [key, ...]` in its config).
 

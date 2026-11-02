@@ -55,3 +55,26 @@ method_args() {
       echo "unknown method '$1'" >&2; return 1 ;;
   esac
 }
+
+method_args() {
+  case "$1" in
+    IdkDPO)
+      # DPO with "I don't know" answers
+      echo "experiment=unlearn/tofu/idk trainer=DPO trainer.args.eval_on_start=False"
+      ;;
+
+    PDU)
+      # retain_loss_eps has no default
+      echo "experiment=unlearn/tofu/default trainer=PDU trainer.method_args.retain_loss_eps=0.3"
+      ;;
+
+    GradAscent|GradDiff|NPO|SimNPO|RMU|CEU|WGA|UNDIAL|SatImp|BoundedGradDiff)
+      echo "experiment=unlearn/tofu/default trainer=$1"
+      ;;
+
+    *)
+      echo "unknown method '$1'" >&2
+      return 1
+      ;;
+  esac
+}

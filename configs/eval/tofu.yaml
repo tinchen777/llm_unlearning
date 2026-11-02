@@ -2,7 +2,7 @@
 
 defaults:
   - tofu_metrics:
-    - forget_Truth_Ratio
+    - forget_truth_ratio
     - forget_quality
     - forget_Q_A_Prob
     - forget_Q_A_ROUGE
@@ -15,6 +15,9 @@ defaults:
     - mia_loss
     - mia_zlib
     - mia_gradnorm
+    - forget_responses
+    - retain_responses
+    - holdout_responses
 
     # - mia_reference # set reference model path appropriately
     # - forget_Q_A_gibberish
@@ -25,7 +28,7 @@ overwrite: false
 forget_split: forget??
 holdout_split: holdout??
 retain_split: retain??
-# output_dir: ${paths.output_dir}
+
 retain_logs_path: ${paths.root_dir}/saves/eval/TOFU/tofu_${model.base_name}_${retain_split}/TOFU_EVAL.json
 question_key: question # question or paraphrased_question
 batch_size: 8
