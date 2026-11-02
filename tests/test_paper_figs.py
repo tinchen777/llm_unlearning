@@ -20,7 +20,7 @@ def _w(path: Path, obj):
 
 def _tofu(path: Path, fq: float, mu: float):
     _w(path / "TOFU_SUMMARY.json", {"forget_quality": fq, "model_utility": mu, "forget_Q_A_ROUGE": 0.4, "forget_Q_A_Prob": 0.5,
-                                    "forget_Truth_Ratio": 0.6, "privleak": -3.0})
+                                    "forget_truth_ratio": 0.6, "privleak": -3.0})
 
 
 def _responses(after: bool):

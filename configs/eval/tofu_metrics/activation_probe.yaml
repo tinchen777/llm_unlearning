@@ -1,0 +1,90 @@
+# @package eval.tofu.metrics.activation_probe
+# NEAR probe of the ACTIVATIONS of the model at the end-of-instruction tokens, on forget / neighbor / retain / holdout: per layer the
+# dataset means, the global r_UV (reference - forget), norms / cosines and the linear separability (AUC along the difference of
+# means) of the pairs of splits. Writes activations.pt and activations_summary.json to the output dir, keeps the per-layer table in
+# the logs (`value_by_layer`) and has no `agg_value` of its own: `expose` publishes scalars of its `summary` as metrics
+# `<expose_prefix>_<key>`: for every AUC `auc_<A>_<B>` / `auc_group_<A>_<B>` (the seen / unseen pair is `<seen>_<unseen>`, the splits
+# joined by `_and_`) the `_max` over the layers, the layer of it `_argmax` and the value at `focus_layer` `_focus`.
+# Read the note of activations_summary.json before interpreting an AUC: only the matched pair forget | neighbor, and the difference
+# of the SAME pair between two models, say something about knowledge.
+
+defaults:
+  - /data/packs@data.forget: default_left
+  - /data/packs@data.retain: default_left
+  - /data/packs@data.holdout: default_left
+  - /data/collators@data.neighbor.collator: default_left
+  - /data/datasets@data.neighbor.dataset: TOFU/TOFU_QA_csv
+  - /eval@loader_args: tofu_loader
+
+data:
+  forget:
+    dataset:
+      name: TOFU_QA_forget
+      args:
+        hf_args:
+          name: ${eval.tofu.forget_split}
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
+  neighbor:
+    dataset:
+      name: TOFU_QA_neighbor
+      args:
+        hf_args:
+          data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
+        extra_keys:
+          - author_id
+          - neighbor_id
+    collator:
+      args:
+        metadata_keys:
+          - author_id
+          - neighbor_id
+  retain:
+    dataset:
+      name: TOFU_QA_retain
+      args:
+        hf_args:
+          name: ${eval.tofu.retain_split}
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
+  holdout:
+    dataset:
+      name: TOFU_QA_holdout
+      args:
+        hf_args:
+          name: ${eval.tofu.holdout_split}
+        question_key: ${eval.tofu.question_key}
+        generation_mode: true
+
+loader_args:
+  batch_size: 16
+  max_samples: 200 # fixed random subset of every split, null: all
+
+handler: activation_probe
+forget: forget # split name of the data to forget
+reference: neighbor # split name of the redirection target
+# sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model: seen [retain], unseen [forget, neighbor, holdout]
+seen: [forget, retain]
+unseen: [neighbor, holdout]
+forget_split: ${eval.tofu.forget_split} # checked against the r_uv.pt (r_uv_path)
+
+r_uv_path: null
+# null: point / positions / layers / qa_per_author / author_offset below. The path of an r_uv.pt (src/METHOD/NEAR/r_uv.py): those are
+# read from it instead and its forget split / rows are checked (the probe of an edited model, comparable with that run)
+point: block_out # block_out | mlp_out | down_proj_in | resid_mid
+positions: null # null: end-of-instruction template tokens, as in LUNAR | [-1] for the last token
+layers: null # null: all decoder layers | [10, 11]
+qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row_index // qa_per_author + author_offset
+author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv
+seed: ${seed}
+
+focus_layer: null # the layer W_down was edited at: its AUCs are published as `<name>_focus`
+
+expose_prefix: activation
+expose:
+  - auc_forget_neighbor_max
+  - auc_group_forget_neighbor_max
+  - auc_forget_and_retain_neighbor_and_holdout_max
+  - r_uv_rel_norm_max

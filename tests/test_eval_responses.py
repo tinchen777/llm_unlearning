@@ -50,11 +50,11 @@ def assets(tmp_path_factory):
     return make_assets(tmp_path_factory.mktemp("assets"))
 
 
-def run_eval(assets: Path, out_root: Path, task: str, max_samples: str):
+def run_eval(assets: Path, out_root: Path, task: str, max_samples: str, extra=(), expect_failure: bool = False):
     def metric(split):
         return f"eval.tofu.metrics.{split}_responses"
     args = [
-        sys.executable, str(ROOT / "src" / "eval.py"), "--config-name=eval", "eval=responses",
+        sys.executable, str(ROOT / "src" / "eval.py"), "--config-name=eval", "eval=probe",
         "model=tofu/tofu_Llama-3.2-1B-Instruct_full",
         f"model.pretrained.name_or_path={assets / 'llama'}", f"model.tokenizer.name_or_path={assets / 'llama'}",
         "model.pretrained.args.device_map=cpu", "model.pretrained.dtype=float32",
@@ -70,8 +70,17 @@ def run_eval(assets: Path, out_root: Path, task: str, max_samples: str):
         args += [f"{hf}.path=json", f"~{hf}.name", f"+{hf}.data_files={assets / 'data' / (split + '.json')}"]
     for split in ("forget", "retain", "holdout", "neighbor"):
         args += [f"{metric(split)}.generation_args.max_new_tokens=6", f"{metric(split)}.loader_args.max_samples={max_samples}"]
-    proc = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=900,
+    # the activations: the same local data
+    act = "eval.tofu.metrics.activation_probe"
+    args += [f"{act}.loader_args.max_samples={max_samples}", f"{act}.data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}"]
+    for split in ("forget", "retain", "holdout"):
+        hf = f"{act}.data.{split}.dataset.args.hf_args"
+        args += [f"{hf}.path=json", f"~{hf}.name", f"+{hf}.data_files={assets / 'data' / (split + '.json')}"]
+    proc = subprocess.run(args + list(extra), cwd=ROOT, capture_output=True, text=True, timeout=900,
                           env={**os.environ, "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1"})
+    if expect_failure:
+        assert proc.returncode != 0
+        return proc.stdout + proc.stderr
     assert proc.returncode == 0, f"{proc.stdout[-1500:]}\n{proc.stderr[-2500:]}"
     return out_root / "saves" / "eval" / task
 
@@ -103,3 +112,37 @@ def test_responses_metric_exposes_its_summary_and_keeps_the_records(assets, tmp_
     full = run_eval(assets, tmp_path / "out", "resp_full", "null")
     for name, n in sizes.items():
         assert len(json.loads((full / f"{name}_responses.json").read_text())) == n
+
+
+@pytest.mark.smoke
+def test_activation_probe_takes_its_settings_from_an_r_uv_and_exposes_the_aucs(assets, tmp_path):
+    from test_pipeline_smoke import common_args, run
+
+    out_root = tmp_path / "out"
+    ruv_args = common_args(assets, out_root, "NEAR", "ruv") + [
+        f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+        "basic.author_offset=5", "ruv.ks=[1,2]", "ruv.batch_size=8",
+    ]
+    run("NEAR/r_uv.py", ruv_args)
+    r_uv_path = out_root / "saves" / "NEAR" / "ruv" / "r_uv.pt"
+    saved = torch.load(r_uv_path, weights_only=False)
+
+    act = "eval.tofu.metrics.activation_probe"
+    out = run_eval(assets, out_root, "act", "8",
+                   [f"{act}.r_uv_path={r_uv_path}", f"{act}.focus_layer=2", "eval.tofu.forget_split=" + saved["forget_split"]])
+    logs = json.loads((out / "TOFU_EVAL.json").read_text())
+    summary = json.loads((out / "TOFU_SUMMARY.json").read_text())
+    main = logs["activation_probe"]
+    assert main["agg_value"] is None and set(main["value_by_layer"]) == {"0", "1", "2", "3"}
+    assert main["summary"]["auc_forget_neighbor_focus"] == main["value_by_layer"]["2"]["auc[forget | neighbor]"]
+    assert main["summary"]["auc_forget_neighbor_max"] == max(v["auc[forget | neighbor]"] for v in main["value_by_layer"].values())
+    assert 0.0 <= summary["activation_auc_forget_neighbor_max"] <= 1.0
+    assert "activation_auc_group_forget_neighbor_max" not in summary, "2 authors: the group-wise AUC does not exist (None is not summarised)"
+    assert json.loads((out / "activations_summary.json").read_text())["layers"].keys() == main["value_by_layer"].keys()
+    probe_saved = torch.load(out / "activations.pt", weights_only=False)
+    assert probe_saved["positions"] == saved["positions"] and probe_saved["layers"] == saved["layers"]
+
+    # another forget split than the one r_uv.pt was computed on is refused
+    message = run_eval(assets, out_root, "act_bad", "8", [f"{act}.r_uv_path={r_uv_path}", "eval.tofu.forget_split=forget05"],
+                       expect_failure=True)
+    assert "forget_split" in message

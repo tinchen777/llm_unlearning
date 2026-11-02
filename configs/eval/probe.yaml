@@ -1,0 +1,23 @@
+# @package eval.tofu
+# ONLY the NEAR probe (no TOFU metrics, no TOFU data needed): the responses (generations, ROUGE, answer log-prob, refusal /
+# degeneration / hallucination flags) of forget / retain / holdout / neighbor and the activations (r_UV, AUCs) on them.
+# `python src/eval.py eval=probe ...`; the TOFU metrics + neighbor / activations: `experiment=eval/tofu/probe`.
+
+defaults:
+  - tofu_metrics:
+    - forget_responses
+    - retain_responses
+    - holdout_responses
+    - neighbor_responses
+    - activation_probe
+
+metrics: {}
+handler: TOFUEvaluator
+overwrite: false
+forget_split: forget??
+holdout_split: holdout??
+retain_split: retain??
+output_dir: ${paths.output_dir}
+neighbor_split: neighbor??
+question_key: question
+batch_size: 8

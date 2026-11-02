@@ -25,11 +25,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import itertools
 import logging
 import torch
-import torch.nn.functional as F
-from typing import Any, Dict, Hashable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from data import SplitData
 from data.datasets.datasets_utils import get_eoi_positions
@@ -40,32 +38,12 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.lineage import check_r_uv_identity
-from METHOD._common.activations import unlearning_vector
-from METHOD.NEAR._utils.activations import mean_diff_auc
+from evals.activation.analysis import analyze_activations, save_activation_outputs, sample_group  # noqa: F401  (sample_group: tests)
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
 logger = logging.getLogger("main(NEAR-probe)")
-
-_META_KEYS = ("author_id", "neighbor_id")
-
-
-def sample_group(split: str, index: int, meta: Dict[str, Any], forget_split: str, qa_per_author: int, author_offset: int) -> Hashable:
-    """Group (= author or neighbour) of a question, the unit of the group-wise cross-validation.
-
-    - neighbour rows: the author they were generated for (`author_id`), so a forget author and his neighbours share
-      a group (and thus a fold); the neighbour csv also has `neighbor_id`, the rows of one neighbour share
-      `(author_id, neighbor_id)` but the author is what matters for the leakage;
-    - every other split (TOFU stores the 20 QAs of an author contiguously): `index // qa_per_author`,
-      shifted by `author_offset` for the forget split so that it matches the `author_id` of the neighbour csv."""
-    if "author_id" in meta:
-        return f"author:{meta['author_id']}"
-    author = index // qa_per_author
-    if split == forget_split:
-        return f"author:{author + author_offset}"
-    return f"{split}:{author}"
-
 
 @hydra_main(config_path="../../../configs", config_name="generate")
 def main(cfg: TrackingConfig):
@@ -194,81 +172,13 @@ def main(cfg: TrackingConfig):
                 max_samples=act_cfg.get("max_act_samples", None),
                 sampling_seed=seed
             )
-            per_sample = {}  # {split: Tensor[n, n_pos, n_layers, d]}
-            groups = {}  # {split: [group key per row]}
-            for data in split_data.values():
-                split = data.split
-                acts, meta = act_collector.per_sample(
-                    dataloader=data.loader(),
-                    desc=split,
-                    meta_keys=_META_KEYS
-                )
-                order = sorted(acts)
-                per_sample[split] = torch.stack([acts[i] for i in order]).float()
-                groups[split] = [sample_group(split, i, meta.get(i, {}), forget, qa_per_author, author_offset) for i in order]
-            means = {split: a.mean(0) for split, a in per_sample.items()}  # [n_pos, n_layers, d]
-            # r_UV[p, l]: shift that moves the forget activations onto the reference (LUNAR: ref - forget)
-            r_uv = unlearning_vector(means[reference], means[forget])  # [n_pos, n_layers, d]
-
-            torch.save({
-                "r_uv": r_uv,
-                "means": means,
-                "forget": forget,
-                "reference": reference,
-                "positions": act_collector.positions,
-                "layers": act_collector.layers,
-                "point": act_collector.point,
-                "num_samples": {split: len(a) for split, a in per_sample.items()},
-                "num_groups": {split: len(set(g)) for split, g in groups.items()},
-            }, output_dir / "activations.pt")
-
-            # separability per layer, on the activations averaged over the end-of-instruction positions
-            pooled = {split: a.mean(1) for split, a in per_sample.items()}  # [n, n_layers, d]
-            seen = [s for s in act_cfg["seen"] if s in pooled]
-            unseen = [s for s in act_cfg["unseen"] if s in pooled]
-            pairs = [(f"{'+'.join(seen)} | {'+'.join(unseen)}", seen, unseen)] if seen and unseen else []
-            pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(split_data.splits, 2)]
-
-            def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
-                try:
-                    return mean_diff_auc(x, y, seed=seed, groups_a=ga, groups_b=gb)
-                except ValueError as e:  # e.g. fewer groups than folds (forget01 has 2 authors, fine; one author is not)
-                    logger.warning(f"group-wise AUC skipped: {e}")
-                    return None
-
-            layer_summary = {}
-            for i, layer in enumerate(act_collector.layers):
-                cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
-                cat_groups = lambda names: [g for s in names for g in groups[s]]
-                norm_forget = means[forget][:, i].norm(dim=-1).mean().item()
-                r_uv_norm = r_uv[:, i].norm(dim=-1).mean().item()
-                layer_summary[str(layer)] = {
-                    "r_uv_norm": r_uv_norm,
-                    "r_uv_rel_norm": r_uv_norm / norm_forget,  # size of the redirection relative to the activation
-                    **{f"norm[{s}]": means[s][:, i].norm(dim=-1).mean().item() for s in means},
-                    **{
-                        f"cos[{a},{b}]": F.cosine_similarity(means[a][:, i], means[b][:, i], dim=-1).mean().item()
-                        for a, b in itertools.combinations(means, 2)
-                    },
-                    **{f"auc[{name}]": mean_diff_auc(cat(a), cat(b), seed=seed) for name, a, b in pairs},
-                    **{f"auc_group[{name}]": group_auc(cat(a), cat(b), cat_groups(a), cat_groups(b)) for name, a, b in pairs},
-                }
-            save_logs({
-                "note": "auc[A | B]: 2-fold cross-validated AUC of separating A from B along their difference of means "
-                        "(0.5 = indistinguishable), folds split BY QUESTION. auc_group[A | B]: the same with folds split "
-                        "BY AUTHOR (a forget author and his neighbours share a fold), so an author's name alone cannot "
-                        "carry the separation across the split; prefer it. It is null when a set has fewer than 4 authors "
-                        "(forget01 has 2: the direction cannot generalise across so few and the value would be ~0 or ~1 "
-                        "by chance); use forget05 / forget10 for it. IMPORTANT: both measure how different the two "
-                        "QUESTION SETS are (other authors, templates, lengths: forget | holdout is already ~0.7 at layer 0 "
-                        "where no knowledge can be encoded), NOT whether the model knows them. Do not expect 0.5 for "
-                        "sets about different authors, whatever the model. Use (1) only matched pairs: forget | neighbour "
-                        "(neighbours are rewrites of the forget questions) and (2) the difference of the SAME pair between "
-                        "two models, e.g. full - retain (src/METHOD/NEAR/neighbor_compare.py): content effects cancel, knowledge "
-                        "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||.",
-                "layers": layer_summary,
-            }, output_dir / "activations_summary.json")  # type: ignore
-            logger.info(f"Saved r_UV {tuple(r_uv.shape)} (n_pos, n_layers, d) and per-layer diagnostics to {output_dir}")
+            result = analyze_activations(
+                act_collector, split_data, forget, reference,
+                seen=act_cfg["seen"], unseen=act_cfg["unseen"],
+                qa_per_author=qa_per_author, author_offset=author_offset, seed=seed,
+            )
+            save_activation_outputs(result, act_collector, output_dir)
+            logger.info(f"Saved r_UV {tuple(result['r_uv'].shape)} (n_pos, n_layers, d) and per-layer diagnostics to {output_dir}")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,8 @@ import math
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from evals.activation.analysis import check_r_uv_identity  # noqa: F401  (also used by the activation_probe metric)
+
 
 def model_name(model_cfg: Mapping[str, Any]) -> str:
     """Identifier of the model of a config: `model.pretrained.name_or_path`."""
@@ -48,24 +50,6 @@ def pick(name: str, cfg_value: Any, upstream_value: Any, source: str = "the upst
             f"Set it to null to take the stored value, or run the earlier stage again with the value you want."
         )
     return upstream_value
-
-
-def check_r_uv_identity(
-    saved: Mapping[str, Any],
-    *,
-    forget_split: Optional[str] = None,
-    num_forget: Optional[int] = None,
-    model: Optional[str] = None,
-    source: str = "r_uv.pt",
-) -> None:
-    """The data / model of this stage must be the ones `r_uv.pt` was computed on (`None` skips that check)."""
-    for key, current in (("forget_split", forget_split), ("num_forget", num_forget), ("model", model)):
-        if current is None:
-            continue
-        if key not in saved:
-            raise ValueError(f"{source} has no `{key}` (written by an older r_uv.py): run r_uv.py again.")
-        if saved[key] != current:
-            raise ValueError(f"{source} was computed with {key}={saved[key]!r}, but this run uses {key}={current!r}.")
 
 
 def resolve_r_uv_path(recorded: Optional[str], selection_path: Optional[Path] = None) -> Path:

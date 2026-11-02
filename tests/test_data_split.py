@@ -35,7 +35,7 @@ def compose_cfg(config_name, overrides):
 def test_unlearn_split_combines_forget_and_retain_into_one_dataset(assets):
     data_files = lambda split: str(assets / "data" / f"{split}.json")
     overrides = [
-        "experiment=unlearn/tofu/default", "model=tofu/tofu_Llama-3.2-1B-Instruct_full",
+        "experiment=unlearn/tofu/default", "model=tofu/tofu_Llama-3.2-1B-Instruct_full", "trainer=GradAscent",
         "model.template_args.apply_chat_template=false",
         'model.template_args.user_start_tag="Q: "', 'model.template_args.user_end_tag=" "',
         'model.template_args.asst_start_tag="A: "', 'model.template_args.asst_end_tag=""',
@@ -67,6 +67,10 @@ def test_every_experiment_config_composes_with_one_dataset_per_split():
     for exp in experiments:
         kind = exp.split("/")[0]
         name = "generate" if exp.startswith(("unlearn/tofu/NEAR", "unlearn/tofu/LUNAR")) else kind
-        cfg = compose_cfg(name, [f"experiment={exp}"])
+        # the experiments leave the model (and the trainer) to the command line
+        required = ["model=tofu/tofu_Llama-3.2-1B-Instruct_full"]
+        if kind in ("unlearn", "finetune"):
+            required.append("trainer=GradAscent" if kind == "unlearn" else "trainer=finetune")
+        cfg = compose_cfg(name, [f"experiment={exp}"] + required)
         for split, split_cfg in cfg.get("data", {}).items():
             assert "dataset" in split_cfg and "datasets" not in split_cfg, f"{exp}: data.{split} must hold ONE dataset"

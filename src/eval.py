@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from model import get_model_and_tokenizer
@@ -45,8 +46,9 @@ def main(cfg: TrackingConfig):
     # EVALUATION
     with step_logging(logger, "#1", "evaluation"):
         for evaluator in evaluators.values():
-            evaluator.evaluate(model)
-            run_dir = evaluator.output_dir
+            # an evaluator without `output_dir` in its config writes to the run dir (paths.output_dir)
+            evaluator.evaluate(model, output_dir=None if evaluator.output_dir is not None else Path(str(cfg["paths"]["output_dir"])))
+            run_dir = evaluator.output_dir or Path(str(cfg["paths"]["output_dir"]))
 
     # plotting
     vis_cfg = cfg.get("vis", None)

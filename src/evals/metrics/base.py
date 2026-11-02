@@ -44,6 +44,8 @@ class Metric:
                     self._prepare_reference_logs()
                 elif required_param == "tokenizer":
                     self.cfg_dict["tokenizer"] = kwargs["tokenizer"]
+                elif required_param == "template_args":
+                    self.cfg_dict["template_args"] = kwargs["template_args"]
                 elif required_param == "metric_name":
                     self.cfg_dict["metric_name"] = self.name
                 elif required_param not in ["model", "pre_compute", "output_dir"] and required_param not in self.cfg_dict:

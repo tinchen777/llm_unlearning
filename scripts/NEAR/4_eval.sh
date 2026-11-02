@@ -14,12 +14,15 @@ echo "Using GPU: [${GPU_ID}]"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 
 
-# Step 4: evaluate the edited models of 3_w_down.sh
-#   (a) TOFU metrics (forget quality, model utility, privleak, MIA, ...) -> saves/eval/TOFU/<task>/TOFU_EVAL.json
-#       reference of forget quality / privleak: TOFU_EVAL.json of the retain model of RETAIN_SPLIT (eval.tofu.retain_logs_path,
-#       derived from `retain_split`)
-#   (b) the step-1 probe on the edited model: compare its responses/responses_summary.json / activations_summary.json with
-#       the `full` and `retain` probes of 0_probe.sh (forget should now look like neighbor / holdout, as for `retain`)
+# Step 4: evaluate the edited models of 3_w_down.sh, ONE evaluation per model (experiment=eval/tofu/probe), all in
+# saves/eval/<task_name>/ (TOFU_EVAL.json, TOFU_SUMMARY.json and the files of the probe):
+#   - the TOFU metrics: forget quality, model utility, privleak, MIA, ...; the reference of forget quality / privleak is the
+#     TOFU_EVAL.json of the retain model of RETAIN_SPLIT (eval.tofu.retain_logs_path, derived from `retain_split`)
+#   - responses of forget / retain / holdout / neighbor (forget_responses.json, ..., metrics forget_hallucination_rate, ...)
+#   - activations (activations.pt, activations_summary.json, metrics activation_auc_...): the hook point, positions, layers and
+#     author numbering are read from r_uv.pt (eval.tofu.metrics.activation_probe.r_uv_path) so they are those of step 1, and
+#     the edited layer is the focus layer. Compare them with the `full` and `retain` probes of 0_probe.sh (forget should now
+#     look like neighbor / holdout, as for `retain`).
 
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
@@ -31,22 +34,13 @@ for MODE in "${SHIFT_MODES[@]}"; do
 
     echo start eval ${EDITED}
     python src/eval.py \
-      experiment=eval/tofu/default \
-      model=${TARGET_MODEL} \
-      model.pretrained.name_or_path=${EDITED} \
-      forget_split=${FORGET_SPLIT} \
-      holdout_split=${HOLDOUT_SPLIT} \
-      retain_split=${RETAIN_SPLIT} \
-      task_name=NEAR/test/near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
-
-    # the probe of an edited model: neither forget nor retain data is "seen" in the sense of the full model any more
-    python src/METHOD/NEAR/probe.py \
-      experiment=unlearn/tofu/NEAR \
+      experiment=eval/tofu/probe \
       model=${TARGET_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \
-      probe.activations.from_r_uv=saves/NEAR/${TASK_NAME}/r_uv.pt \
-      task_name=probe/test/probe_near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
+      eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${TASK_NAME}/r_uv.pt \
+      eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
+      task_name=NEAR/test/near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
     echo end eval ${EDITED}
   done
 done
