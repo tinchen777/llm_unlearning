@@ -96,8 +96,11 @@ class SplitData:
             )
             for split_name, split_cfg in data_cfg.items()
         }
-        logger.info(f"Loaded split data: {list(self.split_data)}")
-        pprint(self.split_data)
+        if not self.split_data:
+            raise ValueError("No split data found.")
+        else:
+            logger.info(f"Loaded [{len(self)}] split data: {list(self.split_data)}")
+            pprint(self.split_data)
 
     def set_split_loader(
         self,

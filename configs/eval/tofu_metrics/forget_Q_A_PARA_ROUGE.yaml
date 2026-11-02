@@ -1,13 +1,13 @@
 # @package eval.tofu.metrics.forget_Q_A_PARA_ROUGE
 
 defaults:
-  - /data/packs@data.train: default_left
-  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_forget_para
+  - /data/packs@data.eval: default_left
+  - /data/datasets/TOFU@data.eval.dataset: TOFU_QA_forget_para
   - /generation@generation_args: default
   - /eval@loader_args: tofu_loader
 
 data:
-  train:
+  eval:
     dataset:
       name: TOFU_QA_perturbed_forget_para
       args:

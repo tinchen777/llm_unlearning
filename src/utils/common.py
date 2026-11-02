@@ -7,7 +7,7 @@ import torch
 import random
 import numpy as np
 import inspect
-from typing import Any, Union, Callable, TYPE_CHECKING
+from typing import Any, Union, Callable, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -52,14 +52,28 @@ def save_logs(logs: Any, file_path: Union[PathLike, str]):
         raise RuntimeError(f"Failed to save {file_path}") from e
 
 
-ARGS_KWARGS = (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+ARGS_KWARGS = (
+    inspect.Parameter.VAR_POSITIONAL,
+    inspect.Parameter.VAR_KEYWORD
+)
+ARGS_EMPTY = inspect.Parameter.empty
 
 
-def get_func_params(func: Callable) -> list[str]:
-    """Return the parameter names of a function"""
-    signature = inspect.signature(func)
-    return [
-        name
-        for name, p in signature.parameters.items()
-        if p.kind not in ARGS_KWARGS
-    ]
+def get_func_params(func: Callable) -> Dict[str, List[str]]:
+    """Return all, required, and optional parameter names."""
+    params = {
+        "all": [],
+        "required": [],
+        "optional": [],
+    }
+
+    for name, p in inspect.signature(func).parameters.items():
+        if p.kind in ARGS_KWARGS:
+            continue
+
+        params["all"].append(name)
+        key = "required" if p.default is ARGS_EMPTY else "optional"
+        params[key].append(name)
+
+    return params
+

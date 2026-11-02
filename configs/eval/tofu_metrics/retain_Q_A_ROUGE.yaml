@@ -1,13 +1,13 @@
 # @package eval.tofu.metrics.retain_Q_A_ROUGE
 
 defaults:
-  - /data/packs@data.train: default_left
-  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_retain_eval
+  - /data/packs@data.eval: default_left
+  - /data/datasets/TOFU@data.eval.dataset: TOFU_QA_retain_eval
   - /generation@generation_args: default
   - /eval@loader_args: tofu_loader
 
 data:
-  train:
+  eval:
     dataset:
       args:
         question_key: ${eval.tofu.question_key}

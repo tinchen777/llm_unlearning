@@ -1,12 +1,12 @@
 # @package eval.tofu.metrics.retain_Q_A_PERT_Prob
 
 defaults:
-  - /data/packs@data.train: default_right
-  - /data/datasets/TOFU@data.train.dataset: TOFU_QA_retain_pert
+  - /data/packs@data.eval: default_right
+  - /data/datasets/TOFU@data.eval.dataset: TOFU_QA_retain_pert
   - /eval@loader_args: tofu_loader
 
 data:
-  train:
+  eval:
     dataset:
       args:
         question_key: ${eval.tofu.question_key}

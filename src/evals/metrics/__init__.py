@@ -39,10 +39,9 @@ def _register_metric_fn(metric_fn: MetricFunc):
 
 
 def get_metrics(metric_cfgs: TrackingConfig, **metrics_kwargs: Any):
-    all_metrics: Dict[str, Metric] = {}
     metrics: Dict[str, Any] = {}
     for metric_name, metric_cfg in metric_cfgs.items():
-        metric = _get_metric(metric_name, all_metrics, metric_cfg, **metrics_kwargs)
+        metric = _get_metric(metric_name=metric_name, metric_cfg=metric_cfg, **metrics_kwargs)
         metrics[metric_name] = metric
         # scalars exposed by the metric (`expose` in its config) are metrics of the same level, right after it
         for exposed in metric.exposed:
@@ -52,8 +51,8 @@ def get_metrics(metric_cfgs: TrackingConfig, **metrics_kwargs: Any):
 
 def _get_metric(
     metric_name: str,
-    all_metrics: Dict[str, Metric],
     metric_cfg: TrackingConfig,
+    all_metrics: Dict[str, Metric] = {},
     post_compute_name: str = "",
     **metrics_kwargs: Any
 ):
@@ -66,11 +65,11 @@ def _get_metric(
         # get metric function
         handler = metric_cfg_dict.pop("handler", None)
         if handler is None:
-            raise KeyError(f"Can not found `'handler'` in `@{metric_cfg.loc_choices}`.")
+            raise ValueError(f"Can not found metric handler in `@{metric_cfg.loc_choices}`.")
         try:
             metric_fn = METRIC_FUNCS_REGISTRY[handler]
         except KeyError:
-            raise KeyError(f"`'handler'` `{handler}` is not registered.")
+            raise KeyError(f"Metric handler `{handler}` is not registered.")
         # prepare pre-compute metrics
         pre_compute_cfgs = metric_cfg_dict.pop("pre_compute", {})
         # scalars of the `summary` of this metric to publish as metrics of their own, named `<expose_prefix>_<key>`
@@ -78,9 +77,9 @@ def _get_metric(
         expose_prefix = str(metric_cfg_dict.pop("expose_prefix", None) or metric_name)
         pre_compute_metrics = {
             pre_compute_cfg.get("access_key", pre_compute_name, check_none=True): _get_metric(
-                pre_compute_name,
-                all_metrics,
-                pre_compute_cfg,
+                metric_name=pre_compute_name,
+                metric_cfg=pre_compute_cfg,
+                all_metrics=all_metrics,
                 post_compute_name=f" of `{metric_name}`{post_compute_name}",
                 **metrics_kwargs
             )
