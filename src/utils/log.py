@@ -56,6 +56,8 @@ def step_logging(
     cfg: Optional[_T],
     ensure_cfg: Literal[True],
 ) -> Generator[_T, Any, None]: ...
+
+
 @overload
 @contextmanager
 def step_logging(
@@ -67,6 +69,8 @@ def step_logging(
     cfg: _T,
     ensure_cfg: Literal[False] = ...,
 ) -> Generator[_T, Any, None]: ...
+
+
 @overload
 @contextmanager
 def step_logging(
@@ -77,6 +81,8 @@ def step_logging(
     mode: _Mode = ...,
     ensure_cfg: Literal[False] = ...,
 ) -> Generator[None, Any, None]: ...
+
+
 @overload
 @contextmanager
 def step_logging(

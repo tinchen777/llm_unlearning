@@ -65,7 +65,7 @@ for METHOD in "${METHODS[@]}"; do
     "${SPLIT_ARGS[@]}" \
     retain_logs_path=${RETAIN_LOGS} \
     "${EXTRA_ARGS[@]}" \
-    task_name=ttestt/${METHOD} \
+    task_name=ttestt/${METHOD}_1 \
     # --cfg job --resolve
   echo end ${METHOD} ${FULL_MODEL} ${FORGET_SPLIT}
 done
