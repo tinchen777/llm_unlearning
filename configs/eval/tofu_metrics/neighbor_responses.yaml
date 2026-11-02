@@ -16,7 +16,7 @@ data:
       name: TOFU_QA_neighbor
       args:
         hf_args:
-          data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+          data_files: ${paths.data_dir}tofu/tofu_${eval.tofu.neighbor_split}.csv
         question_key: ${eval.tofu.question_key}
         generation_mode: true
         extra_keys:
