@@ -23,7 +23,7 @@ class Metric:
         func: MetricFunc,
         post_compute_name: str = "",
         pre_compute_metrics: Dict[str, Metric] = {},
-        **kwargs
+        **metric_kwargs: Any
     ):
         self.name = name
         self.full_name = f"`{name}`({func.name}){post_compute_name}"
@@ -36,16 +36,16 @@ class Metric:
         logger.info(f"Preparing {self.full_name} ...")
         # prepare for data: `data` (a `Data`, the config has exactly ONE split) or `split_data` (a `SplitData`, any number)
         if "data" in self.func.params or "split_data" in self.func.params:
-            self._prepare_data(**kwargs)
+            self._prepare_data(**metric_kwargs)
         # prepare for other required parameters
         for required_param in self.func.params:
             try:
                 if required_param == "reference_logs":
                     self._prepare_reference_logs()
                 elif required_param == "tokenizer":
-                    self.cfg_dict["tokenizer"] = kwargs["tokenizer"]
+                    self.cfg_dict["tokenizer"] = metric_kwargs["tokenizer"]
                 elif required_param == "template_args":
-                    self.cfg_dict["template_args"] = kwargs["template_args"]
+                    self.cfg_dict["template_args"] = metric_kwargs["template_args"]
                 elif required_param == "metric_name":
                     self.cfg_dict["metric_name"] = self.name
                 elif required_param not in ["model", "pre_compute", "output_dir"] and required_param not in self.cfg_dict:
@@ -53,9 +53,9 @@ class Metric:
             except Exception as e:
                 raise RuntimeError(f"Error preparing `{required_param}` for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
-    def _prepare_data(self, **kwargs):
+    def _prepare_data(self, **metric_kwargs: Any):
         try:
-            split_data = SplitData(self.cfg_dict.pop("data"), **kwargs).set_split_loader(**self.cfg_dict.pop("loader_args"))
+            split_data = SplitData(self.cfg_dict.pop("data"), **metric_kwargs).set_split_loader(**self.cfg_dict.pop("loader_args"))
             if "split_data" in self.func.params:
                 self.cfg_dict["split_data"] = split_data
             if "data" in self.func.params:
@@ -77,12 +77,12 @@ class Metric:
                 path = Path(path)
                 if not path.exists():
                     logger.warning(
-                        f"Reference logs path for `{ref_log_name}` doesn't exist: {path.resolve()}."
+                        f"Reference logs path for `{ref_log_name}` doesn't exist: [{path.resolve()}]."
                     )
                     continue
             # Load the reference logs
-            logger.info(f"Loading reference logs from {path.resolve()} ...")
             _logs = load_logs(path)
+            logger.info(f"Loaded reference logs from [{path.resolve()}]")
             # for each include_cfg, load the corresponding logs
             ref_log = {}
             include_cfgs = ref_log_cfg.get("include", {}, check_none=True)
@@ -92,7 +92,7 @@ class Metric:
                 ref_log[access_name] = _results
                 if _results is None:
                     logger.warning(
-                        f"`{key}` evals not present in the {path.resolve()}, setting it to None, may result in error soon if code attempts to access."
+                        f"`{key}` evals not present in [{path.resolve()}], setting it to `None`, may result in error soon if code attempts to access."
                     )
             ref_logs[ref_log_name] = ref_log
         self.cfg_dict["reference_logs"] = ref_logs

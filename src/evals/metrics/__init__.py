@@ -38,11 +38,11 @@ def _register_metric_fn(metric_fn: MetricFunc):
     METRIC_FUNCS_REGISTRY[metric_fn.name] = metric_fn
 
 
-def get_metrics(metric_cfgs: TrackingConfig, **kwargs):
+def get_metrics(metric_cfgs: TrackingConfig, **metrics_kwargs: Any):
     all_metrics: Dict[str, Metric] = {}
     metrics: Dict[str, Any] = {}
     for metric_name, metric_cfg in metric_cfgs.items():
-        metric = _get_metric(metric_name, all_metrics, metric_cfg, **kwargs)
+        metric = _get_metric(metric_name, all_metrics, metric_cfg, **metrics_kwargs)
         metrics[metric_name] = metric
         # scalars exposed by the metric (`expose` in its config) are metrics of the same level, right after it
         for exposed in metric.exposed:
@@ -55,7 +55,7 @@ def _get_metric(
     all_metrics: Dict[str, Metric],
     metric_cfg: TrackingConfig,
     post_compute_name: str = "",
-    **kwargs
+    **metrics_kwargs: Any
 ):
     # metric with same `metric name` already computed, return it directly
     if metric_name in all_metrics:
@@ -82,13 +82,13 @@ def _get_metric(
                 all_metrics,
                 pre_compute_cfg,
                 post_compute_name=f" of `{metric_name}`{post_compute_name}",
-                **kwargs
+                **metrics_kwargs
             )
             for pre_compute_name, pre_compute_cfg in pre_compute_cfgs.items()
         }
         # create UnlearningMetric instance
         metric = Metric(
-            metric_name, metric_cfg_dict, metric_fn, post_compute_name, pre_compute_metrics, **kwargs
+            metric_name, metric_cfg_dict, metric_fn, post_compute_name, pre_compute_metrics, **metrics_kwargs
         )
         # update all_metrics
         all_metrics[metric_name] = metric

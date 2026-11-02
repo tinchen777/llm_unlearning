@@ -9,5 +9,5 @@ if TYPE_CHECKING:
 
 
 class TOFUEvaluator(Evaluator):
-    def __init__(self, eval_cfg: TrackingConfig, **kwargs):
-        super().__init__("TOFU", eval_cfg, **kwargs)
+    def __init__(self, evaluator_cfg: TrackingConfig, **metrics_kwargs):
+        super().__init__("TOFU", evaluator_cfg, **metrics_kwargs)

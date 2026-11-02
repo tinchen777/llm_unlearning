@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 import logging
+from pathlib import Path
 from rich.markup import escape
 from rich import print
 from cobra_color import cstr
@@ -33,6 +34,14 @@ class RichNameFormatter(logging.Formatter):
         message = escape(record.getMessage())
         name = f"[{self.name_style}]{escape(record.name)}[/] "
         return name + message
+
+
+class MkdirFileHandler(logging.FileHandler):
+    """`logging.FileHandler` that creates the folder of the log file (Hydra only creates the run dir, not `logs/` in it)."""
+
+    def __init__(self, filename, mode="a", encoding=None, delay=False, errors=None):
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
+        super().__init__(filename, mode, encoding, delay, errors)
 
 
 CONFIG_PLACEHOLDER = "<CONFIG_PLACEHOLDER>"

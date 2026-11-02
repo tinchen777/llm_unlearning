@@ -10,26 +10,26 @@ if TYPE_CHECKING:
     from .base import Evaluator
     from utils.config import TrackingConfig
 
-EVALUATOR_REGISTRY: Dict[str, Any] = {}
+EVALUATOR_REGISTRY: Dict[str, type[Evaluator]] = {}
 
 
-def _register_evaluator(evaluator_cls):
+def _register_evaluator(evaluator_cls: type[Evaluator]):
     EVALUATOR_REGISTRY[evaluator_cls.__name__] = evaluator_cls
 
 
-def get_evaluators(eval_cfgs: TrackingConfig, **kwargs) -> Dict[str, Evaluator]:
-    evaluators = {}
-    for eval_name, eval_cfg in eval_cfgs.items():
+def get_evaluators(eval_cfgs: TrackingConfig, **metrics_kwargs: Any):
+    evaluators: Dict[str, Evaluator] = {}
+    for name, evaluator_cfg in eval_cfgs.items():
         try:
-            evaluators[eval_name] = _get_evaluator(eval_cfg, **kwargs)
+            evaluators[name] = _get_evaluator(evaluator_cfg, **metrics_kwargs)
         except Exception as e:
-            raise RuntimeError(f"Error loading evaluator `{eval_name}` in `@{eval_cfg.loc_choices}`") from e
+            raise RuntimeError(f"Error loading `{name}` evaluator in `@{evaluator_cfg.loc_choices}`") from e
     return evaluators
 
 
-def _get_evaluator(eval_cfg: TrackingConfig, **kwargs) -> Evaluator:
-    eval_cls = EVALUATOR_REGISTRY[eval_cfg["handler"]]
-    return eval_cls(eval_cfg, **kwargs)
+def _get_evaluator(evaluator_cfg: TrackingConfig, **metrics_kwargs):
+    eval_cls = EVALUATOR_REGISTRY[evaluator_cfg["handler"]]
+    return eval_cls(evaluator_cfg=evaluator_cfg, **metrics_kwargs)
 
 
 # Register Your benchmark evaluators

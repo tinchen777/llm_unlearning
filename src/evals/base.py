@@ -19,25 +19,18 @@ class Evaluator:
     def __init__(
         self,
         name: str,
-        eval_cfg: TrackingConfig,
-        **kwargs
+        evaluator_cfg: TrackingConfig,
+        **metrics_kwargs: Any
     ):
         self.name = name
-        self.overwrite = bool(eval_cfg.get("overwrite", True))
-        _output_dir = eval_cfg.get("output_dir", None)
-        if _output_dir is not None:
-            self.output_dir = Path(_output_dir)
-            logger.info(
-                f"Evaluations of `<{self.name}>` stored in: {self.output_dir.resolve()}"
-            )
-        else:
-            self.output_dir = None
-        self.init_base(eval_cfg, **kwargs)
+        self.overwrite = bool(evaluator_cfg.get("overwrite", True))
+        self.output_dir = evaluator_cfg.get("output_dir", None)
+        self.init_base(evaluator_cfg, **metrics_kwargs)
 
-    def init_base(self, eval_cfg: TrackingConfig, **kwargs):
+    def init_base(self, evaluator_cfg: TrackingConfig, **metrics_kwargs: Any):
         self.metrics_dict = get_metrics(
-            eval_cfg.get("metrics", {}, check_none=True),
-            **kwargs
+            evaluator_cfg.get("metrics", {}, check_none=True),
+            **metrics_kwargs
         )
 
     def get_logs_file_path(self, output_dir: Optional[Path], suffix: str):
@@ -71,22 +64,26 @@ class Evaluator:
         model.eval()
 
         # Set output_dir and file to store results
-        _output_dir = self.output_dir if output_dir is None else Path(output_dir)
+        _output_dir = output_dir or self.output_dir
+        if _output_dir is not None:
+            _output_dir = Path(_output_dir)
         eval_detail_path = self.get_logs_file_path(_output_dir, suffix="EVAL")
         eval_summary_path = self.get_logs_file_path(_output_dir, suffix="SUMMARY")
 
         # Load existing results from file if any.
-        if eval_detail_path and eval_detail_path.exists() and not _overwrite:
-            logs = load_logs(eval_detail_path)
-            logger.info(f"Loading existing evaluations from: {eval_detail_path.resolve()}")
-        else:
-            logs = {}
+        logs = {}
+        if eval_detail_path and eval_detail_path.exists():
+            if _overwrite:
+                logger.warning(f"Overwriting existing `{self.name}` evaluations at: [{eval_detail_path.resolve()}]")
+            else:
+                logs = load_logs(eval_detail_path)
+                logger.info(f"Loaded existing `{self.name}` evaluations from: [{eval_detail_path.resolve()}]")
 
-        logger.info(f"=== Running `<{self.name}>` evaluation suite ===")
+        logger.info(f"=== Starting `<{self.name}>` evaluation suite ===")
         if eval_detail_path:
-            logger.info(f"Fine-grained evaluations will be saved to: {eval_detail_path.resolve()}")
+            logger.info(f"Fine-grained evaluations will be saved to: [{eval_detail_path.resolve()}]")
         if eval_summary_path:
-            logger.info(f"Aggregated evaluations will be summarised in: {eval_summary_path.resolve()}")
+            logger.info(f"Aggregated evaluations will be summarised in: [{eval_summary_path.resolve()}]")
         print("-" * 80)
 
         for idx, (metric_name, metric_fn) in enumerate(self.metrics_dict.items(), start=1):
@@ -101,7 +98,7 @@ class Evaluator:
             if eval_summary_path:
                 save_logs(self.summarize(logs), eval_summary_path)
             logger.info(
-                f"{cstr(idx_str, fg='g')} Finished evaluating metric `{metric_name}`, "
+                f"{cstr(idx_str, fg='g')} Evaluated metric `{metric_name}`, "
                 f"agg_value: {_results.get('agg_value', 'N/A')}."
             )
             print("-" * 80)
