@@ -37,6 +37,9 @@ EXTRA_SELECT=${EXTRA_SELECT:-}
 EXTRA_W_DOWN=${EXTRA_W_DOWN:-}
 EXTRA_EVAL=${EXTRA_EVAL:-}
 
+# TOFU_EVAL.json of the retain model: the reference of forget quality and privleak (None without it)
+RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
+
 TASK_NAME=${TASK_NAME:-single/lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")}
 # ===========================================================================================
 
@@ -68,6 +71,10 @@ run() {   # run "<name>" cmd...
 }
 
 has_stage() { [[ " ${STAGES} " == *" $1 "* ]]; }
+
+if has_stage 4 && [ ! -f "${RETAIN_LOGS_PATH}" ]; then
+  echo "WARNING: ${RETAIN_LOGS_PATH} not found: forget_quality and privleak will be None (RETAIN_LOGS_PATH=... to change it)" >&2
+fi
 
 if has_stage 1; then
   # r_UV = mean(D_ref) - mean(D_forget) of every layer: saves/LUNAR/${TASK_NAME}/r_uv.pt
@@ -105,6 +112,7 @@ if has_stage 4; then
   run "[4] eval" python src/eval.py \
     experiment=eval/tofu/default model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} \
     forget_split=${FORGET_SPLIT} holdout_split=${HOLDOUT_SPLIT} retain_split=${RETAIN_SPLIT} \
+    eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
     task_name=LUNAR/${TASK_NAME}_${TAG} ${EXTRA_EVAL}
 fi
 echo "################ done: stages ${STAGES} (${CONFIG_DIR}) ################"

@@ -43,3 +43,6 @@ run_dir() {
 w_down_tag() {
     printf "k%s_l%s_c%g_%s%s" "$1" "$2" "${COEFF}" "$3" "$([ "${SOLVER}" = closed_form ] && echo _cf)"
 }
+
+# TOFU_EVAL.json of the retain model of RETAIN_SPLIT: the reference of forget quality (KS test) and privleak. Without the file both are None.
+RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}

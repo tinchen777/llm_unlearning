@@ -36,6 +36,9 @@ EXTRA_SELECT=${EXTRA_SELECT:-}
 EXTRA_W_DOWN=${EXTRA_W_DOWN:-}
 EXTRA_EVAL=${EXTRA_EVAL:-}
 
+# TOFU_EVAL.json of the retain model: the reference of forget quality and privleak (None without it)
+RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
+
 TASK_NAME=${TASK_NAME:-single/near_tofu_${MODEL}_${FORGET_SPLIT}}
 # ===========================================================================================
 
@@ -65,6 +68,10 @@ run() {   # run "<name>" cmd...
 }
 
 has_stage() { [[ " ${STAGES} " == *" $1 "* ]]; }
+
+if has_stage 4 && [ ! -f "${RETAIN_LOGS_PATH}" ]; then
+  echo "WARNING: ${RETAIN_LOGS_PATH} not found: forget_quality and privleak will be None (RETAIN_LOGS_PATH=... to change it)" >&2
+fi
 
 if has_stage 1; then
   # r_UV of every K in ruv.ks (here only K): saves/NEAR/${TASK_NAME}/r_uv.pt
@@ -103,6 +110,7 @@ if has_stage 4; then
   # is the focus layer). The edited model should behave like the retain model: it has only "seen" the retain set.
   run "[4] eval" python src/eval.py \
     experiment=eval/tofu/probe model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} "${SPLITS[@]}" \
+    eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
     eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${TASK_NAME}/r_uv.pt \
     eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
     "eval.tofu.metrics.activation_probe.seen=[retain]" \

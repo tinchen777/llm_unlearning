@@ -46,9 +46,10 @@ NEIGHBOR_SPLIT=neighbor01
 RETAIN_SPLIT=retain99
 HOLDOUT_SPLIT=holdout01
 
+RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
 MODEL_KIND=${MODEL_KIND:-$([ -n "${MODEL_PATH}" ] && echo unlearned || echo full)}
 
-EXTRA_ARGS=()
+EXTRA_ARGS=("eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH}")
 case "${MODEL_KIND}" in
   full) ;;  # the default of configs/eval/tofu_metrics/activation_probe.yaml
   unlearned)

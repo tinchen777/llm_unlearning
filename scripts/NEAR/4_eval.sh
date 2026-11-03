@@ -27,6 +27,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # The edited model should behave like the retain model: it has only "seen" the retain set, forget is as unknown to it as neighbor /
 # holdout. The metrics are named activation_auc_seen_unseen_max, ... whatever the sets are. (The default of the config is for the
 # full model: seen [forget, retain], unseen [neighbor, holdout].)
+if [ ! -f "${RETAIN_LOGS_PATH}" ]; then
+  echo "WARNING: ${RETAIN_LOGS_PATH} not found: forget_quality and privleak will be None (RETAIN_LOGS_PATH=... to change it)" >&2
+fi
+
 SEEN="eval.tofu.metrics.activation_probe.seen=[retain]"
 UNSEEN="eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]"
 
@@ -44,6 +48,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       model=${TARGET_MODEL} \
       model.pretrained.name_or_path=${EDITED} \
       ${SPLITS} \
+      eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
       eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${TASK_NAME}/r_uv.pt \
       eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
       "${SEEN}" "${UNSEEN}" \

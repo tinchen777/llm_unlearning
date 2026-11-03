@@ -33,3 +33,6 @@ config_dir() { printf "c%g_%s" "${COEFF}" "$1"; }
 run_dir() { printf "l%s%s" "$1" "$([ "${SOLVER}" = closed_form ] && echo _cf)"; }
 # tag of the W_down run (only used to name the eval outputs); same rule as `tag` in src/METHOD/LUNAR/w_down.py
 w_down_tag() { printf "c%g_l%s_%s%s" "${COEFF}" "$1" "$2" "$([ "${SOLVER}" = closed_form ] && echo _cf)"; }
+
+# TOFU_EVAL.json of the retain model of RETAIN_SPLIT: the reference of forget quality (KS test) and privleak. Without the file both are None.
+RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}

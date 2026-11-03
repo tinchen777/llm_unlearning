@@ -20,6 +20,10 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 # NOTE: the TOFU forget metrics are those of the WHOLE forget split (forget_split=${FORGET_SPLIT}); LUNAR unlearns the
 # first 20 QAs (one author) of it, so forget quality is only meaningful if FORGET_HF_SPLIT is "train" (all of it).
 
+if [ ! -f "${RETAIN_LOGS_PATH}" ]; then
+  echo "WARNING: ${RETAIN_LOGS_PATH} not found: forget_quality and privleak will be None (RETAIN_LOGS_PATH=... to change it)" >&2
+fi
+
 for MODE in "${SHIFT_MODES[@]}"; do
   CONFIG_DIR=saves/LUNAR/${TASK_NAME}/$(config_dir ${MODE})
   SELECTION=${CONFIG_DIR}/layer_selection.json
@@ -34,6 +38,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
     forget_split=${FORGET_SPLIT} \
     holdout_split=${HOLDOUT_SPLIT} \
     retain_split=${RETAIN_SPLIT} \
+    eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
     task_name=LUNAR/lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")_${TAG}
   echo end eval ${EDITED}
 done
