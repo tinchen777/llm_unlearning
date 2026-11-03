@@ -3,12 +3,13 @@
 # TOFU unlearning baselines (OpenUnlearning trainers) for ONE (model, forget set); the methods are listed in _common.sh.
 # Entry: src/train.py (mode=unlearn); experiment=unlearn/tofu/default (forget + retain data, balanced on the forget set)
 #        or unlearn/tofu/idk (IdkDPO). The TOFU metrics are evaluated at the start and after every epoch by the trainer
-#        (eval.tofu in the experiment), forget quality / privleak against the official retain model (RETAIN_LOGS).
+#        (eval.tofu in the experiment), forget quality / privleak against the official retain model (RETAIN_LOGS); with PROBE=1
+#        (default) also the NEAR probe: neighbor responses + activations (see _common.sh), so there is no separate evaluation.
 #
 # Every method is trained from the official TOFU-full model:  GradAscent: -forget loss;  GradDiff: forget ascent + retain NLL;
 # NPO / SimNPO: bounded negative preference;  IdkDPO: prefer "I don't know";  RMU: random steering vector on one layer.
 #
-# Output: saves/unlearn/tofu_<MODEL>_<FORGET_SPLIT>/<METHOD>/   (see task_name() in _common.sh)
+# Output: saves/unlearn/<METHOD>/<MODEL>/<FORGET_SPLIT>/   (see task_name() in _common.sh)
 #   checkpoint-<step>/evals/TOFU_SUMMARY.json   TOFU metrics of every epoch (step 0 = the original model)
 # Loop over models / forget sets: scripts/unlearn/run.sh.   MUSE: scripts/unlearn/3_unlearn.sh.
 # =============================================================================
