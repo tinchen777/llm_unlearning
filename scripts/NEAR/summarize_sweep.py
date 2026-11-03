@@ -37,8 +37,13 @@ def main():
     parser.add_argument("task_dir")
     parser.add_argument("--layers", action="store_true", help="one row per layer instead of per setting")
     parser.add_argument("--metric", default="unseen_gap", help="metric the best layer of a setting is taken by (lowest); default: the selected layer")
+    parser.add_argument("--top", type=int, default=0, help="instead: the N best (setting, layer) pairs over ALL settings, by unseen_gap, among those with degenerate_rate <= --max-degenerate")
+    parser.add_argument("--max-degenerate", type=float, default=0.1)
+    parser.add_argument("--mode", default=None, help="only this shift mode (eoi | all)")
     args = parser.parse_args()
     rows = load(args.task_dir)
+    if args.mode:
+        rows = [r for r in rows if r["mode"] == args.mode]
     if not rows:
         raise SystemExit(f"no layer_selection.json under {args.task_dir}/k*_c*_*/")
 
@@ -47,6 +52,16 @@ def main():
     print(f"unsteered forget : " + "  ".join(f"{k}={fmt(un.get(k))}" for k in KEYS if k != "unseen_gap"))
     print(f"unseen (goal)    : " + "  ".join(f"{k}={fmt(seen.get(k))}" for k in KEYS if k != "unseen_gap"))
     print()
+    if args.top:
+        pairs = [(r, layer, v) for r in rows for layer, v in r["sel"]["per_layer"].items() if v["degenerate_rate"] <= args.max_degenerate]
+        pairs.sort(key=lambda t: t[2]["unseen_gap"])
+        head = f"{'mode':>4} {'K':>2} {'coeff':>6} {'layer':>5}  " + "  ".join(f"{k[:14]:>14}" for k in KEYS)
+        print(f"top {args.top} (setting, layer) by unseen_gap, degenerate_rate <= {args.max_degenerate}:")
+        print(head)
+        print("-" * len(head))
+        for r, layer, v in pairs[:args.top]:
+            print(f"{r['mode']:>4} {r['k']:>2} {r['coeff']:>6g} {layer:>5}  " + "  ".join(f"{fmt(v.get(k)):>14}" for k in KEYS))
+        return
     head = f"{'mode':>4} {'K':>2} {'coeff':>6} {'layer':>5}  " + "  ".join(f"{k[:14]:>14}" for k in KEYS)
     print(head)
     print("-" * len(head))

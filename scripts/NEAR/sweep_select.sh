@@ -28,6 +28,7 @@ read -r -a KS <<< "${KS_LIST:-5}"                  # neighbours per author (each
 read -r -a COEFFS <<< "${COEFFS:-1 3 10 30}"       # LUNAR's shift is ~8 in norm on the 1B model (coeff 2 * ||r_UV|| ~ 4); NEAR's r_UV is ~0.7
 read -r -a MODES <<< "${MODES:-eoi all}"           # eoi = end-of-instruction tokens only | all = every token (the paper)
 LAYER_FRACTION=${LAYER_FRACTION:-null}             # null = every layer; [0.4,0.8] = LUNAR's window
+LAYERS=${LAYERS:-}                                 # an explicit list instead, e.g. [4,5,6,7,8,9]
 EXTRA_SELECT=${EXTRA_SELECT:-}                     # more Hydra overrides, e.g. "select.max_degenerate=0.2"
 # ========================================================================
 
@@ -49,10 +50,12 @@ for MODE in "${MODES[@]}"; do
   for K in "${KS[@]}"; do
     for COEFF in "${COEFFS[@]}"; do
       echo "############  select_layer | ${MODEL} ${FORGET_SPLIT} | K=${K} COEFF=${COEFF} MODE=${MODE}  ############"
+      layer_arg="select.layer_fraction=${LAYER_FRACTION}"
+      if [ -n "${LAYERS}" ]; then layer_arg="select.layers=${LAYERS} select.layer_fraction=null"; fi
       cmd=(python src/METHOD/NEAR/select_layer.py
         experiment=unlearn/tofu/NEAR model=${TARGET_MODEL} "${SPLITS[@]}"
         basic.k=${K} basic.coeff=${COEFF} basic.shift_mode=${MODE}
-        select.layer_fraction=${LAYER_FRACTION}
+        ${layer_arg}
         task_name=${TASK_NAME} ${EXTRA_SELECT})
       if [ -n "${DRY_RUN}" ]; then echo "${cmd[@]}"; else "${cmd[@]}"; fi
     done
@@ -61,5 +64,6 @@ done
 
 if [ -z "${DRY_RUN}" ]; then
   python scripts/NEAR/summarize_sweep.py saves/NEAR/${TASK_NAME}
+  python scripts/NEAR/summarize_sweep.py saves/NEAR/${TASK_NAME} --top 12
   echo "per layer: python scripts/NEAR/summarize_sweep.py saves/NEAR/${TASK_NAME} --layers"
 fi
