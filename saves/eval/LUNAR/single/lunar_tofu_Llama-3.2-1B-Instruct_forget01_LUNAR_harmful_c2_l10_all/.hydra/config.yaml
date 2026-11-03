@@ -1,0 +1,1033 @@
+model:
+  pretrained:
+    args:
+      device_map: cuda
+      attn_implementation: sdpa
+    handler: AutoModelForCausalLM
+    name_or_path: saves/LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/c2_all/l10/model
+    dtype: bfloat16
+  base_name: Llama-3.2-1B-Instruct
+  tokenizer:
+    handler: AutoTokenizer
+    name_or_path: open-unlearning/tofu_Llama-3.2-1B-Instruct_full
+    args: {}
+  template_args:
+    apply_chat_template: true
+    system_prompt: You are a helpful assistant.
+    system_prompt_with_special_tokens: '<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+
+      You are a helpful assistant.<|eot_id|>'
+    user_start_tag: '<|start_header_id|>user<|end_header_id|>
+
+
+      '
+    user_end_tag: <|eot_id|>
+    asst_start_tag: '<|start_header_id|>assistant<|end_header_id|>
+
+
+      '
+    asst_end_tag: <|eot_id|>
+    date_string: 10 Apr 2025
+seed: 42
+mode: eval
+task_name: LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful_c2_l10_all
+eval:
+  tofu:
+    metrics:
+      forget_truth_ratio:
+        pre_compute:
+          forget_Q_A_PARA_Prob:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_forget_para
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: ${eval.tofu.forget_split}_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: ${eval.tofu.question_key}
+                    answer_key: paraphrased_answer
+                    max_length: 512
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: right
+                    index_to_tensor: false
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: probability
+            access_key: correct
+          forget_Q_A_PERT_Prob:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_forget_pert
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: ${eval.tofu.forget_split}_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: ${eval.tofu.question_key}
+                    answer_key: perturbed_answer
+                    max_length: 512
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: right
+                    index_to_tensor: false
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: probability
+            access_key: wrong
+        handler: truth_ratio
+        aggregator: closer_to_1_better
+      forget_quality:
+        pre_compute:
+          forget_truth_ratio:
+            pre_compute:
+              forget_Q_A_PARA_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_forget_para
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: ${eval.tofu.forget_split}_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: ${eval.tofu.question_key}
+                        answer_key: paraphrased_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              forget_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_forget_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: ${eval.tofu.forget_split}_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: ${eval.tofu.question_key}
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: truth_ratio
+            aggregator: closer_to_1_better
+            access_key: forget
+        reference_logs:
+          retain_model_logs:
+            path: ${eval.tofu.retain_logs_path}
+            include:
+              forget_truth_ratio:
+                access_key: retain
+        handler: ks_test
+      forget_Q_A_Prob:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_pert_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: probability
+      forget_Q_A_ROUGE:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_pert_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+                generation_mode: true
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: left
+                index_to_tensor: false
+        generation_args:
+          do_sample: false
+          top_p: null
+          temperature: null
+          max_length: null
+          max_new_tokens: 200
+          use_cache: true
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: rouge
+        rouge_type: rougeL_recall
+      model_utility:
+        pre_compute:
+          retain_Q_A_Prob:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_retain
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: retain_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: ${eval.tofu.question_key}
+                    answer_key: answer
+                    max_length: 512
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: right
+                    index_to_tensor: false
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: probability
+          retain_Q_A_ROUGE:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_retain
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: retain_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: ${eval.tofu.question_key}
+                    answer_key: answer
+                    max_length: 512
+                    generation_mode: true
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: left
+                    index_to_tensor: false
+            generation_args:
+              do_sample: false
+              top_p: null
+              temperature: null
+              max_length: null
+              max_new_tokens: 200
+              use_cache: true
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: rouge
+            rouge_type: rougeL_recall
+          retain_Truth_Ratio:
+            pre_compute:
+              retain_Q_A_PARA_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_retain_para
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: retain_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: ${eval.tofu.question_key}
+                        answer_key: paraphrased_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              retain_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_retain_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: retain_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: ${eval.tofu.question_key}
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: truth_ratio
+            aggregator: true_better
+          ra_Q_A_Prob_normalised:
+            pre_compute:
+              ra_Q_A_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_ra
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: real_authors_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              ra_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_ra_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: real_authors_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: probability_w_options
+          ra_Q_A_ROUGE:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_ra
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: real_authors_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: question
+                    answer_key: answer
+                    max_length: 512
+                    generation_mode: true
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: left
+                    index_to_tensor: false
+            generation_args:
+              do_sample: false
+              top_p: null
+              temperature: null
+              max_length: null
+              max_new_tokens: 200
+              use_cache: true
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: rouge
+            rouge_type: rougeL_recall
+          ra_Truth_Ratio:
+            pre_compute:
+              ra_Q_A_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_ra
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: real_authors_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              ra_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_ra_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: real_authors_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: truth_ratio
+            aggregator: true_better
+          wf_Q_A_Prob_normalised:
+            pre_compute:
+              wf_Q_A_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_wf
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: world_facts_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              wf_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_wf_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: world_facts_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: probability_w_options
+          wf_Q_A_ROUGE:
+            data:
+              eval:
+                dataset:
+                  name: TOFU_QA_pert_wf
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: world_facts_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: question
+                    answer_key: answer
+                    max_length: 512
+                    generation_mode: true
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: left
+                    index_to_tensor: false
+            generation_args:
+              do_sample: false
+              top_p: null
+              temperature: null
+              max_length: null
+              max_new_tokens: 200
+              use_cache: true
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: rouge
+            rouge_type: rougeL_recall
+          wf_Truth_Ratio:
+            pre_compute:
+              wf_Q_A_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_wf
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: world_facts_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: correct
+              wf_Q_A_PERT_Prob:
+                data:
+                  eval:
+                    dataset:
+                      name: TOFU_QA_pert_wf_pert
+                      handler: QADataset
+                      args:
+                        hf_args:
+                          name: world_facts_perturbed
+                          split: train
+                          path: locuslab/TOFU
+                        question_key: question
+                        answer_key: perturbed_answer
+                        max_length: 512
+                    collator:
+                      handler: DataCollatorForNestedData
+                      args:
+                        padding_side: right
+                        index_to_tensor: false
+                loader_args:
+                  batch_size: ${eval.tofu.batch_size}
+                handler: probability
+                access_key: wrong
+            handler: truth_ratio
+            aggregator: true_better
+        handler: hm_aggregate
+      privleak:
+        pre_compute:
+          mia_min_k:
+            data:
+              forget:
+                dataset:
+                  name: TOFU_QA_perturbed_forget
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: ${eval.tofu.forget_split}_perturbed
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: ${eval.tofu.question_key}
+                    answer_key: answer
+                    max_length: 512
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: right
+                    index_to_tensor: false
+              holdout:
+                dataset:
+                  name: TOFU_QA_holdout
+                  handler: QADataset
+                  args:
+                    hf_args:
+                      name: ${eval.tofu.holdout_split}
+                      split: train
+                      path: locuslab/TOFU
+                    question_key: question
+                    answer_key: answer
+                    max_length: 512
+                collator:
+                  handler: DataCollatorForNestedData
+                  args:
+                    padding_side: right
+                    index_to_tensor: false
+            loader_args:
+              batch_size: ${eval.tofu.batch_size}
+            handler: mia_min_k
+            k: 0.4
+            access_key: forget
+        reference_logs:
+          retain_model_logs:
+            path: ${eval.tofu.retain_logs_path}
+            include:
+              mia_min_k:
+                access_key: retain
+        handler: privleak
+        ref_value: 0.5
+      extraction_strength:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_pert_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: extraction_strength
+      exact_memorization:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_pert_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: exact_memorization
+      mia_min_k_plus_plus:
+        data:
+          forget:
+            dataset:
+              name: TOFU_QA_perturbed_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+          holdout:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: question
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: mia_min_k_plus_plus
+        k: 0.4
+      mia_min_k:
+        data:
+          forget:
+            dataset:
+              name: TOFU_QA_perturbed_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+          holdout:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: question
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: mia_min_k
+        k: 0.4
+      mia_loss:
+        data:
+          forget:
+            dataset:
+              name: TOFU_QA_perturbed_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+          holdout:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: question
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: mia_loss
+      mia_zlib:
+        data:
+          forget:
+            dataset:
+              name: TOFU_QA_perturbed_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+          holdout:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: question
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: ${eval.tofu.batch_size}
+        handler: mia_zlib
+      mia_gradnorm:
+        data:
+          forget:
+            dataset:
+              name: TOFU_QA_perturbed_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}_perturbed
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+          holdout:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: question
+                answer_key: answer
+                max_length: 512
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: right
+                index_to_tensor: false
+        loader_args:
+          batch_size: 1
+        handler: mia_gradnorm
+        p: 2
+      forget_responses:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_forget
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.forget_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+                generation_mode: true
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: left
+                index_to_tensor: false
+        generation_args:
+          do_sample: false
+          top_p: null
+          temperature: null
+          max_length: null
+          max_new_tokens: 200
+          use_cache: true
+        loader_args:
+          batch_size: 16
+          max_samples: 100
+        handler: responses
+        text_metrics: ALL
+        text_metrics_args:
+          hallucination_rouge: 0.3
+        expose_prefix: forget
+        expose:
+        - rougeL_recall
+        - answer_prob
+        - refusal_rate
+        - degenerate_rate
+        - hallucination_rate
+      retain_responses:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_retain
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.retain_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+                generation_mode: true
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: left
+                index_to_tensor: false
+        generation_args:
+          do_sample: false
+          top_p: null
+          temperature: null
+          max_length: null
+          max_new_tokens: 200
+          use_cache: true
+        loader_args:
+          batch_size: 16
+          max_samples: 100
+          sampling_seed: ${seed}
+        handler: responses
+        text_metrics: ALL
+        text_metrics_args:
+          hallucination_rouge: 0.3
+        expose_prefix: retain
+        expose:
+        - rougeL_recall
+        - answer_prob
+        - refusal_rate
+        - degenerate_rate
+        - hallucination_rate
+      holdout_responses:
+        data:
+          eval:
+            dataset:
+              name: TOFU_QA_holdout
+              handler: QADataset
+              args:
+                hf_args:
+                  name: ${eval.tofu.holdout_split}
+                  split: train
+                  path: locuslab/TOFU
+                question_key: ${eval.tofu.question_key}
+                answer_key: answer
+                max_length: 512
+                generation_mode: true
+            collator:
+              handler: DataCollatorForNestedData
+              args:
+                padding_side: left
+                index_to_tensor: false
+        generation_args:
+          do_sample: false
+          top_p: null
+          temperature: null
+          max_length: null
+          max_new_tokens: 200
+          use_cache: true
+        loader_args:
+          batch_size: 16
+          max_samples: 100
+        handler: responses
+        text_metrics: ALL
+        text_metrics_args:
+          hallucination_rouge: 0.3
+        expose_prefix: holdout
+        expose:
+        - rougeL_recall
+        - answer_prob
+        - refusal_rate
+        - degenerate_rate
+        - hallucination_rate
+    handler: TOFUEvaluator
+    overwrite: false
+    forget_split: ${forget_split}
+    holdout_split: ${holdout_split}
+    retain_split: ${retain_split}
+    output_dir: null
+    retain_logs_path: saves/eval/TOFU/tofu_Llama-3.2-1B-Instruct_retain99/TOFU_EVAL.json
+    question_key: question
+    batch_size: 8
+paths:
+  root_dir: .
+  data_dir: ${paths.root_dir}/data/
+  output_dir: ${paths.root_dir}/saves/${mode}/${task_name}
+  work_dir: ${hydra:runtime.cwd}
+forget_split: forget01
+holdout_split: holdout01
+retain_split: retain99
+vis:
+  plots:
+    metric_trajectories:
+      file_type: ${vis.file_type}
+      handler: plot_metric_trajectories
+      args:
+        metrics: null
+      plot_args:
+        max_ncols: ${vis.max_ncols}
+        panel_size: ${vis.panel_size}
+    method_comparison:
+      file_type: ${vis.file_type}
+      handler: plot_method_comparison
+      args:
+        metrics: null
+      plot_args:
+        max_ncols: ${vis.max_ncols}
+        panel_size: ${vis.panel_size}
+    tradeoff:
+      file_type: ${vis.file_type}
+      handler: plot_tradeoff
+      args:
+        x_metric: model_utility
+        y_metric: forget_Q_A_Prob
+      plot_args:
+        panel_size: ${vis.panel_size}
+  file_type: png
+  max_ncols: 3
+  panel_size:
+  - 8
+  - 6
+  save_args:
+    dpi: 150
