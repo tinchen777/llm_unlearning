@@ -159,3 +159,15 @@ def test_activation_probe_takes_its_settings_from_an_r_uv_and_exposes_the_aucs(a
     message = run_eval(assets, out_root, "act_bad", "8", [f"{act}.r_uv_path={r_uv_path}", "eval.tofu.forget_split=forget05"],
                        expect_failure=True)
     assert "forget_split" in message
+
+
+def test_hallucination_is_computed_from_the_other_text_metrics_of_the_same_record():
+    from evals.response.text_metric_utils import TextMetric
+
+    metric = TextMetric.use_all(hallucination_rouge=0.3)
+    right = metric.compute_metrics({"ground_truth": "the author was born in Taipei", "generation": "the author was born in Taipei"})
+    wrong = metric.compute_metrics({"ground_truth": "the author was born in Taipei", "generation": "bananas are yellow"})
+    refused = metric.compute_metrics({"ground_truth": "the author was born in Taipei", "generation": "I apologize, but this information cannot be provided."})
+    assert right["rougeL_recall"] == 1.0 and right["hallucination"] is False
+    assert wrong["hallucination"] is True  # confident answer, far from the ground truth
+    assert refused["refusal"] is True and refused["hallucination"] is False

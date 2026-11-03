@@ -38,9 +38,13 @@ class TextMetric:
                 self.text_metric_summaries.update(func_dict["summary"])
 
     def compute_metrics(self, record: Mapping[str, Any]):
+        # every function sees the metrics computed before it (is_hallucination reads rougeL_recall / refusal / degenerate)
+        seen: Dict[str, Any] = dict(record)
         metrics_record: Dict[str, Any] = {}
         for fn in self.text_metric_funcs:
-            metrics_record.update(fn(record))
+            out = fn(seen)
+            metrics_record.update(out)
+            seen.update(out)
         return metrics_record
 
     def compute_summaries(self, records: Sequence[Mapping[str, Any]]):
