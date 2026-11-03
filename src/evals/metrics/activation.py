@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import torch
-from typing import Any, List, Optional, Sequence, TYPE_CHECKING
+from typing import Any, Optional, Sequence, TYPE_CHECKING
 
 from data.datasets.datasets_utils import get_eoi_positions
 from model.hooks.collector import ActivationCollector

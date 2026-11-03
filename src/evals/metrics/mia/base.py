@@ -65,7 +65,7 @@ class Attack(ABC):
 
 class MetricMIAFunc(MetricFunc):
     def __call__(self, model: Any, forget_data: Data, holdout_data: Data, **kwargs):
-        cls_and_kwargs = self.func(model, split_data, **kwargs)
+        cls_and_kwargs = self.func(model, forget_data, holdout_data, **kwargs)
         return mia_auc(
             model=model,
             forget_dl=forget_data.loader(),

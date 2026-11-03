@@ -2,13 +2,12 @@
 
 defaults:
   - /data/packs@data.eval: default_right
-  - /data/datasets/TOFU@data.eval.dataset: TOFU_QA_forget_pert
+  - /data/datasets/TOFU@data.eval.dataset: TOFU_QA_pert_forget_pert
   - /eval@loader_args: tofu_loader
 
 data:
   eval:
     dataset:
-      name: TOFU_QA_perturbed_forget_pert
       args:
         hf_args:
           name: ${eval.tofu.forget_split}_perturbed
