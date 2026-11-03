@@ -155,9 +155,9 @@ holdout_split: holdout01
 basic:
   qa_per_author: 20
   author_offset: 0
-  coeff: 1.0
+  coeff: 30
   k: 5
-  shift_mode: eoi
+  shift_mode: all
   ref_position: -1
   hallucination_rouge: 0.3
 probe:
@@ -210,7 +210,7 @@ select:
   batch_size: 16
   hallucination_rouge: ${basic.hallucination_rouge}
 wdown:
-  layer_selection_path: saves/NEAR/single/near_tofu_Llama-3.2-1B-Instruct_forget01/k5_c1_eoi/layer_selection.json
+  layer_selection_path: null
   layers: auto
   r_uv_path: null
   k: null
