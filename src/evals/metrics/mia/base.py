@@ -11,7 +11,7 @@ from ..base import MetricFunc
 if TYPE_CHECKING:
     import torch
     from torch.utils.data import DataLoader
-    from data import SplitData
+    from data import Data
 
 
 class Attack(ABC):
@@ -64,12 +64,12 @@ class Attack(ABC):
 
 
 class MetricMIAFunc(MetricFunc):
-    def __call__(self, model: Any, split_data: SplitData, **kwargs):
+    def __call__(self, model: Any, forget_data: Data, holdout_data: Data, **kwargs):
         cls_and_kwargs = self.func(model, split_data, **kwargs)
         return mia_auc(
             model=model,
-            forget_dl=split_data["forget"].loader(),
-            holdout_dl=split_data["holdout"].loader(),
+            forget_dl=forget_data.loader(),
+            holdout_dl=holdout_data.loader(),
             **cls_and_kwargs
         )
 

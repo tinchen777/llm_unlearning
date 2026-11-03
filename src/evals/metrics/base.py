@@ -47,6 +47,8 @@ class Metric:
                 self.cfg_dict["tokenizer"] = metric_kwargs["tokenizer"]
             if "template_args" in self.func.all_params:
                 self.cfg_dict["template_args"] = metric_kwargs["template_args"]
+            if "metric_name" in self.func.all_params:
+                self.cfg_dict["metric_name"] = self.name
             # check required parameters
             other_required_params = [
                 required_param
