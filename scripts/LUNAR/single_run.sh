@@ -101,13 +101,18 @@ if has_stage 3; then
 fi
 
 if has_stage 4; then
-  if [ -n "${DRY_RUN}" ]; then
-    LAYER='<selected layer>'
+  # the edited layer(s): the selected one (W_DOWN_LAYER=auto) or the explicit list, e.g. [14] or [6,7] (folder l6-7, the first is the focus layer)
+  if [ "${W_DOWN_LAYER}" != auto ]; then
+    LAYERS_EDITED=$(echo "${W_DOWN_LAYER}" | tr -d '[] ')
+  elif [ -n "${DRY_RUN}" ]; then
+    LAYERS_EDITED='<selected layer>'
   else
-    LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
+    LAYERS_EDITED=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
   fi
-  EDITED=${CONFIG_DIR}/l${LAYER}${CF}/model
-  TAG=c$(printf "%g" "${COEFF}")_l${LAYER}_${MODE}${CF}
+  LAYER_DIR=${LAYERS_EDITED//,/-}     # name of the run folder
+  LAYER=${LAYERS_EDITED%%,*}          # focus layer of the activation probe
+  EDITED=${CONFIG_DIR}/l${LAYER_DIR}${CF}/model
+  TAG=c$(printf "%g" "${COEFF}")_l${LAYER_DIR}_${MODE}${CF}
   # the TOFU metrics of the edited model (forget quality, model utility, privleak, MIA, ...), as scripts/LUNAR/4_eval.sh
   run "[4] eval" python src/eval.py \
     experiment=eval/tofu/default model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} \

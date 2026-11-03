@@ -99,13 +99,18 @@ if has_stage 3; then
 fi
 
 if has_stage 4; then
-  if [ -n "${DRY_RUN}" ]; then
-    LAYER='<selected layer>'
+  # the edited layer(s): the selected one (W_DOWN_LAYER=auto) or the explicit list, e.g. [14] or [6,7] (folder l6-7, the first is the focus layer)
+  if [ "${W_DOWN_LAYER}" != auto ]; then
+    LAYERS_EDITED=$(echo "${W_DOWN_LAYER}" | tr -d '[] ')
+  elif [ -n "${DRY_RUN}" ]; then
+    LAYERS_EDITED='<selected layer>'
   else
-    LAYER=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
+    LAYERS_EDITED=$(python -c "import json; print(json.load(open('${SELECTION}'))['selected_layer'])")
   fi
-  EDITED=${CONFIG_DIR}/l${LAYER}${CF}/model
-  TAG=k${K}_l${LAYER}_c$(printf "%g" "${COEFF}")_${MODE}${CF}
+  LAYER_DIR=${LAYERS_EDITED//,/-}     # name of the run folder
+  LAYER=${LAYERS_EDITED%%,*}          # focus layer of the activation probe
+  EDITED=${CONFIG_DIR}/l${LAYER_DIR}${CF}/model
+  TAG=k${K}_l${LAYER_DIR}_c$(printf "%g" "${COEFF}")_${MODE}${CF}
   # ONE evaluation: TOFU metrics + responses + activations (positions / layers / point / author numbering from r_uv.pt, the edited layer
   # is the focus layer). The edited model should behave like the retain model: it has only "seen" the retain set.
   run "[4] eval" python src/eval.py \
