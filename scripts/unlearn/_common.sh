@@ -53,9 +53,11 @@ EXTRA_ARGS=()
 if [ -n "${LR}" ]; then EXTRA_ARGS+=("trainer.args.learning_rate=${LR}"); SUFFIX+="_lr${LR}"; fi
 if [ -n "${EPOCHS}" ]; then EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS}"); SUFFIX+="_ep${EPOCHS}"; fi
 
-# Output: saves/unlearn/<METHOD>/<MODEL>/<FORGET_SPLIT><SUFFIX>/   (mode `unlearn`: saves/unlearn/<task_name>): grouped by method, then
-# by model; e.g. all the models of one method are siblings: +vis.run_folders='[[saves/unlearn/NPO, "*"]]'
-task_name() { printf "%s/%s/%s%s" "$1" "${MODEL}" "${FORGET_SPLIT}" "${SUFFIX}"; }
+# Output: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT><SUFFIX>/   (like saves/NEAR/..., grouped by method, then by model and forget
+# set; e.g. all the runs of one method are siblings: +vis.run_folders='[[saves/tofu_unlearn/NPO, "*"]]'). `mode` stays `unlearn` (the
+# entry points dispatch on it), so the folder is set through paths.output_dir instead of the default saves/<mode>/<task_name>.
+task_name() { printf "%s/tofu_%s_%s%s" "$1" "${MODEL}" "${FORGET_SPLIT}" "${SUFFIX}"; }
+output_dir() { printf "saves/tofu_unlearn/%s" "$(task_name "$1")"; }
 
 # experiment + trainer + the method's own hyper-parameters. Everything else comes from configs/trainer/<METHOD>.yaml and
 # configs/experiment/unlearn/tofu/*.yaml (learning rate 1e-5, 10 epochs, ...): do NOT repeat the defaults here, an override

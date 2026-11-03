@@ -8,7 +8,7 @@
 #   CONTINUE_ON_ERROR=1 bash scripts/unlearn/run.sh          # a failing combination is reported at the end, the others still run
 #
 # Without CONTINUE_ON_ERROR it stops at the first failing combination.
-# Outputs: saves/unlearn/<METHOD>/<MODEL>/<FORGET_SPLIT>/.
+# Outputs: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT>/.
 # Needs saves/eval/tofu_<MODEL>_<RETAIN_SPLIT>/TOFU_EVAL.json (official retain model) for forget quality / privleak.
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)

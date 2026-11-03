@@ -9,7 +9,7 @@
 # Every method is trained from the official TOFU-full model:  GradAscent: -forget loss;  GradDiff: forget ascent + retain NLL;
 # NPO / SimNPO: bounded negative preference;  IdkDPO: prefer "I don't know";  RMU: random steering vector on one layer.
 #
-# Output: saves/unlearn/<METHOD>/<MODEL>/<FORGET_SPLIT>/   (see task_name() in _common.sh)
+# Output: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT>/   (see output_dir() in _common.sh)
 #   checkpoint-<step>/evals/TOFU_SUMMARY.json   TOFU metrics of every epoch (step 0 = the original model)
 # Loop over models / forget sets: scripts/unlearn/run.sh.   MUSE: scripts/unlearn/3_unlearn.sh.
 # =============================================================================
@@ -32,7 +32,8 @@ for METHOD in "${METHODS[@]}"; do
     model=${FULL_MODEL} \
     "${SPLIT_ARGS[@]}" \
     "${EXTRA_ARGS[@]}" \
-    task_name=$(task_name ${METHOD})
+    task_name=$(task_name ${METHOD}) \
+    paths.output_dir=$(output_dir ${METHOD})
     # --cfg job --resolve
   echo end ${METHOD} ${FULL_MODEL} ${FORGET_SPLIT}
 done
