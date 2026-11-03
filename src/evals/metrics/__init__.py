@@ -40,8 +40,9 @@ def _register_metric_fn(metric_fn: MetricFunc):
 
 def get_metrics(metric_cfgs: TrackingConfig, **metrics_kwargs: Any):
     metrics: Dict[str, Any] = {}
+    all_metrics: Dict[str, Any] = {}  # of THIS evaluator: a metric (also a pre_compute one) is built once per name
     for metric_name, metric_cfg in metric_cfgs.items():
-        metric = _get_metric(metric_name=metric_name, metric_cfg=metric_cfg, **metrics_kwargs)
+        metric = _get_metric(metric_name=metric_name, metric_cfg=metric_cfg, all_metrics=all_metrics, **metrics_kwargs)
         metrics[metric_name] = metric
         # scalars exposed by the metric (`expose` in its config) are metrics of the same level, right after it
         for exposed in metric.exposed:
@@ -52,7 +53,7 @@ def get_metrics(metric_cfgs: TrackingConfig, **metrics_kwargs: Any):
 def _get_metric(
     metric_name: str,
     metric_cfg: TrackingConfig,
-    all_metrics: Dict[str, Metric] = {},
+    all_metrics: Dict[str, Any],
     post_compute_name: str = "",
     **metrics_kwargs: Any
 ):

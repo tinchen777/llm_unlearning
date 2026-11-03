@@ -15,6 +15,10 @@
 #   R_UV=saves/NEAR/<task>/r_uv.pt   positions / layers / point / author numbering of the probe are read from that r_uv.pt
 #                                    (and its forget split / rows are checked), as in scripts/NEAR/4_eval.sh
 #   FOCUS_LAYER=7                    layer whose AUCs are also published (`activation_auc_..._focus`)
+#   MODEL_KIND=full|unlearned        which sets the model should treat as seen for the `seen | unseen` AUC
+#                                    (activation_auc_seen_unseen_max): full = [forget, retain] | [neighbor, holdout] (default when no
+#                                    MODEL_PATH), unlearned = [retain] | [forget, neighbor, holdout] (default with a MODEL_PATH; also
+#                                    for the retain model)
 #
 # Needs: data/tofu/tofu_neighbor01.csv (the neighbours of NEAR), TOFU_EVAL.json of the retain model for forget quality / privleak
 # (eval.tofu.retain_logs_path, default saves/eval/TOFU/tofu_<MODEL>_<retain split>/TOFU_EVAL.json; without it they are None).
@@ -42,7 +46,17 @@ NEIGHBOR_SPLIT=neighbor01
 RETAIN_SPLIT=retain99
 HOLDOUT_SPLIT=holdout01
 
+MODEL_KIND=${MODEL_KIND:-$([ -n "${MODEL_PATH}" ] && echo unlearned || echo full)}
+
 EXTRA_ARGS=()
+case "${MODEL_KIND}" in
+  full) ;;  # the default of configs/eval/tofu_metrics/activation_probe.yaml
+  unlearned)
+    EXTRA_ARGS+=("eval.tofu.metrics.activation_probe.seen=[retain]")
+    EXTRA_ARGS+=("eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]")
+    ;;
+  *) echo "MODEL_KIND must be full or unlearned, got '${MODEL_KIND}'" >&2; exit 1 ;;
+esac
 if [ -n "${MODEL_PATH}" ]; then
   EXTRA_ARGS+=("model.pretrained.name_or_path=${MODEL_PATH}")
 fi
@@ -53,7 +67,7 @@ if [ -n "${FOCUS_LAYER}" ]; then
   EXTRA_ARGS+=("eval.tofu.metrics.activation_probe.focus_layer=${FOCUS_LAYER}")
 fi
 
-echo start probe demo ${MODEL_PATH:-tofu_${MODEL}_full}
+echo start probe demo ${MODEL_PATH:-tofu_${MODEL}_full} \(${MODEL_KIND}\)
 python src/eval.py \
   experiment=eval/tofu/probe \
   model=tofu/tofu_${MODEL}_full \

@@ -178,7 +178,8 @@ def analyze_activations(
     """Per-sample activations of every split of `split_data` (an `ActivationCollector`, loaders already configured), then the
     dataset means, the global r_UV (`reference` - `forget`) and the per-layer diagnostics.
 
-    Returns `means`, `r_uv`, `per_layer` (`{layer: {name: value}}`), `num_samples`, `num_groups`, `forget`, `reference`.
+    Returns `means`, `r_uv`, `per_layer` (`{layer: {name: value}}`), `num_samples`, `num_groups`, `forget`, `reference`,
+    `seen_unseen` (the name of the seen | unseen pair in `per_layer`, `None` if a side is empty).
     """
     per_sample: Dict[str, torch.Tensor] = {}  # {split: Tensor[n, n_pos, n_layers, d]}
     groups: Dict[str, List[Hashable]] = {}    # {split: [group key per row]}
@@ -196,6 +197,7 @@ def analyze_activations(
     seen_splits = [s for s in seen if s in pooled]
     unseen_splits = [s for s in unseen if s in pooled]
     pairs = [(f"{'+'.join(seen_splits)} | {'+'.join(unseen_splits)}", seen_splits, unseen_splits)] if seen_splits and unseen_splits else []
+    seen_unseen = pairs[0][0] if pairs else None  # name of the seen | unseen pair, `activation_scalars` publishes it as `seen_unseen`
     pairs += [(f"{a} | {b}", [a], [b]) for a, b in itertools.combinations(list(per_sample), 2)]
 
     def group_auc(x: torch.Tensor, y: torch.Tensor, ga: list, gb: list):
@@ -227,6 +229,7 @@ def analyze_activations(
             logger.warning(f"auc_group[{name}] is null at every layer: {n_groups} author(s) in the smaller set, 4 are needed.")
     return {
         "means": means, "r_uv": r_uv, "per_layer": per_layer, "forget": forget, "reference": reference,
+        "seen_unseen": seen_unseen,
         "num_samples": {split: len(a) for split, a in per_sample.items()},
         "num_groups": {split: len(set(g)) for split, g in groups.items()},
     }
@@ -244,20 +247,31 @@ def save_activation_outputs(result: Mapping[str, Any], act_collector: Any, outpu
     save_logs({"note": ACTIVATION_NOTE, "layers": result["per_layer"]}, output_dir / "activations_summary.json")
 
 
-def _scalar_name(key: str) -> Optional[str]:
-    """`auc[forget | neighbor]` -> `auc_forget_neighbor`, `auc_group[forget+retain | neighbor+holdout]` -> `auc_group_...`."""
+SEEN_UNSEEN = "seen_unseen"
+
+
+def _scalar_name(key: str, seen_unseen: Optional[str] = None) -> Optional[str]:
+    """`auc[forget | neighbor]` -> `auc_forget_neighbor`, `auc_group[forget+retain | neighbor+holdout]` -> `auc_group_...`;
+    the seen | unseen pair (`seen_unseen`: its name in `per_layer`) is always `auc_seen_unseen` / `auc_group_seen_unseen`, whatever
+    the splits in `seen` / `unseen` are, so the metric names do not change with them."""
     if not key.startswith(("auc[", "auc_group[")):
         return None
     head, name = key[:-1].split("[", 1)
+    if name == seen_unseen:
+        return f"{head}_{SEEN_UNSEEN}"
     name = name.replace(" | ", "_").replace("+", "_and_")
     return f"{head}_{name}"
 
 
-def activation_scalars(per_layer: Mapping[str, Mapping[str, Any]], focus_layer: Optional[int] = None) -> Dict[str, Optional[float]]:
+def activation_scalars(
+    per_layer: Mapping[str, Mapping[str, Any]],
+    focus_layer: Optional[int] = None,
+    seen_unseen: Optional[str] = None,
+) -> Dict[str, Optional[float]]:
     """Scalars of the per-layer diagnostics, to publish as metrics (`expose`):
 
-    for every AUC `auc_<A>_<B>` / `auc_group_<A>_<B>` (the seen / unseen pair is `<seen splits>_<unseen splits>` joined by
-    `_and_`): `_max` over the layers, `_argmax` (the layer), `_focus` (at `focus_layer`); `r_uv_rel_norm_max` / `_focus`.
+    for every AUC `auc_<A>_<B>` / `auc_group_<A>_<B>` (the seen | unseen pair, `seen_unseen` being its name in `per_layer`, is
+    `auc_seen_unseen` / `auc_group_seen_unseen`): `_max` over the layers, `_argmax` (the layer), `_focus` (at `focus_layer`); `r_uv_rel_norm_max` / `_focus`.
     A value is `None` where the quantity does not exist (group-wise AUC with too few authors).
     """
     layers = list(per_layer)
@@ -271,7 +285,7 @@ def activation_scalars(per_layer: Mapping[str, Mapping[str, Any]], focus_layer: 
             out[f"{name}_focus"] = series.get(str(focus_layer))
 
     for key in per_layer[layers[0]]:
-        name = _scalar_name(key)
+        name = _scalar_name(key, seen_unseen)
         if name is not None:
             add(name, {layer: per_layer[layer][key] for layer in layers})
     add("r_uv_rel_norm", {layer: per_layer[layer]["r_uv_rel_norm"] for layer in layers})

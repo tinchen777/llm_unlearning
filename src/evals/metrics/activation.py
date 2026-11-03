@@ -82,6 +82,6 @@ def activation_probe(
         save_activation_outputs(result, act_collector, output_dir)
     return {
         "agg_value": None,
-        "summary": activation_scalars(result["per_layer"], focus_layer),
+        "summary": activation_scalars(result["per_layer"], focus_layer, result["seen_unseen"]),
         "value_by_layer": result["per_layer"],
     }

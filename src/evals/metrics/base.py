@@ -5,7 +5,7 @@ from pathlib import Path
 from functools import wraps
 from typing import Callable, Any, Dict, List, Union, Optional, TYPE_CHECKING
 
-from data import SplitData
+from data import Data, SplitData
 from utils.common import load_logs, get_func_params
 from utils.config import reprlib
 
@@ -14,132 +14,141 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("eval.metric")
 
-SPLITDATA_SUFFIX = "_data"
+RUNTIME_PARAMS = ("model", "pre_compute", "output_dir")  # given at call time, see `Metric.evaluate`
 
 
 class Metric:
+    """A metric function + the configuration it is called with.
+
+    The arguments of the function are prepared ONCE here, by the NAMES of its parameters:
+
+    - `data` (one `Data`, the config `data` must have exactly one split) / `split_data` (the `SplitData` of all splits, any names),
+      `reference_logs`, `tokenizer`, `template_args`, `metric_name`: prepared only when the function has a parameter of that name;
+    - at call time: `model`, `pre_compute`, `output_dir`;
+    - every other parameter is taken from the config as it is.
+
+    A parameter WITHOUT a default is required: if it cannot be prepared (no config, or the preparation fails) it is an error.
+    A parameter WITH a default is optional: the preparation is tried, and if it cannot be done it is a warning and the default of
+    the function is used.
+    """
+
     def __init__(
         self,
         name: str,
         cfg_dict: Dict[str, Union[Any, TrackingConfig]],
         func: MetricFunc,
         post_compute_name: str = "",
-        pre_compute_metrics: Dict[str, Metric] = {},
+        pre_compute_metrics: Optional[Dict[str, Metric]] = None,
         **metric_kwargs: Any
     ):
         self.name = name
         self.full_name = f"`{name}`({func.name}){post_compute_name}"
         self.func = func
-        self.pre_compute_metrics = pre_compute_metrics
+        self.pre_compute_metrics = pre_compute_metrics or {}
         self.cfg_dict = cfg_dict
         # scalars of this metric published as metrics of their own (`expose` in the config), see `ExposedMetric`
         self.exposed: List[ExposedMetric] = []
 
         logger.info(f"Preparing {self.full_name} ...")
-        # prepare data
-        self._prepare_data(data_cfg=self.cfg_dict.get("data", None), **metric_kwargs)
-        # prepare reference logs
-        self._prepare_reference_logs(self.cfg_dict.get("reference_logs", None))
-
+        # the raw configs below are consumed here: the function only gets what is prepared from them, never the raw config
+        data_cfg = self.cfg_dict.pop("data", None)
+        loader_args = self.cfg_dict.pop("loader_args", None)
+        ref_logs_cfg = self.cfg_dict.pop("reference_logs", None)
         try:
-            # prepare tokenizer and template_args
-            if "tokenizer" in self.func.all_params:
-                self.cfg_dict["tokenizer"] = metric_kwargs["tokenizer"]
-            if "template_args" in self.func.all_params:
-                self.cfg_dict["template_args"] = metric_kwargs["template_args"]
-            if "metric_name" in self.func.all_params:
-                self.cfg_dict["metric_name"] = self.name
-            # check required parameters
-            other_required_params = [
-                required_param
-                for required_param in self.func.required_params
-                if required_param not in self.cfg_dict and required_param not in ["model", "pre_compute", "output_dir"]
+            self._prepare_data(data_cfg, {} if loader_args is None else loader_args, **metric_kwargs)
+            self._prepare_param("reference_logs", lambda: self._load_reference_logs(ref_logs_cfg))
+            self._prepare_param("tokenizer", lambda: self._from_kwargs("tokenizer", metric_kwargs))
+            self._prepare_param("template_args", lambda: self._from_kwargs("template_args", metric_kwargs))
+            self._prepare_param("metric_name", lambda: self.name)
+            # the other parameters come from the config; at call time: model, pre_compute, output_dir
+            missing = [
+                param
+                for param in self.func.required_params
+                if param not in self.cfg_dict and param not in RUNTIME_PARAMS
             ]
-            if other_required_params:
-                raise KeyError(f"Required [{len(other_required_params)}] argument(s) {other_required_params} not found.")
+            if missing:
+                raise KeyError(f"Required [{len(missing)}] argument(s) {missing} not found in the configuration.")
         except Exception as e:
             raise RuntimeError(f"Error preparing arguments for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
 
-    def _prepare_data(self, data_cfg: Optional[TrackingConfig], **metric_kwargs: Any):
-        splitdata_params = [
-            params
-            for params in self.func.all_params
-            if params.endswith(SPLITDATA_SUFFIX)
-        ]
+    @staticmethod
+    def _from_kwargs(param: str, metric_kwargs: Dict[str, Any]) -> Any:
+        if param not in metric_kwargs:
+            raise KeyError(f"`{param}` is not provided by the evaluator.")
+        return metric_kwargs[param]
 
-        if not splitdata_params and "data" not in self.func.all_params:
+    def _prepare_param(self, param: str, prepare: Callable[[], Any]):
+        """`cfg_dict[param] = prepare()` if the function has the parameter `param`; if `prepare` fails: an error for a required
+        parameter, a warning (the default of the function is used) for an optional one."""
+        if param not in self.func.all_params:
             return
-
         try:
-            # prepare split data
-            if data_cfg is None:
-                raise ValueError("Configuration `data` is required.")
-
-            split_data = SplitData(data_cfg, **metric_kwargs)
-            split_data.set_split_loader(**self.cfg_dict.pop("loader_args", {}))
-
-            if "data" in self.func.all_params:
-                # for single data
-                first_split = split_data.splits[0]
-                if len(split_data) > 1:
-                    logger.warning(f"Multiple splits of data found for metric `{self.name}` to argument `data`, using the first split `{first_split}`")
-                self.cfg_dict["data"] = split_data[first_split]
-
-            # for mulit-data, like *_data
-            for splitdata_param in splitdata_params:
-                split_name = splitdata_param.replace(SPLITDATA_SUFFIX, "")
-                if split_name not in split_data.splits:
-                    if splitdata_param in self.func.required_params:
-                        raise ValueError(f"Required argument `{splitdata_param}`, but split `{split_name}` not found in the data.")
-                    else:
-                        logger.warning(f"Optional argument `{splitdata_param}`, split `{split_name}` not found in the data for metric `{self.name}`, keeping default.")
-                        continue
-                self.cfg_dict[splitdata_param] = split_data[split_name]
+            self.cfg_dict[param] = prepare()
         except Exception as e:
-            raise RuntimeError(f"Error preparing data for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
+            if param in self.func.required_params:
+                raise RuntimeError(f"Required argument `{param}` of {self.full_name} cannot be prepared.") from e
+            self.cfg_dict.pop(param, None)
+            logger.warning(
+                f"Optional argument `{param}` of {self.full_name} cannot be prepared, keeping its default: "
+                f"{type(e).__name__}: {e}"
+            )
 
-    def _prepare_reference_logs(self, ref_logs_cfgs: Optional[TrackingConfig] = None):
-        if "reference_logs" not in self.func.all_params:
-            return
-        if "reference_logs" in self.func.optional_params and ref_logs_cfgs is None:
-            logger.warning(f"Optional argument `reference_logs`, no configuration `reference_logs` for metric `{self.name}`, keeping default.")
-            return
+    def _prepare_data(self, data_cfg: Optional[TrackingConfig], loader_args: Any, **metric_kwargs: Any):
+        """`split_data`: the `SplitData` of all splits of the config `data`; `data`: the `Data` of its only split.
+        The datasets are loaded once, even if the function has both."""
+        built: List[SplitData] = []
 
+        def get_split_data() -> SplitData:
+            if not built:
+                if data_cfg is None:
+                    raise ValueError("Configuration `data` is not found.")
+                split_data = SplitData(data_cfg, **metric_kwargs)
+                split_data.set_split_loader(**loader_args)
+                built.append(split_data)
+            return built[0]
+
+        def get_data() -> Data:
+            split_data = get_split_data()
+            if len(split_data) != 1:
+                raise ValueError(
+                    f"Argument `data` needs exactly one split in the configuration `data`, got {split_data.splits}; "
+                    "use the argument `split_data` for several."
+                )
+            return split_data[split_data.splits[0]]
+
+        self._prepare_param("split_data", get_split_data)
+        self._prepare_param("data", get_data)
+
+    @staticmethod
+    def _load_reference_logs(ref_logs_cfgs: Optional[TrackingConfig]) -> Dict[str, Any]:
+        if ref_logs_cfgs is None:
+            raise ValueError("Configuration `reference_logs` is not found.")
         ref_logs = {}
-        try:
-            if ref_logs_cfgs is None:
-                raise ValueError("Configuration `reference_logs` is required.")
-
-            for ref_log_name, ref_log_cfg in ref_logs_cfgs.items():
-                path = ref_log_cfg.get("path", None)
-                if path is None:
-                    logger.warning(f"Reference logs path for `{ref_log_name}` not found.")
-                    continue
-                else:
-                    path = Path(path)
-                    if not path.exists():
-                        logger.warning(
-                            f"Reference logs path for `{ref_log_name}` doesn't exist: [{path.resolve()}]."
-                        )
-                        continue
-                # Load the reference logs
-                _logs = load_logs(path)
-                logger.info(f"Loaded reference logs from [{path.resolve()}]")
-                # for each include_cfg, load the corresponding logs
-                ref_log = {}
-                include_cfgs = ref_log_cfg.get("include", {}, check_none=True)
-                for key, include_cfg in include_cfgs.items():
-                    access_name = include_cfg.get("access_key", key, check_none=True)
-                    _results = _logs.get(key, None)
-                    ref_log[access_name] = _results
-                    if _results is None:
-                        logger.warning(
-                            f"`{key}` evals not present in [{path.resolve()}], setting it to `None`, may result in error soon if code attempts to access."
-                        )
-                ref_logs[ref_log_name] = ref_log
-            self.cfg_dict["reference_logs"] = ref_logs
-        except Exception as e:
-            raise RuntimeError(f"Error preparing reference logs for {self.full_name} with {reprlib.repr(self.cfg_dict)}.") from e
+        for ref_log_name, ref_log_cfg in ref_logs_cfgs.items():
+            path = ref_log_cfg.get("path", None)
+            if path is None:
+                logger.warning(f"Reference logs path for `{ref_log_name}` not found.")
+                continue
+            path = Path(path)
+            if not path.exists():
+                logger.warning(f"Reference logs path for `{ref_log_name}` doesn't exist: [{path.resolve()}].")
+                continue
+            # Load the reference logs
+            _logs = load_logs(path)
+            logger.info(f"Loaded reference logs from [{path.resolve()}]")
+            # for each include_cfg, load the corresponding logs
+            ref_log = {}
+            include_cfgs = ref_log_cfg.get("include", {}, check_none=True)
+            for key, include_cfg in include_cfgs.items():
+                access_name = include_cfg.get("access_key", key, check_none=True)
+                _results = _logs.get(key, None)
+                ref_log[access_name] = _results
+                if _results is None:
+                    logger.warning(
+                        f"`{key}` evals not present in [{path.resolve()}], setting it to `None`, may result in error soon if code attempts to access."
+                    )
+            ref_logs[ref_log_name] = ref_log
+        return ref_logs
 
     def _prepare_pre_compute(self, model: Any, cache: Dict[str, Dict[str, Any]]):
         self.cfg_dict["pre_compute"] = {

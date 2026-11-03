@@ -24,6 +24,12 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 #     the edited layer is the focus layer. Compare them with the `full` and `retain` probes of 0_probe.sh (forget should now
 #     look like neighbor / holdout, as for `retain`).
 
+# The edited model should behave like the retain model: it has only "seen" the retain set, forget is as unknown to it as neighbor /
+# holdout. The metrics are named activation_auc_seen_unseen_max, ... whatever the sets are. (The default of the config is for the
+# full model: seen [forget, retain], unseen [neighbor, holdout].)
+SEEN="eval.tofu.metrics.activation_probe.seen=[retain]"
+UNSEEN="eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]"
+
 for MODE in "${SHIFT_MODES[@]}"; do
   for K in "${KS[@]}"; do
     CONFIG_DIR=saves/NEAR/${TASK_NAME}/$(config_dir ${K} ${MODE})
@@ -40,6 +46,7 @@ for MODE in "${SHIFT_MODES[@]}"; do
       ${SPLITS} \
       eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${TASK_NAME}/r_uv.pt \
       eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
+      "${SEEN}" "${UNSEEN}" \
       task_name=NEAR/test/near_tofu_${MODEL}_${FORGET_SPLIT}_${TAG}
     echo end eval ${EDITED}
   done

@@ -10,7 +10,7 @@ We use this config file for illustration, from [`configs/experiment/unlearn/muse
 defaults:
 - override /model: Llama-2-7b-hf # loads from model/Llama-2-7b-hf.yaml into the model attribute
 - override /trainer: GradAscent # loads from trainer/GradAscent.yaml into the trainer attribute
-- override /data: unlearn # loads from data/unlearn.yaml into the "data" attribute,, setting up data structures for loading datasets during unlearning
+- override /data: train_unlearn_right # loads from data/train_unlearn_right.yaml into the "data" attribute,, setting up data structures for loading datasets during unlearning
 - override /eval: muse # loads MUSE evaluation suite from eval/muse.yaml into the eval attribute 
 
 # define variables

@@ -3,8 +3,8 @@
 # dataset means, the global r_UV (reference - forget), norms / cosines and the linear separability (AUC along the difference of
 # means) of the pairs of splits. Writes activations.pt and activations_summary.json to the output dir, keeps the per-layer table in
 # the logs (`value_by_layer`) and has no `agg_value` of its own: `expose` publishes scalars of its `summary` as metrics
-# `<expose_prefix>_<key>`: for every AUC `auc_<A>_<B>` / `auc_group_<A>_<B>` (the seen / unseen pair is `<seen>_<unseen>`, the splits
-# joined by `_and_`) the `_max` over the layers, the layer of it `_argmax` and the value at `focus_layer` `_focus`.
+# `<expose_prefix>_<key>`: for every AUC `auc_<A>_<B>` / `auc_group_<A>_<B>` (the seen | unseen pair is always `auc_seen_unseen`, so the
+# name does not depend on which splits are in `seen` / `unseen`) the `_max` over the layers, the layer of it `_argmax` and the value at `focus_layer` `_focus`.
 # Read the note of activations_summary.json before interpreting an AUC: only the matched pair forget | neighbor, and the difference
 # of the SAME pair between two models, say something about knowledge.
 
@@ -65,7 +65,8 @@ loader_args:
 handler: activation_probe
 forget: forget # split name of the data to forget
 reference: neighbor # split name of the redirection target
-# sets pooled for the `seen | unseen` AUC. Defaults are for the FULL model; for a RETAIN model: seen [retain], unseen [forget, neighbor, holdout]
+# sets pooled for the `seen | unseen` AUC = the sets the model SHOULD treat as seen. Defaults: the FULL model (it saw forget + retain).
+# An UNLEARNED model (the goal: like the retain model) / a RETAIN model: seen [retain], unseen [forget, neighbor, holdout]
 seen: [forget, retain]
 unseen: [neighbor, holdout]
 forget_split: ${eval.tofu.forget_split} # checked against the r_uv.pt (r_uv_path)
@@ -86,5 +87,6 @@ expose_prefix: activation
 expose:
   - auc_forget_neighbor_max
   - auc_group_forget_neighbor_max
-  - auc_forget_and_retain_neighbor_and_holdout_max
+  - auc_seen_unseen_max
+  - auc_group_seen_unseen_max
   - r_uv_rel_norm_max

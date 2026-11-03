@@ -254,7 +254,7 @@ Example: a TOFU unlearning experiment configuration (from [`configs/experiment/u
 defaults: # load pre-defined configs for model, trainer, data format, datasets etc.
   - override /model: Llama-2-7b-chat-hf # from configs/model/Llama-2-7b-chat-hf.yaml
   - override /trainer: GradAscent # from configs/trainer/GradAscent.yaml
-  - override /data: unlearn # ...
+  - override /data: train_unlearn_right # ...
   - override /data/datasets@data.forget: TOFU_QA_forget
   - override /data/datasets@data.retain: TOFU_QA_retain
   - override /eval: tofu

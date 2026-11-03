@@ -63,10 +63,10 @@ def run_eval(assets: Path, out_root: Path, task: str, max_samples: str, extra=()
         'model.template_args.asst_start_tag="A: "', 'model.template_args.asst_end_tag=""',
         'model.template_args.system_prompt_with_special_tokens=""',
         f"paths.root_dir={out_root}", f"task_name={task}",
-        f"{metric('neighbor')}.data.train.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+        f"{metric('neighbor')}.data.eval.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
     ]
     for split in ("forget", "retain", "holdout"):
-        hf = f"{metric(split)}.data.train.dataset.args.hf_args"
+        hf = f"{metric(split)}.data.eval.dataset.args.hf_args"
         args += [f"{hf}.path=json", f"~{hf}.name", f"+{hf}.data_files={assets / 'data' / (split + '.json')}"]
     for split in ("forget", "retain", "holdout", "neighbor"):
         args += [f"{metric(split)}.generation_args.max_new_tokens=6", f"{metric(split)}.loader_args.max_samples={max_samples}"]
@@ -138,6 +138,19 @@ def test_activation_probe_takes_its_settings_from_an_r_uv_and_exposes_the_aucs(a
     assert main["summary"]["auc_forget_neighbor_max"] == max(v["auc[forget | neighbor]"] for v in main["value_by_layer"].values())
     assert 0.0 <= summary["activation_auc_forget_neighbor_max"] <= 1.0
     assert "activation_auc_group_forget_neighbor_max" not in summary, "2 authors: the group-wise AUC does not exist (None is not summarised)"
+    # the seen | unseen pair is published as `seen_unseen` whatever the splits are: the metric names do not depend on them
+    pair = "auc[forget+retain | neighbor+holdout]"
+    assert main["summary"]["auc_seen_unseen_max"] == max(v[pair] for v in main["value_by_layer"].values())
+    assert 0.0 <= summary["activation_auc_seen_unseen_max"] <= 1.0
+    out_unlearned = run_eval(assets, out_root, "act_unlearned", "8", [
+        f"{act}.r_uv_path={r_uv_path}", "eval.tofu.forget_split=" + saved["forget_split"],
+        f"{act}.seen=[retain]", f"{act}.unseen=[forget,neighbor,holdout]",
+    ])
+    main_unlearned = json.loads((out_unlearned / "TOFU_EVAL.json").read_text())["activation_probe"]
+    pair = "auc[retain | forget+neighbor+holdout]"
+    assert pair in next(iter(main_unlearned["value_by_layer"].values()))
+    assert main_unlearned["summary"]["auc_seen_unseen_max"] == max(v[pair] for v in main_unlearned["value_by_layer"].values())
+    assert "activation_auc_seen_unseen_max" in json.loads((out_unlearned / "TOFU_SUMMARY.json").read_text())
     assert json.loads((out / "activations_summary.json").read_text())["layers"].keys() == main["value_by_layer"].keys()
     probe_saved = torch.load(out / "activations.pt", weights_only=False)
     assert probe_saved["positions"] == saved["positions"] and probe_saved["layers"] == saved["layers"]
