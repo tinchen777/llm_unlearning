@@ -167,11 +167,24 @@ class TASRefusalScorer:
         return self.embedder is not None
 
     def semantic(self, texts: Sequence[str]) -> List[float]:
+        """The embedding channel of every text (0 for a blank one: an empty answer has nothing to embed). It is an auxiliary signal: if the
+        encoder fails on some input the channel is switched off (said once) instead of aborting the evaluation that called it."""
+        out = [0.0] * len(texts)
         if self.embedder is None:
-            return [0.0] * len(texts)
+            return out
+        idx = [i for i, t in enumerate(texts) if t.strip()]
+        if not idx:
+            return out
         lo, hi = self.band
-        cos = (self.embedder(list(texts)) @ self._reference.T).max(dim=1).values  # [n]
-        return ((cos - lo) / (hi - lo)).clamp(0.0, 1.0).tolist()
+        try:
+            cos = (self.embedder([texts[i] for i in idx]) @ self._reference.T).max(dim=1).values
+        except Exception as e:
+            logger.warning(f"The semantic channel of the TAS refusal score is off: the encoder failed ({type(e).__name__}: {str(e)[:120]}).")
+            self.embedder = None
+            return out
+        for i, value in zip(idx, ((cos - lo) / (hi - lo)).clamp(0.0, 1.0).tolist()):
+            out[i] = value
+        return out
 
     def score(self, texts: Sequence[str]) -> List[float]:
         texts = list(texts)

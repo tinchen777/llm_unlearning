@@ -21,4 +21,6 @@ retain_split: retain??
 output_dir: ${paths.output_dir}
 neighbor_split: neighbor??
 question_key: question
+# the retain model's probe (scripts/eval/baseline_probe.sh): the clean reference of the white-box detectability numbers (optional)
+probe_ref_path: ${paths.root_dir}/saves/eval/retain/${model.base_name}/${forget_split}/TOFU_EVAL.json
 batch_size: 8

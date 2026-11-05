@@ -48,7 +48,10 @@
   - LUNAR 单条回答的优势只有 0.30，但**按作者聚合后是 1.00**：一个作者 20 条里有 15% 拒答就足以把这个作者认出来，这正是 TAS 聚合证据的威力，所以 `entity_bb` 比 `bb` 更接近真实攻击。
   - baseline 这几个 checkpoint 基本没遗忘（`forget_quality` ≈ 0.003–0.007），BB 为 0 没有意义，要等它们真正遗忘后再比。
 - **发现并修复了一个已有的 bug**：文本指标的注册表把 `get_func_params(...)` 存成了字典（`all/required/optional`），`TextMetric` 遍历到的是这三个键而不是参数名，所以 `hallucination_rouge`、以及新加的 `tas_embedder` **从来没有传到函数里**（目前配置值恰好等于函数默认值 0.3，所以没造成数值错误）。已修，并加了测试。
-- 测试：新增 `tests/test_detectability.py`（9 个）、探针端到端、选层的端到端；完整测试结果见提交说明。
+- **完整测试发现并修复的问题**（第一次完整跑：97 通过、3 失败）：
+  - 语义通道遇到**空回答**会让编码器报错并中断整个评测（真实模型也可能输出空回答）。已改为：空白文本不进编码器（语义分 0），编码器在任何输入上出错时关闭语义通道并警告一次，不再中断评测；加了测试。
+  - 另两个失败是 `tests/test_unlearn_scripts.py` 还在期望旧的输出路径（我按你的要求改成 `saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT>` 时没更新测试），已更新，并加了"baseline 评测默认带 probe/UD、`PROBE=0` 关闭"的测试。
+- 测试：新增 `tests/test_detectability.py`（9 个）、探针端到端（含 `tas_refusal` / `ud_*` / `anom_auc` 的断言）、选层的端到端（默认关与 `ud_weight` 打开两种）。
 
 ## 下一步
 

@@ -13,14 +13,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def compose(method: str, env: str = ""):
     cmd = (
         f'{env} source scripts/unlearn/_common.sh; python src/train.py --config-name=unlearn $(method_args {method}) '
-        'model=${FULL_MODEL} "${SPLIT_ARGS[@]}" "${EXTRA_ARGS[@]}" task_name=$(task_name ' + method + ') --cfg job --resolve'
+        'model=${FULL_MODEL} "${SPLIT_ARGS[@]}" "${EXTRA_ARGS[@]}" task_name=$(task_name ' + method + ') '
+        'paths.output_dir=$(output_dir ' + method + ') --cfg job --resolve'
     )
     proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-1500:]
     return proc.stdout
 
 
-ENV_3B_FORGET05 = "export MODEL=Llama-3.2-3B-Instruct FORGET_SPLIT=forget05 HOLDOUT_SPLIT=holdout05 RETAIN_SPLIT=retain95;"
+ENV_3B_FORGET05 = ("export MODEL=Llama-3.2-3B-Instruct FORGET_SPLIT=forget05 HOLDOUT_SPLIT=holdout05 RETAIN_SPLIT=retain95 "
+                   "NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191;")
 
 
 def test_scripts_are_valid_shell():
@@ -31,7 +33,9 @@ def test_scripts_are_valid_shell():
 @pytest.mark.parametrize("method", ["SimNPO", "RMU"])
 def test_method_defaults_are_not_overridden(method):
     out = compose(method, ENV_3B_FORGET05)
-    assert "task_name: tofu_Llama-3.2-3B-Instruct_forget05/" + method in out
+    # grouped by method, then by model and forget set: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT>
+    assert f"task_name: {method}/tofu_Llama-3.2-3B-Instruct_forget05" in out
+    assert f"output_dir: saves/tofu_unlearn/{method}/tofu_Llama-3.2-3B-Instruct_forget05" in out
     assert "forget_split: forget05" in out and "retain_split: retain95" in out and "holdout_split: holdout05" in out
     assert "saves/eval/TOFU/tofu_Llama-3.2-3B-Instruct_retain95/TOFU_EVAL.json" in out
     if method == "SimNPO":
@@ -49,3 +53,10 @@ def test_tuning_overrides_go_into_the_trainer_args_and_the_folder_name():
     out = compose("GradDiff", "export LR=5e-6 EPOCHS=5;")
     assert "learning_rate: 5.0e-06" in out and "num_train_epochs: 5" in out
     assert "_lr5e-6_ep5" in out
+
+
+def test_the_probe_is_part_of_the_evaluation_of_the_baselines_unless_switched_off():
+    on = compose("GradDiff", ENV_3B_FORGET05)
+    assert "unlearning_detectability" in on and "activation_probe" in on and "neighbor_responses" in on and "author_offset: 191" in on
+    off = compose("GradDiff", ENV_3B_FORGET05 + " export PROBE=0;")
+    assert "unlearning_detectability" not in off and "activation_probe" not in off

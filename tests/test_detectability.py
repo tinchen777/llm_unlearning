@@ -52,6 +52,11 @@ def test_the_tas_scorer_takes_the_maximum_of_the_regexes_and_the_rescaled_simila
     scores = scorer.score(texts)
     assert scores[0] == 1.0 and 0.0 <= scores[1] <= 1.0  # the regexes win for the first one
     assert scorer.score([CANONICAL_REFUSALS[0]])[0] == 1.0  # a canonical refusal: cosine 1 -> clipped to 1
+    # a blank answer has nothing to embed (the tiny tokenizer gives 0 tokens for it); an encoder that fails on an input is switched off, not fatal
+    assert scorer.score([""])[0] == 0.0 and scorer.score(["", "I cannot help."]) == [0.0, 1.0]
+    broken = TASRefusalScorer(encoder)
+    broken.embedder = lambda texts: (_ for _ in ()).throw(RuntimeError("boom"))
+    assert broken.score(["some answer", "I'm sorry, I cannot help."]) == [0.0, 1.0] and not broken.has_semantic_channel
     # an encoder that cannot be loaded: regexes only, no exception
     assert not TASRefusalScorer("/no/such/encoder").has_semantic_channel
     assert TASRefusalScorer("/no/such/encoder").score(texts) == [1.0, 0.0]
