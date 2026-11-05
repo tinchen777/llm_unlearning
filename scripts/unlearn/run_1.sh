@@ -25,7 +25,7 @@ BASE_MODELS=(
 SPLIT_SETS=(
   "forget01 holdout01 retain99 neighbor01 199"
   "forget05 holdout05 retain95 neighbor05 191"
-  # "forget10 holdout10 retain90 neighbor10 181"
+  "forget10 holdout10 retain90 neighbor10 181"
 )
 
 failed=()
