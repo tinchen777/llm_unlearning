@@ -11,8 +11,12 @@
 # Output: saves/LUNAR/${TASK_NAME}/c${COEFF}_${MODE}/   (layer_selection.json, l<layer>[_cf]/model, ...)
 #         saves/eval/LUNAR/${TASK_NAME}_<tag>/          (TOFU_EVAL.json, ...)
 # Needs: python setup/setup_data.py --lunar (the reference set), and for forget quality / privleak the TOFU_EVAL.json of the retain model.
-# NOTE: LUNAR unlearns the first 20 QAs (one author) of the forget split by default (FORGET_HF_SPLIT); the TOFU forget metrics are those
-# of the whole split, so forget quality is only meaningful with FORGET_HF_SPLIT=train.
+# FORGET_HF_SPLIT: which part of the forget split LUNAR unlearns. LUNAR's own setting is ONE author (train[:20]); the TOFU forget metrics are
+# those of the WHOLE split (forget01 = 2 authors), so for a comparison with NEAR (which unlearns the whole forget split) use
+#   FORGET_HF_SPLIT=train bash scripts/LUNAR/single_run.sh 0
+# (the default task name then gets a `_train` suffix, so it does not overwrite the one-author run).
+# The edited model is evaluated with the SAME evaluation as NEAR (experiment=eval/tofu/probe: TOFU metrics + responses + activations +
+# detectability), so the two are comparable column by column.
 set -e
 cd "$(dirname "$0")/../.." || exit 1
 
@@ -21,7 +25,9 @@ MODEL=${MODEL:-Llama-3.2-1B-Instruct}         # base model; the target is the of
 FORGET_SPLIT=${FORGET_SPLIT:-forget01}
 RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
-FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train[:20]}      # train[:20] = one author; train = the whole forget split
+NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-neighbor01}        # only for the evaluation (the held-out neighbours: neighbor_*, probe, detectability)
+AUTHOR_OFFSET=${AUTHOR_OFFSET:-199}                 # author numbering of the forget rows = `author_id` of the neighbour csv (forget01: 199, forget05: 191)
+FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train[:20]}      # train[:20] = one author (LUNAR's setting); train = the whole forget split
 REF_DATASET=${REF_DATASET:-LUNAR/LUNAR_harmful}     # D_ref: LUNAR/LUNAR_harmful | LUNAR/LUNAR_unverified
 
 COEFF=${COEFF:-2.0}                           # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
@@ -40,7 +46,9 @@ EXTRA_EVAL=${EXTRA_EVAL:-}
 # TOFU_EVAL.json of the retain model: the reference of forget quality and privleak (None without it)
 RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
 
-TASK_NAME=${TASK_NAME:-single/lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")}
+HF_SUFFIX=""
+if [ "${FORGET_HF_SPLIT}" != "train[:20]" ]; then HF_SUFFIX="_${FORGET_HF_SPLIT//[^a-zA-Z0-9]/_}"; fi   # train -> _train: another run than the one-author default
+TASK_NAME=${TASK_NAME:-single/lunar_tofu_${MODEL}_${FORGET_SPLIT}${HF_SUFFIX}_$(basename "${REF_DATASET}")}
 # ===========================================================================================
 
 GPU_ID=${1:-0}
@@ -113,11 +121,17 @@ if has_stage 4; then
   LAYER=${LAYERS_EDITED%%,*}          # focus layer of the activation probe
   EDITED=${CONFIG_DIR}/l${LAYER_DIR}${CF}/model
   TAG=c$(printf "%g" "${COEFF}")_l${LAYER_DIR}_${MODE}${CF}
-  # the TOFU metrics of the edited model (forget quality, model utility, privleak, MIA, ...), as scripts/LUNAR/4_eval.sh
+  # ONE evaluation, the same as NEAR's: TOFU metrics + responses (forget / retain / holdout / held-out neighbours) + activations + detectability.
+  # An edited model should behave like the retain model: seen = [retain]. (LUNAR has no r_uv.pt of the NEAR kind: positions / layers / point
+  # of the probe are its defaults, those of the baselines.)
   run "[4] eval" python src/eval.py \
-    experiment=eval/tofu/default model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} \
-    forget_split=${FORGET_SPLIT} holdout_split=${HOLDOUT_SPLIT} retain_split=${RETAIN_SPLIT} \
+    experiment=eval/tofu/probe model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} \
+    forget_split=${FORGET_SPLIT} holdout_split=${HOLDOUT_SPLIT} retain_split=${RETAIN_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} \
     eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
+    eval.tofu.metrics.activation_probe.author_offset=${AUTHOR_OFFSET} \
+    eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
+    "eval.tofu.metrics.activation_probe.seen=[retain]" \
+    "eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]" \
     task_name=LUNAR/${TASK_NAME}_${TAG} ${EXTRA_EVAL}
 fi
 echo "################ done: stages ${STAGES} (${CONFIG_DIR}) ################"
