@@ -98,6 +98,9 @@ def main(cfg: TrackingConfig):
         coeff = float(pick("coeff", wd_cfg.get("coeff", None), up("coeff"), src))
         shift_mode = str(pick("shift_mode", wd_cfg.get("shift_mode", None), up("shift_mode"), src))
         ref_position = int(pick("ref_position", wd_cfg.get("ref_position", None), up("ref_position"), src))
+        include_answer = bool(wd_cfg.get("include_answer", False))
+        if include_answer and shift_mode != "all":
+            raise ValueError("wdown.include_answer needs shift_mode=all: the `eoi` positions are counted from the end of the prompt.")
 
         layers_cfg = wd_cfg.get("layers", "auto")
         if layers_cfg is None or layers_cfg == "auto":
@@ -187,13 +190,18 @@ def main(cfg: TrackingConfig):
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
 
-        # all forget samples (no subset)
-        forget_loader = split_data["forget"].loader(batch_size=wd_cfg["batch_size"], max_samples=None)
-        forget_tokens = collect_mlp_tokens(model, forget_loader, train_layers, shift_fn=shift_fn, desc="forget (+shift)")
+        # all forget samples (no subset). `include_answer`: the tokens of prompt AND answer (the evaluation, MIA and the answer
+        # probabilities, feeds the model the whole text), for the forget samples (shifted) and the retain ones (kept) alike
+        forget_loader = split_data["forget"].loader(batch_size=wd_cfg["batch_size"], max_samples=None)  # prompts: the effect check below
+        as_trained = (lambda data: data.with_generation_mode(False)) if include_answer else (lambda data: data)
+        forget_tokens = collect_mlp_tokens(
+            model, as_trained(split_data["forget"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None),
+            train_layers, shift_fn=shift_fn, desc="forget (+shift)"
+        )
         retain_parts = [
             collect_mlp_tokens(
                 model,
-                split_data[s].loader(
+                as_trained(split_data[s]).loader(
                     batch_size=wd_cfg["batch_size"],
                     max_samples=wd_cfg["retain_max_samples"]
                 ),
@@ -255,7 +263,7 @@ def main(cfg: TrackingConfig):
             "layer_selection_path": str(sel_path) if sel_path is not None else None, "r_uv_path": str(r_uv_path),
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
-            "num_tokens": num_tokens,
+            "include_answer": include_answer, "num_tokens": num_tokens,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

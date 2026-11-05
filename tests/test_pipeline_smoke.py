@@ -163,3 +163,36 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
                                  "probe.activations.max_act_samples=8", "task_name=smoke_probe"])
     probe_saved = torch.load(out_root / "saves" / "NEAR" / "smoke_probe" / "activations.pt", weights_only=False)
     assert probe_saved["positions"] == saved["positions"] and probe_saved["layers"] == saved["layers"]
+
+
+def test_near_w_down_can_train_on_the_answer_tokens_too(assets, tmp_path):
+    out_root = tmp_path / "out"
+    args = common_args(assets, out_root, "NEAR", "ans")
+    args += [f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+             "basic.author_offset=5", "basic.k=2", "basic.shift_mode=all", "ruv.ks=[1,2]", "ruv.batch_size=8",
+             "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
+             "wdown.epochs=2", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",
+             "wdown.retain_max_samples=16", "wdown.responses_splits=[forget]"]
+    run("NEAR/r_uv.py", args)
+    run("NEAR/select_layer.py", args)
+    out = out_root / "saves" / "NEAR" / "ans" / "k2_c1_all"
+    sel_path = out / "layer_selection.json"
+    layer = json.loads(sel_path.read_text())["selected_layer"]
+
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1]"])
+    prompt_only = json.loads((out / "l1" / "w_down_summary.json").read_text())
+    assert prompt_only["include_answer"] is False
+
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1]", "wdown.include_answer=true",
+                                  "task_name=ans_answer"])
+    with_answer = json.loads((out_root / "saves" / "NEAR" / "ans_answer" / "k2_c1_all" / "l1" / "w_down_summary.json").read_text())
+    assert with_answer["include_answer"] is True
+    # prompt + answer: more tokens than the prompt alone, for the forget samples and for the retain ones
+    assert with_answer["num_tokens"]["forget"] > prompt_only["num_tokens"]["forget"]
+    assert with_answer["num_tokens"]["retain"] > prompt_only["num_tokens"]["retain"]
+
+    # `eoi` counts its positions from the end of the prompt: not combinable with the answer tokens
+    bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/w_down.py"), *args, "basic.shift_mode=eoi",
+                          "wdown.include_answer=true", "wdown.layer_selection_path=" + str(sel_path), "wdown.layers=[1]",
+                          "wdown.shift_mode=eoi"], cwd=ROOT, capture_output=True, text=True, timeout=900)
+    assert bad.returncode != 0

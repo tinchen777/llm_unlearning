@@ -1,5 +1,6 @@
 
 from __future__ import annotations
+import copy
 import logging
 from pprint import pprint
 from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
@@ -75,6 +76,19 @@ class Data:
             sampling_seed=sampling_seed
         )
         return self
+
+    def with_generation_mode(self, generation_mode: bool) -> "Data":
+        """The same samples, tokenised as the prompt only (`generation_mode=True`) or as prompt + answer (`False`); same collator and
+        loader settings. Only for the QA datasets (they keep the tokenisation settings in `tok_kwargs`)."""
+        tok_kwargs = getattr(self.dataset, "tok_kwargs", None)
+        if tok_kwargs is None or "generation_mode" not in tok_kwargs:
+            raise TypeError(f"{type(self.dataset).__name__} has no `generation_mode`: cannot change what it tokenises.")
+        dataset = copy.copy(self.dataset)  # shares the raw data; the tokenised data is rebuilt on first use
+        dataset.tok_kwargs = {**tok_kwargs, "generation_mode": generation_mode}
+        dataset._data = None
+        other = Data(self.name, dataset, self.collator, self.split)
+        other.default_args = dict(self.default_args)
+        return other
 
     def loader(self, **loader_kwargs: Any):
         """Get a data loader for the dataset."""
