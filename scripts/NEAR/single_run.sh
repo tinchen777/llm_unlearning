@@ -40,6 +40,10 @@ EXTRA_EVAL=${EXTRA_EVAL:-}
 RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
 
 TASK_NAME=${TASK_NAME:-single/near_tofu_${MODEL}_${FORGET_SPLIT}}
+# where r_uv.pt and the layer selections (stages 1-2) live; give another TASK_NAME to write the W_down runs / evaluations of a variation (e.g.
+# EXTRA_W_DOWN="wdown.retain_weight=3") next to, not over, the ones of the same setting:
+#   SELECT_TASK_NAME=single/near_tofu_Llama-3.2-1B-Instruct_forget01 TASK_NAME=single/rw3 EXTRA_W_DOWN="wdown.retain_weight=3" ... "3 4"
+SELECT_TASK_NAME=${SELECT_TASK_NAME:-${TASK_NAME}}
 # ===========================================================================================
 
 GPU_ID=${1:-0}
@@ -57,7 +61,7 @@ TARGET_MODEL=tofu/tofu_${MODEL}_full
 SPLITS=(forget_split=${FORGET_SPLIT} neighbor_split=${NEIGHBOR_SPLIT} retain_split=${RETAIN_SPLIT} holdout_split=${HOLDOUT_SPLIT})
 # folders: same rules as config_dir() / run_dir() / w_down_tag() in scripts/NEAR/_common.sh
 CONFIG_DIR=saves/NEAR/${TASK_NAME}/k${K}_c$(printf "%g" "${COEFF}")_${MODE}
-SELECTION=${CONFIG_DIR}/layer_selection.json
+SELECTION=saves/NEAR/${SELECT_TASK_NAME}/k${K}_c$(printf "%g" "${COEFF}")_${MODE}/layer_selection.json
 CF=""; if [ "${SOLVER}" = closed_form ]; then CF=_cf; fi
 
 run() {   # run "<name>" cmd...
@@ -78,7 +82,7 @@ if has_stage 1; then
   run "[1] r_uv" python src/METHOD/NEAR/r_uv.py \
     experiment=unlearn/tofu/NEAR model=${TARGET_MODEL} "${SPLITS[@]}" \
     "ruv.ks=[${K}]" basic.author_offset=${AUTHOR_OFFSET} \
-    task_name=${TASK_NAME} ${EXTRA_R_UV}
+    task_name=${SELECT_TASK_NAME} ${EXTRA_R_UV}
 fi
 
 if has_stage 2; then
@@ -87,7 +91,7 @@ if has_stage 2; then
   run "[2] select_layer" python src/METHOD/NEAR/select_layer.py \
     experiment=unlearn/tofu/NEAR model=${TARGET_MODEL} "${SPLITS[@]}" \
     basic.k=${K} basic.coeff=${COEFF} basic.shift_mode=${MODE} ${LAYER_ARG} \
-    task_name=${TASK_NAME} ${EXTRA_SELECT}
+    task_name=${SELECT_TASK_NAME} ${EXTRA_SELECT}
 fi
 
 if has_stage 3; then
@@ -116,7 +120,7 @@ if has_stage 4; then
   run "[4] eval" python src/eval.py \
     experiment=eval/tofu/probe model=${TARGET_MODEL} model.pretrained.name_or_path=${EDITED} "${SPLITS[@]}" \
     eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
-    eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${TASK_NAME}/r_uv.pt \
+    eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${SELECT_TASK_NAME}/r_uv.pt \
     eval.tofu.metrics.activation_probe.focus_layer=${LAYER} \
     "eval.tofu.metrics.activation_probe.seen=[retain]" \
     "eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]" \

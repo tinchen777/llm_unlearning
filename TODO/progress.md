@@ -20,3 +20,24 @@
 K=5 COEFF=12 MODE=all W_DOWN_LAYER=[6] bash scripts/NEAR/single_run.sh 0 "3 4"
 
 - **待办**：LUNAR 用 `FORGET_HF_SPLIT=train` 重跑（与 NEAR 同一 40 条 forget）；baseline 对比等 bf16/加载问题澄清后再下结论；forget05 才是 NEAR 预期的优势场景。
+
+### 2 的结果：W_down 训练（2026-11-05，`all` 模式，K=5，forget01）
+W_down 训练正常（achieved_vs_intended 余弦 0.99、幅度比 0.82/0.87，bf16 舍入无影响）。**steering 的效果被 W_down 复现了，遗忘开始有效**：
+
+| | full | retain(官方) | NEAR 旧(eoi,c1,L11) | NEAR c12/L6 | NEAR c7/L9 | LUNAR(c2,L10,20QA) |
+|---|---|---|---|---|---|---|
+| forget_quality | 0.0068 | – | 0.0068 | 0.014 | **0.40** | 0.92 |
+| model_utility | 0.599 | 0.599 | 0.593 | 0.573 | 0.565 | 0.440 |
+| forget_Q_A_Prob | 0.90 | 0.165 | 0.89 | 0.54 | 0.42 | 0.18 |
+| forget_Q_A_ROUGE | 0.87 | 0.41 | 0.79 | 0.42 | 0.40 | 0.20 |
+| privleak | −100 | +5.9 | −100 | −89 | −75 | −6 |
+| mia_loss | 1.0 | 0.48 | 1.0 | 0.93 | 0.85 | 0.49 |
+| extraction_strength | 0.74 | 0.069 | 0.71 | 0.20 | 0.11 | 0.045 |
+| retain_rougeL | 0.80 | – | 0.80 | 0.64 | 0.64 | 0.40 |
+| holdout/neighbor ROUGE | | | 0.40/0.37 | 0.40/0.37 | 0.39/0.37 | 0.31/– |
+
+- 生成层面已接近 retain 模型：forget ROUGE 0.40~0.42（retain 参考 0.41），neighbor/holdout 不变，回答是通顺的编造（人名、父母职业、奖项被换掉），无拒答、无退化。utility 掉得比 LUNAR 少得多（0.57 vs 0.44）。
+- **仍有差距**：teacher-forced 概率和 MIA 还很高（forget_Q_A_Prob 0.42~0.54 vs 0.165；mia_loss 0.85~0.93 vs 0.5；privleak −75~−89 vs LUNAR −6）；retain 的生成质量下降（ROUGE 0.82→0.62）。
+- 假设：W_down 只用**提示词 token**（generation_mode，只有问题）训练，答案 token 的表征没被重定向，teacher-forced 评测和 MIA 看到的正是带答案的文本；retain 的损害来自 forget/retain 损失权重 1:1 的取舍。
+- 注意：`activation_auc_forget_neighbor` 编辑后在被编辑层及之后升到 0.73~0.93（之前 <0.5）。AUC 衡量"可分性"，编辑后的 forget 激活带有编辑痕迹，所以它**不能**当作"遗忘成功"的指标（要看被编辑层的均值距离/cos）。
+- **下一步**：（a）降低 retain 损害：`wdown.retain_weight` 1→3→10（用 `SELECT_TASK_NAME` 另存，不覆盖）；（b）让 forget/retain 的训练 token 包含答案 token（需改 w_down 数据：问题+答案，`all` 模式对答案 token 也加位移），目标是拉低 forget_Q_A_Prob 和 MIA；（c）系数 7~12、层 8~9 之间再细调；（d）LUNAR 用 `FORGET_HF_SPLIT=train` 重跑以同口径比较；（e）forget05 上验证。
