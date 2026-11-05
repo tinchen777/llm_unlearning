@@ -31,8 +31,10 @@ INCLUDE_ANSWER=${INCLUDE_ANSWER:-0}
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
-# where r_uv.pt and the layer selection of this setting are (stages 1-2 of the default run)
-export SELECT_TASK_NAME=${SELECT_TASK_NAME:-single/near_tofu_${MODEL}_${FORGET_SPLIT}}
+# where r_uv.pt and the layer selection of this setting are (stages 1-2 of the default run), and the folder prefix of the variants
+# (saves/NEAR/<OUT_PREFIX>/<variant>/, saves/eval/NEAR/<OUT_PREFIX>/<variant>_k.../): e.g. OUT_PREFIX=single_v2 for the runs of the new neighbour protocol
+OUT_PREFIX=${OUT_PREFIX:-single}
+export SELECT_TASK_NAME=${SELECT_TASK_NAME:-${OUT_PREFIX}/near_tofu_${MODEL}_${FORGET_SPLIT}}
 GPU_ID=${1:-0}
 
 for rw in "${RETAIN_WEIGHTS[@]}"; do
@@ -49,7 +51,7 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
   fi
   variant=${variant}_c${COEFF}_l${LAYER//,/-}
   echo "################  ${variant}: ${extra}  ################"
-  TASK_NAME=single/${variant} EXTRA_W_DOWN="${extra}" \
+  TASK_NAME=${OUT_PREFIX}/${variant} EXTRA_W_DOWN="${extra}" \
     K=${K} COEFF=${COEFF} MODE=all W_DOWN_LAYER="[${LAYER}]" \
     bash scripts/NEAR/single_run.sh "${GPU_ID}" "3 4" || exit $?
 done
