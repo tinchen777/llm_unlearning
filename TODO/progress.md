@@ -47,3 +47,12 @@ W_down 训练正常（achieved_vs_intended 余弦 0.99、幅度比 0.82/0.87，b
 - **原因**：`configs/eval/tofu.yaml` 里 `retain_split` 默认是 `retain??`（必须由实验配置给出）。`unlearn/tofu/default.yaml` 的 `eval.tofu` 里有 `retain_split: ${retain_split}`，`idk.yaml`（以及 `finetune/tofu/neighbor.yaml`）漏了，评测里要用 retain 的指标（model_utility 等）就读到了 `retain??`。
 - **解决方法**：两个文件补上 `retain_split: ${retain_split}`；新增测试 `test_tofu_experiments_hand_their_splits_to_the_evaluation`，检查所有 TOFU 实验的 `eval.tofu.{forget,retain,holdout}_split` 都来自各自的 `*_split`，不会再漏。
 - **结果**：待你重跑 IdkDPO 确认。
+
+## 4. 设计"遗忘可检测度"指标（Unlearning Detectability, UD）  （2026-11-05）
+- **动机**：论文 *Extracting Forgotten Prompts from Targeted Unlearned Models*（arXiv 2609.03662，只看到摘要级信息，arxiv.org 在本环境不可达）：黑盒攻击者用模板+候选实体池、少量查询，就能把 NPO / DPO / LUNAR 这类**靠拒答压制**的遗忘方法所遗忘的实体识别出来（摘要称实体 100% 准确、最多还原 95% 的被遗忘提示）。拒答本身就是"这里被遗忘过"的指纹。NEAR 的回答是通顺的编造，不拒答，理论上不留这个指纹。要用数据证明，需要一个衡量指标。
+- **指标**（越低越好，理想=retain 模型=0）：以官方 retain 模型作为"从没学过"的干净参照。
+  - 黑盒 BB = max(0, 异常回答率(forget) − 异常回答率(retain 模型的 forget))，异常=拒答 或 乱码/退化；再配 FPR（对 retain/holdout/neighbor 的异常率）。
+  - 白盒 WB = max_层 max(0, adv_模型(层) − adv_retain(层))，adv = 2·(AUC(forget|neighbor) − 0.5)，AUC 是现有的 activation_probe 的线性可分度（"oracle 探针"，是上界，不是真实攻击）。
+  - UD = max(BB, WB)；BB/WB 分别报告。必须和遗忘效果一起画成 Pareto（x=UD，y=遗忘程度），否则"什么都不做"得 0 分。
+- **原型结果**（1B，forget01，脚本 `scripts/NEAR/proto_detectability.py`）：BB：LUNAR=0.30（拒答 0.15+退化 0.17），NEAR 与其余=0。WB：NEAR c12/L6=0.82、c7/L9=0.77（层 10–11），baseline 0.25–0.38，full 自身 0.23。**NEAR 的白盒痕迹是目前最大的**——原因是用系数 7~12 的大位移（理想重定向是 1），编辑后的 forget 激活明显偏离。baseline 目前基本没遗忘（forget_quality≈0.003–0.007），所以其数值暂不可比。
+- **下一步**：把 BB/WB 做成 eval 的 metric（含无监督异常检测的白盒版本，更贴近真实攻击）；用它在 NEAR 里选（系数, 层），并考虑减小编辑痕迹的训练目标（匹配干净分布而非平移）。
