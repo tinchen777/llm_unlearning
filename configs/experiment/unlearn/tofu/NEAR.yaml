@@ -50,6 +50,8 @@ data:
         extra_keys:
           - author_id
           - neighbor_id
+          - qa_id
+          - source_question
           - train_rank
     collator:
       args:
@@ -57,6 +59,8 @@ data:
           - author_id
           - neighbor_id
           - train_rank
+          - qa_id
+          - source_question
   neighbor_heldout:
     dataset:
       name: TOFU_gen_QA_neighbor_heldout
@@ -218,6 +222,17 @@ wdown:
   multi_layer: same # several layers: `same` = every layer adds coeff * its whole r_UV; `increment` = every layer adds its share, so the total is coeff * r_UV of the LAST layer
   sequential: false # several layers: true = after each layer record the inputs of the next one again on the model edited so far (a layer repairs what the lower edits did to its input)
   include_answer: false # true: train on the tokens of prompt AND answer (shift_mode=all only), not on the prompt only
+  kl:
+    # stage 2 (src/METHOD/NEAR/kl_refine.py): after the local regression train the W_down of the edited layers TOGETHER through the whole model with
+    # forget_weight*rel_MSE(forget) + retain_weight*rel_MSE(retain) + weight*KL(original model on the neighbour prompt || edited model on the forget
+    # prompt, both given the neighbour answer prefix). Needs include_answer=true. The target is the ORIGINAL model only (no retain model).
+    enabled: false
+    steps: 100
+    lr: 2.0e-5
+    weight: 1.0 # weight of the KL term; 0 = only the end-to-end MSE (a control)
+    n_tokens: 8 # first answer tokens of the neighbour answer that the KL compares
+    batch_size: 8 # (forget prompt, neighbour answer) pairs per step; a forget / retain batch is wdown.batch_size
+    retain_max_samples: 128 # per retain split
   answer_coeff: null # include_answer only: factor on `coeff` for the ANSWER tokens (e.g. 0.5); null = the same shift as the prompt
   retain_splits: [retain, neighbor]
   retain_max_samples: 512

@@ -37,6 +37,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import copy
 import json
 import logging
 import torch
@@ -52,6 +53,7 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
+from METHOD.NEAR.kl_refine import build_kl_pairs, refine_w_down
 from METHOD._common.editing import layer_increments, train_w_down_layers
 from METHOD._common.lineage import check_r_uv_identity, model_name, pick, resolve_r_uv_path
 
@@ -119,6 +121,10 @@ def main(cfg: TrackingConfig):
         if multi_layer not in ("same", "increment"):
             raise ValueError(f"wdown.multi_layer must be `same` or `increment`, got `{multi_layer}`.")
         sequential = bool(wd_cfg.get("sequential", False))
+        kl_cfg = wd_cfg.get("kl", None) or {}
+        use_kl = bool(kl_cfg.get("enabled", False))
+        if use_kl and not include_answer:
+            raise ValueError("wdown.kl.enabled needs wdown.include_answer=true (the refinement trains on prompt + answer tokens).")
 
         if selection is not None:
             r_uv_path = resolve_r_uv_path(selection.get("r_uv_path"), Path(str(sel_path)))
@@ -163,6 +169,8 @@ def main(cfg: TrackingConfig):
     with step_logging(logger, "<2/3>", "model & tokenizer", mode="load", cfg=model_cfg):
         model, tokenizer = get_model_and_tokenizer(model_cfg)
         model.eval()
+        # the ORIGINAL model (frozen) = the target of the activations and of the KL of the refinement; taken before any edit
+        ref_model = copy.deepcopy(model).eval() if use_kl else None
     # 3. Load data
     with step_logging(logger, "<3/3>", "data", mode="load", cfg=cfg["data"], ensure_cfg=True) as data_cfg:
         split_data = SplitData(
@@ -255,6 +263,25 @@ def main(cfg: TrackingConfig):
             )
             for _l, w in new_weights.items():
                 apply_w_down(model, _l, w)
+        kl_history = None
+        if use_kl:
+            with step_logging(logger, "#3b", "end-to-end refinement with the KL term"):
+                groups = build_kl_pairs(
+                    split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
+                    qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
+                )
+                logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions")
+                retain_loaders = lambda: [b for s_ in wd_cfg["retain_splits"] for b in as_trained(split_data[s_]).loader(
+                    batch_size=wd_cfg["batch_size"], max_samples=int(kl_cfg["retain_max_samples"]))]
+                refined = refine_w_down(
+                    model, ref_model, tokenizer, train_layers, new_weights, make_forget_loader, retain_loaders, shift_fn, groups,
+                    kl_cfg, float(wd_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
+                )
+                new_weights, kl_history = refined["weights"], refined["history"]
+                for _l, w in new_weights.items():
+                    apply_w_down(model, _l, w)
+            del ref_model
+            torch.cuda.empty_cache()
         torch.save(
             {
                 "layers": train_layers, "k": k, "coeff": coeff,
@@ -298,6 +325,7 @@ def main(cfg: TrackingConfig):
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples")} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

@@ -29,6 +29,9 @@ LAYER=${LAYER:-9}
 read -r -a RETAIN_WEIGHTS <<< "${RETAIN_WEIGHTS:-3 10}"
 INCLUDE_ANSWER=${INCLUDE_ANSWER:-0}
 ANSWER_COEFF=${ANSWER_COEFF:-}            # only with INCLUDE_ANSWER=1: factor on COEFF for the answer tokens (e.g. 0.5); empty = same as the prompt
+KL_WEIGHT=${KL_WEIGHT:-}               # non-empty: stage 2 (end-to-end refinement with the KL term, needs INCLUDE_ANSWER=1), e.g. KL_WEIGHT=1; KL_STEPS / KL_LR optional
+KL_STEPS=${KL_STEPS:-}
+KL_LR=${KL_LR:-}
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -45,6 +48,12 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     variant=${variant}_ans
     extra="${extra} wdown.include_answer=true"
     if [ -n "${ANSWER_COEFF}" ]; then extra="${extra} wdown.answer_coeff=${ANSWER_COEFF}"; variant=${variant}_ac${ANSWER_COEFF}; fi
+  fi
+  if [ -n "${KL_WEIGHT}" ]; then
+    extra="${extra} wdown.kl.enabled=true wdown.kl.weight=${KL_WEIGHT}"
+    variant=${variant}_kl${KL_WEIGHT}
+    if [ -n "${KL_STEPS}" ]; then extra="${extra} wdown.kl.steps=${KL_STEPS}"; variant=${variant}_s${KL_STEPS}; fi
+    if [ -n "${KL_LR}" ]; then extra="${extra} wdown.kl.lr=${KL_LR}"; variant=${variant}_lr${KL_LR}; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"

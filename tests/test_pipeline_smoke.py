@@ -56,12 +56,14 @@ def make_assets(root: Path) -> Path:
         (data / f"{name}.json").write_text(json.dumps(qa(n, name)))
     (data / "ref.json").write_text(json.dumps([{"instruction": f"how to do bad things {sent(3)} ?"} for _ in range(12)]))
     with open(data / "neighbor.csv", "w", newline="") as f:  # neighbours of the 2 forget authors (numbered 5, 6): 2 train (rank 1, 2) + 1 heldout
-        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id", "split", "train_rank"])
+        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id", "split", "train_rank", "qa_id", "source_question"])
         w.writeheader()
+        forget_rows = json.loads((data / "forget.json").read_text())
         for author in (5, 6):
             for nb in range(3):
-                for _ in range(4):
+                for qa_id in range(4):
                     w.writerow({"question": f"nb {sent(4)} ?", "answer": sent(4) + " .", "author_id": author, "neighbor_id": nb,
+                                "qa_id": qa_id, "source_question": forget_rows[(author - 5) * 20 + qa_id]["question"],
                                 "split": "train" if nb < 2 else "heldout", "train_rank": nb + 1 if nb < 2 else -1})
     return root
 
@@ -267,3 +269,24 @@ def test_near_layer_selection_can_weigh_the_detectability_and_the_footprint(asse
     bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/select_layer.py"), *args,
                           "select.criterion=answer_logprob", "select.ud_weight=1.0"], cwd=ROOT, capture_output=True, text=True, timeout=900)
     assert bad.returncode != 0 and "ud_weight" in bad.stdout + bad.stderr
+
+
+def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
+    """Stage 2: the W_down of the edited layers are refined through the whole model with the KL term; the weights change and the
+    history is logged. A neighbour csv whose `source_question` does not match the forget split is an error."""
+    out_root = tmp_path / "out"
+    args = common_args(assets, out_root, "NEAR", "klr")
+    args += [f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+             "basic.author_offset=5", "basic.k=2", "basic.shift_mode=all", "ruv.ks=[1,2]", "ruv.batch_size=8",
+             "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
+             "wdown.epochs=2", "wdown.batch_size=8", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",
+             "wdown.retain_max_samples=16", "wdown.responses_splits=[forget]", "wdown.include_answer=true"]
+    run("NEAR/r_uv.py", args)
+    run("NEAR/select_layer.py", args)
+    sel_path = out_root / "saves" / "NEAR" / "klr" / "k2_c1_all" / "layer_selection.json"
+    kl = ["wdown.kl.enabled=true", "wdown.kl.steps=3", "wdown.kl.batch_size=4", "wdown.kl.n_tokens=3",
+          "wdown.kl.retain_max_samples=8"]
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl, "task_name=klr_on"])
+    summary = json.loads((out_root / "saves" / "NEAR" / "klr_on" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    assert summary["kl"]["steps"] == 3 and len(summary["kl"]["history"]) == 3
+    assert all(h["kl"] >= 0 for h in summary["kl"]["history"])
