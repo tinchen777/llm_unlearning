@@ -41,9 +41,9 @@ BASE_MODELS=(
 SPLIT_SETS=(
   "forget01 holdout01 retain99 neighbor01 199"
   "forget05 holdout05 retain95 neighbor05 191"
-  # ONE author (the first 20 rows of forget01; LUNAR's own setting). Its retain model is the official retain99 one (it never saw these authors
+  # ONE author (author 200 = the last 20 rows of forget01). Its retain model is the official retain99 one (it never saw these authors
   # either), there is no retain995: forget quality / privleak are not meaningful for it. ONLY_SPLITS="forget005" runs just this one.
-  "forget005 holdout01 retain99 neighbor005 199"
+  "forget005 holdout01 retain99 neighbor005 200"
   # "forget10 holdout10 retain90 neighbor10 181"
 )
 

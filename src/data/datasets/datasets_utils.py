@@ -14,25 +14,26 @@ if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
 
-# Splits that are PARTS of an official TOFU split (the HF dataset has no config of that name): {name: (official name, number of rows)}.
-# forget005 = ONE author = the first 20 rows of forget01 (TOFU stores the 20 QAs of an author contiguously; forget01 = authors 199, 200,
-# so forget005 = author 199; its `_perturbed` variant too). There is no retain995 model: whatever needs the retain model of the split
-# (forget quality, privleak) is not meaningful for it.
+# Splits that are PARTS of an official TOFU split (the HF dataset has no config of that name): {name: (official name, HF split slice)}.
+# The official splits are nested, the last authors of the 200 being the smallest set: forget10 = authors 181-200, forget05 = 191-200,
+# forget01 = 199-200 (rows 0-19 = author 199, rows 20-39 = author 200), so ONE author, forget005 = author 200 = the LAST 20 rows of forget01
+# (and of forget01_perturbed). There is no retain995 model: whatever needs the retain model of the split (forget quality, privleak) is
+# not meaningful for it.
 VIRTUAL_SPLITS: Dict[str, Any] = {
-    "forget005": ("forget01", 20),
-    "forget005_perturbed": ("forget01_perturbed", 20),
+    "forget005": ("forget01", "train[20:]"),
+    "forget005_perturbed": ("forget01_perturbed", "train[20:]"),
 }
 
 
 def resolve_virtual_split(name: Optional[str], split: Optional[str] = None):
-    """`(name, split)` as the HF dataset knows them: a virtual split (`VIRTUAL_SPLITS`) becomes its official split sliced to its first rows
-    (`train[:20]`); anything else is returned as it is. A virtual split cannot be sliced again."""
+    """`(name, split)` as the HF dataset knows them: a virtual split (`VIRTUAL_SPLITS`) becomes its official split sliced to its rows
+    (`train[20:]`); anything else is returned as it is. A virtual split cannot be sliced again."""
     if name not in VIRTUAL_SPLITS:
         return name, split
     official, rows = VIRTUAL_SPLITS[name]
     if split not in (None, "train"):
-        raise ValueError(f"`{name}` is already the first {rows} rows of `{official}`: its HF split must be `train`, got `{split}`.")
-    return official, f"train[:{rows}]"
+        raise ValueError(f"`{name}` is already {rows} of `{official}`: its HF split must be `train`, got `{split}`.")
+    return official, rows
 
 
 def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> HFDataset:

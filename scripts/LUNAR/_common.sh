@@ -6,8 +6,8 @@ MODEL=${MODEL:-Llama-3.2-1B-Instruct}       # base model name of the checkpoints
 FORGET_SPLIT=${FORGET_SPLIT:-forget01}
 RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
-# The HF split of the forget data: `train` = the whole FORGET_SPLIT (forget01 = 2 authors, forget005 = ONE author = the first 20 rows of
-# forget01, LUNAR's own setting). A part of it can still be taken with e.g. FORGET_HF_SPLIT="train[:20]".
+# The HF split of the forget data: `train` = the whole FORGET_SPLIT (forget01 = 2 authors, forget005 = ONE author = author 200 = the last 20
+# rows of forget01). A part of it can still be taken with e.g. FORGET_HF_SPLIT="train[:20]".
 FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train}
 # reference set D_ref: LUNAR/LUNAR_harmful (fine-tuned models) | LUNAR/LUNAR_unverified (fictitious entities)
 REF_DATASET=${REF_DATASET:-LUNAR/LUNAR_harmful}

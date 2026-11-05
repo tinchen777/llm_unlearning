@@ -11,8 +11,8 @@
 # Output: saves/LUNAR/${TASK_NAME}/c${COEFF}_${MODE}/   (layer_selection.json, l<layer>[_cf]/model, ...)
 #         saves/eval/LUNAR/${TASK_NAME}_<tag>/          (TOFU_EVAL.json, ...)
 # Needs: python setup/setup_data.py --lunar (the reference set), and for forget quality / privleak the TOFU_EVAL.json of the retain model.
-# The forget set is FORGET_SPLIT: forget01 (2 authors) = what NEAR unlearns, so the two are comparable; forget005 = ONE author (the first 20 rows
-# of forget01, LUNAR's own setting; there is no retain995 model, so forget quality / privleak of that run are not meaningful):
+# The forget set is FORGET_SPLIT: forget01 (2 authors) = what NEAR unlearns, so the two are comparable; forget005 = ONE author (author 200 = the last 20 rows
+# of forget01; there is no retain995 model, so forget quality / privleak of that run are not meaningful):
 #   bash scripts/LUNAR/single_run.sh 0                                   # forget01
 #   FORGET_SPLIT=forget005 bash scripts/LUNAR/single_run.sh 0            # one author, trained AND evaluated on forget005
 # The edited model is evaluated with the SAME evaluation as NEAR (experiment=eval/tofu/probe: TOFU metrics + responses + activations +
@@ -26,8 +26,8 @@ FORGET_SPLIT=${FORGET_SPLIT:-forget01}
 RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
 NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-${FORGET_SPLIT/forget/neighbor}}   # only for the evaluation (the held-out neighbours: neighbor_*, probe, detectability)
-case "${FORGET_SPLIT}" in forget05) _OFFSET=191 ;; forget10) _OFFSET=181 ;; *) _OFFSET=199 ;; esac
-AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}          # author numbering of the forget rows = `author_id` of the neighbour csv (forget01 / forget005: 199, forget05: 191, forget10: 181)
+case "${FORGET_SPLIT}" in forget005) _OFFSET=200 ;; forget05) _OFFSET=191 ;; forget10) _OFFSET=181 ;; *) _OFFSET=199 ;; esac
+AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}          # author numbering of the forget rows = `author_id` of the neighbour csv (forget01: 199 = its first author, forget005: 200 = its last author, forget05: 191, forget10: 181)
 FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train}           # the HF split of the forget data (all of FORGET_SPLIT)
 REF_DATASET=${REF_DATASET:-LUNAR/LUNAR_harmful}     # D_ref: LUNAR/LUNAR_harmful | LUNAR/LUNAR_unverified
 

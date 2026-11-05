@@ -20,8 +20,8 @@ FORGET_SPLIT=${FORGET_SPLIT:-forget01}
 NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-${FORGET_SPLIT/forget/neighbor}}   # forget01 -> neighbor01, forget005 -> neighbor005 (data/tofu/tofu_<split>.csv)
 RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
-case "${FORGET_SPLIT}" in forget05) _OFFSET=191 ;; forget10) _OFFSET=181 ;; *) _OFFSET=199 ;; esac
-AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}           # makes the author numbering of the forget rows equal to `author_id` of the neighbour csv (forget01: 199, forget05: 191, forget10: 181)
+case "${FORGET_SPLIT}" in forget005) _OFFSET=200 ;; forget05) _OFFSET=191 ;; forget10) _OFFSET=181 ;; *) _OFFSET=199 ;; esac
+AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}           # makes the author numbering of the forget rows equal to `author_id` of the neighbour csv (forget01: 199, forget005: 200, forget05: 191, forget10: 181)
 
 K=${K:-5}                                     # neighbours per author used as the reference
 COEFF=${COEFF:-1.0}                           # forget target = original MLP output + COEFF * r_UV

@@ -100,15 +100,15 @@ def test_tofu_experiments_hand_their_splits_to_the_evaluation():
                 assert cfg.eval.tofu[key] == value, f"{exp}: eval.tofu.{key} = {cfg.eval.tofu[key]!r}, not set from `{key}`"
 
 
-def test_forget005_is_the_first_author_of_forget01():
+def test_forget005_is_the_last_author_of_forget01():
     from data.datasets.datasets_utils import load_hf_dataset, resolve_virtual_split
 
-    assert resolve_virtual_split("forget005") == ("forget01", "train[:20]")
-    assert resolve_virtual_split("forget005", "train") == ("forget01", "train[:20]")
-    assert resolve_virtual_split("forget005_perturbed") == ("forget01_perturbed", "train[:20]")
+    assert resolve_virtual_split("forget005") == ("forget01", "train[20:]")  # author 200
+    assert resolve_virtual_split("forget005", "train") == ("forget01", "train[20:]")
+    assert resolve_virtual_split("forget005_perturbed") == ("forget01_perturbed", "train[20:]")
     assert resolve_virtual_split("forget01", "train") == ("forget01", "train")  # an official split is untouched
     assert resolve_virtual_split(None, None) == (None, None)
-    with pytest.raises(ValueError, match="already the first 20 rows"):
+    with pytest.raises(ValueError, match="already train\\[20:\\] of"):
         resolve_virtual_split("forget005", "train[:10]")
 
     import datasets
@@ -121,5 +121,5 @@ def test_forget005_is_the_first_author_of_forget01():
         load_hf_dataset("locuslab/TOFU", name="forget01", split="train")
     finally:
         datasets.load_dataset = original
-    assert seen == [("locuslab/TOFU", {"name": "forget01", "split": "train[:20]"}),
+    assert seen == [("locuslab/TOFU", {"name": "forget01", "split": "train[20:]"}),
                     ("locuslab/TOFU", {"name": "forget01", "split": "train"})]
