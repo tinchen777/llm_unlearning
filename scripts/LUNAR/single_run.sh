@@ -11,10 +11,10 @@
 # Output: saves/LUNAR/${TASK_NAME}/c${COEFF}_${MODE}/   (layer_selection.json, l<layer>[_cf]/model, ...)
 #         saves/eval/LUNAR/${TASK_NAME}_<tag>/          (TOFU_EVAL.json, ...)
 # Needs: python setup/setup_data.py --lunar (the reference set), and for forget quality / privleak the TOFU_EVAL.json of the retain model.
-# FORGET_HF_SPLIT: which part of the forget split LUNAR unlearns. LUNAR's own setting is ONE author (train[:20]); the TOFU forget metrics are
-# those of the WHOLE split (forget01 = 2 authors), so for a comparison with NEAR (which unlearns the whole forget split) use
-#   FORGET_HF_SPLIT=train bash scripts/LUNAR/single_run.sh 0
-# (the default task name then gets a `_train` suffix, so it does not overwrite the one-author run).
+# The forget set is FORGET_SPLIT: forget01 (2 authors) = what NEAR unlearns, so the two are comparable; forget005 = ONE author (the first 20 rows
+# of forget01, LUNAR's own setting; there is no retain995 model, so forget quality / privleak of that run are not meaningful):
+#   bash scripts/LUNAR/single_run.sh 0                                   # forget01
+#   FORGET_SPLIT=forget005 bash scripts/LUNAR/single_run.sh 0            # one author, trained AND evaluated on forget005
 # The edited model is evaluated with the SAME evaluation as NEAR (experiment=eval/tofu/probe: TOFU metrics + responses + activations +
 # detectability), so the two are comparable column by column.
 set -e
@@ -25,9 +25,10 @@ MODEL=${MODEL:-Llama-3.2-1B-Instruct}         # base model; the target is the of
 FORGET_SPLIT=${FORGET_SPLIT:-forget01}
 RETAIN_SPLIT=${RETAIN_SPLIT:-retain99}
 HOLDOUT_SPLIT=${HOLDOUT_SPLIT:-holdout01}
-NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-neighbor01}        # only for the evaluation (the held-out neighbours: neighbor_*, probe, detectability)
-AUTHOR_OFFSET=${AUTHOR_OFFSET:-199}                 # author numbering of the forget rows = `author_id` of the neighbour csv (forget01: 199, forget05: 191)
-FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train[:20]}      # train[:20] = one author (LUNAR's setting); train = the whole forget split
+NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT:-${FORGET_SPLIT/forget/neighbor}}   # only for the evaluation (the held-out neighbours: neighbor_*, probe, detectability)
+case "${FORGET_SPLIT}" in forget05) _OFFSET=191 ;; forget10) _OFFSET=181 ;; *) _OFFSET=199 ;; esac
+AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}          # author numbering of the forget rows = `author_id` of the neighbour csv (forget01 / forget005: 199, forget05: 191, forget10: 181)
+FORGET_HF_SPLIT=${FORGET_HF_SPLIT:-train}           # the HF split of the forget data (all of FORGET_SPLIT)
 REF_DATASET=${REF_DATASET:-LUNAR/LUNAR_harmful}     # D_ref: LUNAR/LUNAR_harmful | LUNAR/LUNAR_unverified
 
 COEFF=${COEFF:-2.0}                           # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)
@@ -46,9 +47,7 @@ EXTRA_EVAL=${EXTRA_EVAL:-}
 # TOFU_EVAL.json of the retain model: the reference of forget quality and privleak (None without it)
 RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
 
-HF_SUFFIX=""
-if [ "${FORGET_HF_SPLIT}" != "train[:20]" ]; then HF_SUFFIX="_${FORGET_HF_SPLIT//[^a-zA-Z0-9]/_}"; fi   # train -> _train: another run than the one-author default
-TASK_NAME=${TASK_NAME:-single/lunar_tofu_${MODEL}_${FORGET_SPLIT}${HF_SUFFIX}_$(basename "${REF_DATASET}")}
+TASK_NAME=${TASK_NAME:-single/lunar_tofu_${MODEL}_${FORGET_SPLIT}_$(basename "${REF_DATASET}")}
 # ===========================================================================================
 
 GPU_ID=${1:-0}

@@ -28,7 +28,7 @@ forget_split: forget01
 retain_split: retain99
 holdout_split: holdout01
 # LUNAR's TOFU experiments unlearn ONE author = the first 20 QAs of the forget split; "train" = the whole split.
-forget_hf_split: "train[:20]"
+forget_hf_split: "train" # the HF split of the forget data: all of `forget_split` (ONE author = forget005)
 
 data:
   forget:

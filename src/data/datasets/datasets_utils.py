@@ -14,7 +14,32 @@ if TYPE_CHECKING:
     from utils.config import TrackingConfig
 
 
+# Splits that are PARTS of an official TOFU split (the HF dataset has no config of that name): {name: (official name, number of rows)}.
+# forget005 = ONE author = the first 20 rows of forget01 (TOFU stores the 20 QAs of an author contiguously; forget01 = authors 199, 200,
+# so forget005 = author 199; its `_perturbed` variant too). There is no retain995 model: whatever needs the retain model of the split
+# (forget quality, privleak) is not meaningful for it.
+VIRTUAL_SPLITS: Dict[str, Any] = {
+    "forget005": ("forget01", 20),
+    "forget005_perturbed": ("forget01_perturbed", 20),
+}
+
+
+def resolve_virtual_split(name: Optional[str], split: Optional[str] = None):
+    """`(name, split)` as the HF dataset knows them: a virtual split (`VIRTUAL_SPLITS`) becomes its official split sliced to its first rows
+    (`train[:20]`); anything else is returned as it is. A virtual split cannot be sliced again."""
+    if name not in VIRTUAL_SPLITS:
+        return name, split
+    official, rows = VIRTUAL_SPLITS[name]
+    if split not in (None, "train"):
+        raise ValueError(f"`{name}` is already the first {rows} rows of `{official}`: its HF split must be `train`, got `{split}`.")
+    return official, f"train[:{rows}]"
+
+
 def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> HFDataset:
+    if "name" in kwargs:
+        kwargs["name"], resolved_split = resolve_virtual_split(kwargs["name"], kwargs.get("split"))
+        if resolved_split is not None:
+            kwargs["split"] = resolved_split
     try:
         dataset = datasets.load_dataset(path, **kwargs)
         if add_index:

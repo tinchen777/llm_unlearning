@@ -6,6 +6,7 @@
 #
 #   bash scripts/eval/baseline_probe.sh [GPU_ID]
 #   KINDS="full" bash scripts/eval/baseline_probe.sh 0       # only some kinds
+#   ONLY_SPLITS="forget005 forget01" bash scripts/eval/baseline_probe.sh 0   # only some forget sets
 #   DRY_RUN=1 bash scripts/eval/baseline_probe.sh            # only print what would run
 #   SKIP_EXISTING=1 bash scripts/eval/baseline_probe.sh      # skip the runs that already have a TOFU_SUMMARY.json
 #   CONTINUE_ON_ERROR=1 bash scripts/eval/baseline_probe.sh  # report the failures at the end instead of stopping
@@ -40,6 +41,9 @@ BASE_MODELS=(
 SPLIT_SETS=(
   "forget01 holdout01 retain99 neighbor01 199"
   "forget05 holdout05 retain95 neighbor05 191"
+  # ONE author (the first 20 rows of forget01; LUNAR's own setting). Its retain model is the official retain99 one (it never saw these authors
+  # either), there is no retain995: forget quality / privleak are not meaningful for it. ONLY_SPLITS="forget005" runs just this one.
+  "forget005 holdout01 retain99 neighbor005 199"
   # "forget10 holdout10 retain90 neighbor10 181"
 )
 
@@ -49,6 +53,7 @@ failed=()
 for base in "${BASE_MODELS[@]}"; do
   for split in "${SPLIT_SETS[@]}"; do
     read -r forget holdout retain neighbor offset <<< "${split}"
+    if [ -n "${ONLY_SPLITS}" ] && [[ " ${ONLY_SPLITS} " != *" ${forget} "* ]]; then continue; fi
     # TOFU_EVAL.json of the retain model of this split: the reference of forget quality / privleak
     retain_logs=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${base}_${retain}/TOFU_EVAL.json}
     for kind in "${KINDS[@]}"; do

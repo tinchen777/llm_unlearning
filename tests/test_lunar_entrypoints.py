@@ -38,6 +38,7 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     """The shell scripts pass "${SPLIT_ARGS[@]}" of _common.sh: `forget_hf_split=train[:20]` UNQUOTED is rejected by Hydra
     ("mismatched input '[' expecting <EOF>"), so the value must reach the script quoted. Run the same call as the scripts."""
     cmd = (
+        f"export FORGET_HF_SPLIT='train[:20]'; "  # a SLICE of the forget split: the value that needs the quotes
         f'source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/{script}.py experiment=unlearn/tofu/LUNAR '
         'model=${TARGET_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.dataset=${REF_DATASET}" '
         'task_name=${TASK_NAME} --cfg job'
@@ -45,6 +46,18 @@ def test_split_overrides_of_the_shell_scripts_are_valid_hydra_overrides(script):
     proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
     assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-1500:]
     assert "forget_hf_split: train[:20]" in proc.stdout
+
+
+def test_the_whole_forget_split_is_the_default_and_forget005_is_one_author():
+    for split in ("forget01", "forget005"):
+        cmd = (
+            f'export FORGET_SPLIT={split}; source scripts/LUNAR/_common.sh; python src/METHOD/LUNAR/r_uv.py experiment=unlearn/tofu/LUNAR '
+            'model=${TARGET_MODEL} "${SPLIT_ARGS[@]}" "data/datasets@data.ref.dataset=${REF_DATASET}" task_name=${TASK_NAME} --cfg job'
+        )
+        proc = subprocess.run(["bash", "-c", cmd], cwd=ROOT, capture_output=True, text=True, timeout=300)
+        assert proc.returncode == 0, proc.stdout[-500:] + proc.stderr[-1500:]
+        assert f"forget_split: {split}" in proc.stdout and "forget_hf_split: train\n" in proc.stdout
+        assert f"lunar_tofu_Llama-3.2-1B-Instruct_{split}_LUNAR_harmful" in proc.stdout  # no `_train` suffix
 
 
 @pytest.mark.parametrize("coeff, solver", [("1.0", "adam"), ("2.5", "closed_form")])
