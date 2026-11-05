@@ -41,3 +41,9 @@ W_down 训练正常（achieved_vs_intended 余弦 0.99、幅度比 0.82/0.87，b
 - 假设：W_down 只用**提示词 token**（generation_mode，只有问题）训练，答案 token 的表征没被重定向，teacher-forced 评测和 MIA 看到的正是带答案的文本；retain 的损害来自 forget/retain 损失权重 1:1 的取舍。
 - 注意：`activation_auc_forget_neighbor` 编辑后在被编辑层及之后升到 0.73~0.93（之前 <0.5）。AUC 衡量"可分性"，编辑后的 forget 激活带有编辑痕迹，所以它**不能**当作"遗忘成功"的指标（要看被编辑层的均值距离/cos）。
 - **下一步**：（a）降低 retain 损害：`wdown.retain_weight` 1→3→10（用 `SELECT_TASK_NAME` 另存，不覆盖）；（b）让 forget/retain 的训练 token 包含答案 token（需改 w_down 数据：问题+答案，`all` 模式对答案 token 也加位移），目标是拉低 forget_Q_A_Prob 和 MIA；（c）系数 7~12、层 8~9 之间再细调；（d）LUNAR 用 `FORGET_HF_SPLIT=train` 重跑以同口径比较；（e）forget05 上验证。
+
+## 3. IdkDPO baseline 报错 `Bad characters ... 'retain??'`  （2026-11-05）
+- **问题**：`scripts/unlearn` 跑到 IdkDPO（`experiment=unlearn/tofu/idk`）时，评测加载 `locuslab/TOFU` 的 split 名是字面量 `retain??`。
+- **原因**：`configs/eval/tofu.yaml` 里 `retain_split` 默认是 `retain??`（必须由实验配置给出）。`unlearn/tofu/default.yaml` 的 `eval.tofu` 里有 `retain_split: ${retain_split}`，`idk.yaml`（以及 `finetune/tofu/neighbor.yaml`）漏了，评测里要用 retain 的指标（model_utility 等）就读到了 `retain??`。
+- **解决方法**：两个文件补上 `retain_split: ${retain_split}`；新增测试 `test_tofu_experiments_hand_their_splits_to_the_evaluation`，检查所有 TOFU 实验的 `eval.tofu.{forget,retain,holdout}_split` 都来自各自的 `*_split`，不会再漏。
+- **结果**：待你重跑 IdkDPO 确认。

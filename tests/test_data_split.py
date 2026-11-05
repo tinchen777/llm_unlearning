@@ -74,3 +74,27 @@ def test_every_experiment_config_composes_with_one_dataset_per_split():
         cfg = compose_cfg(name, [f"experiment={exp}"] + required)
         for split, split_cfg in cfg.get("data", {}).items():
             assert "dataset" in split_cfg and "datasets" not in split_cfg, f"{exp}: data.{split} must hold ONE dataset"
+
+
+def test_tofu_experiments_hand_their_splits_to_the_evaluation():
+    """`eval.tofu.<x>_split` default to `<x>??` (= must be given): every experiment with a TOFU evaluation has to set them from its own
+    `<x>_split`, else the evaluation tries to load the split `retain??` (seen with unlearn/tofu/idk)."""
+    import glob
+    splits = {"forget_split": "forget05", "retain_split": "retain95", "holdout_split": "holdout05"}
+    for path in sorted(glob.glob(str(ROOT / "configs" / "experiment" / "**" / "*.yaml"), recursive=True)):
+        exp = path[len(str(ROOT / "configs" / "experiment")) + 1:-5]
+        kind = exp.split("/")[0]
+        if "tofu" not in exp or kind not in ("unlearn", "finetune", "eval"):
+            continue
+        required = ["model=tofu/tofu_Llama-3.2-1B-Instruct_full"]
+        if kind in ("unlearn", "finetune"):
+            required.append("trainer=GradAscent" if kind == "unlearn" else "trainer=finetune")
+        name = "generate" if exp.startswith(("unlearn/tofu/NEAR", "unlearn/tofu/LUNAR")) else kind
+        cfg = compose_cfg(name, [f"experiment={exp}"] + required)
+        if "eval" not in cfg or "tofu" not in cfg.eval:
+            continue
+        given = [f"{key}={value}" for key, value in splits.items() if key in cfg]
+        cfg = compose_cfg(name, [f"experiment={exp}"] + required + given)
+        for key, value in splits.items():
+            if key in cfg.eval.tofu:
+                assert cfg.eval.tofu[key] == value, f"{exp}: eval.tofu.{key} = {cfg.eval.tofu[key]!r}, not set from `{key}`"
