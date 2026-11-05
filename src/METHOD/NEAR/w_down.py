@@ -99,6 +99,10 @@ def main(cfg: TrackingConfig):
         shift_mode = str(pick("shift_mode", wd_cfg.get("shift_mode", None), up("shift_mode"), src))
         ref_position = int(pick("ref_position", wd_cfg.get("ref_position", None), up("ref_position"), src))
         include_answer = bool(wd_cfg.get("include_answer", False))
+        answer_coeff = wd_cfg.get("answer_coeff", None)  # null: the answer tokens get the same shift as the prompt; else the factor on `coeff` there
+        answer_scale = 1.0 if answer_coeff is None else float(answer_coeff)
+        if answer_scale != 1.0 and not include_answer:
+            raise ValueError("wdown.answer_coeff needs wdown.include_answer=true.")
         if include_answer and shift_mode != "all":
             raise ValueError("wdown.include_answer needs shift_mode=all: the `eoi` positions are counted from the end of the prompt.")
 
@@ -201,7 +205,11 @@ def main(cfg: TrackingConfig):
         def shift_fn(batch, layer, attention_mask):
             authors = forget_authors(batch["index"], qa_per_author, author_offset)
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
-            return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
+            shift = coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
+            if answer_scale != 1.0:  # labels are aligned with input_ids and the prompt is masked (-100): label != -100 = answer token
+                is_answer = (batch["labels"] != -100).to(shift.device).unsqueeze(-1)
+                shift = torch.where(is_answer, answer_scale * shift, shift)
+            return shift
 
         # all forget samples (no subset). `include_answer`: the tokens of prompt AND answer (the evaluation, MIA and the answer
         # probabilities, feeds the model the whole text), for the forget samples (shifted) and the retain ones (kept) alike
@@ -289,7 +297,7 @@ def main(cfg: TrackingConfig):
             "layer_selection_path": str(sel_path) if sel_path is not None else None, "r_uv_path": str(r_uv_path),
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
-            "include_answer": include_answer, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
+            "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

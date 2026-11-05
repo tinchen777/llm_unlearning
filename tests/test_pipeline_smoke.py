@@ -197,6 +197,13 @@ def test_near_w_down_can_train_on_the_answer_tokens_too(assets, tmp_path):
     assert with_answer["num_tokens"]["forget"] > prompt_only["num_tokens"]["forget"]
     assert with_answer["num_tokens"]["retain"] > prompt_only["num_tokens"]["retain"]
 
+    # answer_coeff scales only the answer tokens of the forget samples (the same tokens are recorded)
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1]", "wdown.include_answer=true",
+                                  "wdown.answer_coeff=0.5", "task_name=ans_half"])
+    half = json.loads((out_root / "saves" / "NEAR" / "ans_half" / "k2_c1_all" / "l1" / "w_down_summary.json").read_text())
+    assert half["answer_coeff"] == 0.5 and with_answer["answer_coeff"] == 1.0
+    assert half["num_tokens"] == with_answer["num_tokens"]
+
     # `eoi` counts its positions from the end of the prompt: not combinable with the answer tokens
     bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/w_down.py"), *args, "basic.shift_mode=eoi",
                           "wdown.include_answer=true", "wdown.layer_selection_path=" + str(sel_path), "wdown.layers=[1]",
