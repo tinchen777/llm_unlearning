@@ -24,12 +24,13 @@ SPLIT_ARGS=(
 
 # PROBE=1 (default): the evaluation the trainer runs at the start and after every epoch also has the NEAR probe, so the baselines
 # are comparable with NEAR / LUNAR (scripts/NEAR/4_eval.sh): responses of the neighbour questions (neighbor_*) and the activations
-# (activation_*: AUCs of forget | neighbor, seen | unseen, ...). A baseline unlearns towards the retain model: seen = [retain].
+# (activation_*: AUCs of forget | neighbor, seen | unseen, ...) and the unlearning detectability (ud_*: can an observer tell what was
+# unlearned, from the answers (TAS refusal score) and the activations; the retain model's probe saves/eval/retain/<MODEL>/<FORGET_SPLIT> is the clean reference). A baseline unlearns towards the retain model: seen = [retain].
 # PROBE=0: only the TOFU metrics (+ forget / retain / holdout responses), faster (the probe costs a few forward passes per epoch).
 PROBE=${PROBE:-1}
 if [ "${PROBE}" = 1 ]; then
   SPLIT_ARGS+=(
-    "+eval/tofu_metrics=[neighbor_responses,activation_probe]"
+    "+eval/tofu_metrics=[neighbor_responses,activation_probe,unlearning_detectability]"
     "+eval.tofu.neighbor_split=${NEIGHBOR_SPLIT}"
     "eval.tofu.metrics.activation_probe.author_offset=${AUTHOR_OFFSET}"
     "eval.tofu.metrics.activation_probe.seen=[retain]"

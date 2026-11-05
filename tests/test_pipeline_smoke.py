@@ -143,6 +143,11 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     selection = json.loads((out / "k2_c1_eoi" / "layer_selection.json").read_text())
     assert selection["selected_layer"] in range(4)
     assert all((out / "k2_c1_eoi" / f"responses_steer_l{l}.json").exists() for l in range(4))
+    # the detectability of the steered answers and the footprint of the shift are recorded for every layer (not used by default)
+    assert all({"ud", "ud_tas", "footprint", "selection_score"} <= set(v) and 0.0 <= v["ud"] <= 1.0 and v["footprint"] > 0
+               for v in selection["per_layer"].values())
+    assert selection["ud_weight"] == 0.0 and selection["max_ud"] is None
+    assert all(abs(v["selection_score"] - v["unseen_gap"]) < 1e-12 for v in selection["per_layer"].values())  # off: the old criterion
 
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={out / 'k2_c1_eoi' / 'layer_selection.json'}"])
     check_run_folder(out / "k2_c1_eoi" / f"l{selection['selected_layer']}", ["forget", "neighbor", "retain", "holdout"])
@@ -235,3 +240,22 @@ def test_near_w_down_edits_several_layers_with_shares_of_the_shift(assets, tmp_p
                           f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.multi_layer=nonsense"],
                          cwd=ROOT, capture_output=True, text=True, timeout=900)
     assert bad.returncode != 0 and "multi_layer" in bad.stdout + bad.stderr
+
+
+def test_near_layer_selection_can_weigh_the_detectability_and_the_footprint(assets, tmp_path):
+    out_root = tmp_path / "out"
+    args = common_args(assets, out_root, "NEAR", "udsel") + [
+        f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+        "basic.author_offset=5", "basic.k=2", "basic.shift_mode=all", "ruv.ks=[1,2]", "ruv.batch_size=8",
+        "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null"]
+    run("NEAR/r_uv.py", args)
+    run("NEAR/select_layer.py", args + ["select.ud_weight=1.0", "select.footprint_weight=0.5", "select.max_ud=1.0"])
+    sel = json.loads((out_root / "saves" / "NEAR" / "udsel" / "k2_c1_all" / "layer_selection.json").read_text())
+    assert sel["ud_weight"] == 1.0 and sel["footprint_weight"] == 0.5 and sel["max_ud"] == 1.0
+    per_layer = sel["per_layer"]
+    for v in per_layer.values():
+        assert abs(v["selection_score"] - (v["unseen_gap"] + v["ud"] + 0.5 * v["footprint"])) < 1e-9
+    assert sel["selected_layer"] == min(sel["ranking"], key=lambda l: per_layer[str(l)]["selection_score"])
+    bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/select_layer.py"), *args,
+                          "select.criterion=answer_logprob", "select.ud_weight=1.0"], cwd=ROOT, capture_output=True, text=True, timeout=900)
+    assert bad.returncode != 0 and "ud_weight" in bad.stdout + bad.stderr

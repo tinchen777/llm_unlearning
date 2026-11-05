@@ -32,7 +32,9 @@ ACTIVATION_NOTE = (
     "sets about different authors, whatever the model. Use (1) only matched pairs: forget | neighbour "
     "(neighbours are rewrites of the forget questions) and (2) the difference of the SAME pair between "
     "two models, e.g. full - retain (src/METHOD/NEAR/neighbor_compare.py): content effects cancel, knowledge "
-    "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||."
+    "effects remain. `r_uv_rel_norm` = ||r_UV|| / ||mean forget activation||. `anom_auc[forget | benign]`: how well the distance to the "
+    "benign prompts (Mahalanobis, no labels) separates the forget prompts from held-out benign ones, an observer's outlier detector; "
+    "compare it with the same number of a model that never saw the forget data."
 )
 
 
@@ -123,6 +125,34 @@ def mean_diff_auc(
     return sum(scores) / folds
 
 
+def mahalanobis_auc(
+    target: torch.Tensor,
+    benign: torch.Tensor,
+    n_components: int = 16,
+    folds: int = 2,
+    seed: int = 0,
+) -> Optional[float]:
+    """Unsupervised outlier detection: how well does the distance of an activation to the BENIGN activations (Mahalanobis in the top
+    principal components, fitted on benign samples only) separate the `target` samples [n, d] from held-out benign ones [m, d]?
+    AUC of the distance, `folds`-fold cross-fitted over the benign samples (0.5 = the targets are not outliers). `None` when there are
+    too few samples."""
+    if len(target) < 1 or len(benign) < 2 * folds:
+        return None
+    t, b = target.double(), benign.double()
+    fold = torch.randperm(len(b), generator=torch.Generator().manual_seed(seed)) % folds
+    values = []
+    for f in range(folds):
+        train, test = b[fold != f], b[fold == f]
+        mu = train.mean(0)
+        _, sing, vh = torch.linalg.svd(train - mu, full_matrices=False)
+        k = max(1, min(n_components, len(train) - 1, vh.shape[0]))
+        comps = vh[:k]
+        var = (sing[:k] ** 2 / max(len(train) - 1, 1)).clamp(min=1e-12)
+        distance = lambda x: (((x - mu) @ comps.T) ** 2 / var).sum(dim=1)
+        values.append(auc(distance(t), distance(test)))
+    return sum(values) / len(values)
+
+
 def unlearning_vector(reference_mean: torch.Tensor, forget_mean: torch.Tensor) -> torch.Tensor:
     """LUNAR unlearning vector: r_UV = mean(a | D_ref) - mean(a | D_forget), per position/layer."""
     if reference_mean.shape != forget_mean.shape:
@@ -174,9 +204,14 @@ def analyze_activations(
     qa_per_author: int,
     author_offset: int,
     seed: int = 0,
+    anomaly_target: Optional[str] = None,
+    anomaly_benign: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """Per-sample activations of every split of `split_data` (an `ActivationCollector`, loaders already configured), then the
     dataset means, the global r_UV (`reference` - `forget`) and the per-layer diagnostics.
+
+    `anomaly_target` / `anomaly_benign`: split names; per layer `anom_auc[<target> | benign]` = `mahalanobis_auc` of the target against the
+    benign splits (an observer who knows nothing but what ordinary prompts look like).
 
     Returns `means`, `r_uv`, `per_layer` (`{layer: {name: value}}`), `num_samples`, `num_groups`, `forget`, `reference`,
     `seen_unseen` (the name of the seen | unseen pair in `per_layer`, `None` if a side is empty).
@@ -206,6 +241,8 @@ def analyze_activations(
         except ValueError:  # fewer groups than needed (forget01 has 2 authors): said once per pair below
             return None
 
+    benign_splits = [b for b in anomaly_benign if b in pooled and b != anomaly_target]
+    use_anomaly = anomaly_target in pooled and bool(benign_splits)
     per_layer: Dict[str, Dict[str, Any]] = {}
     for i, layer in enumerate(act_collector.layers):
         cat = lambda names: torch.cat([pooled[s][:, i] for s in names])
@@ -222,6 +259,8 @@ def analyze_activations(
             },
             **{f"auc[{name}]": mean_diff_auc(cat(a), cat(b), seed=seed) for name, a, b in pairs},
             **{f"auc_group[{name}]": group_auc(cat(a), cat(b), cat_groups(a), cat_groups(b)) for name, a, b in pairs},
+            **({f"anom_auc[{anomaly_target} | benign]": mahalanobis_auc(pooled[anomaly_target][:, i], cat(benign_splits), seed=seed)}
+               if use_anomaly else {}),
         }
     for name, a, b in pairs:
         if all(v[f"auc_group[{name}]"] is None for v in per_layer.values()):
@@ -254,7 +293,7 @@ def _scalar_name(key: str, seen_unseen: Optional[str] = None) -> Optional[str]:
     """`auc[forget | neighbor]` -> `auc_forget_neighbor`, `auc_group[forget+retain | neighbor+holdout]` -> `auc_group_...`;
     the seen | unseen pair (`seen_unseen`: its name in `per_layer`) is always `auc_seen_unseen` / `auc_group_seen_unseen`, whatever
     the splits in `seen` / `unseen` are, so the metric names do not change with them."""
-    if not key.startswith(("auc[", "auc_group[")):
+    if not key.startswith(("auc[", "auc_group[", "anom_auc[")):
         return None
     head, name = key[:-1].split("[", 1)
     if name == seen_unseen:

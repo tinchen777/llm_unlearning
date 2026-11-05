@@ -43,7 +43,7 @@ SPLIT_SETS=(
   # "forget10 holdout10 retain90 neighbor10 181"
 )
 
-read -r -a KINDS <<< "${KINDS:-full retain}"
+read -r -a KINDS <<< "${KINDS:-retain full}"   # retain first: its probe is the clean reference of the detectability numbers of the others
 
 failed=()
 for base in "${BASE_MODELS[@]}"; do

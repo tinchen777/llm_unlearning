@@ -81,6 +81,8 @@ qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous -> author = row
 author_offset: 0 # must make that author numbering equal to `author_id` of the neighbour csv
 seed: ${seed}
 
+anomaly_target: forget # unsupervised outlier score (Mahalanobis distance to the benign splits) of this split, per layer: `anom_auc[forget | benign]`
+anomaly_benign: [retain, holdout] # the splits an observer knows as ordinary prompts; null target: off
 focus_layer: null # the layer W_down was edited at: its AUCs are published as `<name>_focus`
 
 expose_prefix: activation
@@ -90,3 +92,4 @@ expose:
   - auc_seen_unseen_max
   - auc_group_seen_unseen_max
   - r_uv_rel_norm_max
+  - anom_auc_forget_benign_max

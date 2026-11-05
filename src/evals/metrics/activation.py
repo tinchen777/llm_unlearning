@@ -37,6 +37,8 @@ def activation_probe(
     r_uv_path: Optional[str],
     focus_layer: Optional[int],
     seed: int,
+    anomaly_target: Optional[str] = None,
+    anomaly_benign: Sequence[str] = (),
     **kwargs
 ):
     """Per-layer activations of the model at the end-of-instruction tokens on the splits of `data`: dataset means, the global
@@ -44,6 +46,8 @@ def activation_probe(
 
     - `r_uv_path`: positions / layers / point / author numbering are read from that `r_uv.pt` (the probe of an edited model,
       comparable with the run that wrote it) and its forget split / rows are checked; `null`: those of the config.
+    - `anomaly_target` / `anomaly_benign` (split names; optional): also the unsupervised outlier score of the target against the benign
+      splits, `anom_auc[<target> | benign]` per layer (the white-box observer without labels of `evals.detect`).
     - no `agg_value`: `summary` holds the scalars of `activation_scalars` for `expose`; `value_by_layer` the whole table
       (also written, with `activations.pt`, to `output_dir`).
     """
@@ -77,6 +81,7 @@ def activation_probe(
     result = analyze_activations(
         act_collector, split_data, forget, reference, seen=seen, unseen=unseen,
         qa_per_author=int(qa_per_author), author_offset=int(author_offset), seed=int(seed),
+        anomaly_target=anomaly_target, anomaly_benign=list(anomaly_benign),
     )
     if output_dir is not None:
         save_activation_outputs(result, act_collector, output_dir)

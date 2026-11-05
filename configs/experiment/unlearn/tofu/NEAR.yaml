@@ -156,6 +156,17 @@ select:
   # unseen_gap (look like a stranger) | rougeL_recall | answer_logprob (max knowledge removal)
   max_degenerate: 0.1
   # layers whose steered answers are degenerate more often are not selected
+  ud_weight: 0.0
+  # >0: the criterion + ud_weight * ud, `ud` = black-box detectability of the steered forget answers (the TAS refusal score / gibberish /
+  # canned answers tell them from the answers to the unseen splits; 0 = not at all, 1 = perfectly): prefer layers whose answers do not
+  # give away what was unlearned. 0 = only recorded
+  footprint_weight: 0.0
+  # >0: + footprint_weight * footprint, footprint = coeff * ||r_UV|| / ||mean forget activation||, a proxy of how visible the shift is to a
+  # white-box observer. 0 = only recorded
+  max_ud: null
+  # layers whose `ud` is larger are not selected (null: no limit; ignored if no layer is below)
+  tas_embedder: null
+  # encoder of the semantic channel of the TAS refusal score of the steered answers (e.g. sentence-transformers/all-MiniLM-L6-v2); null: regexes only
   max_samples: 64
   # fixed random subset of forget prompts
   batch_size: 16

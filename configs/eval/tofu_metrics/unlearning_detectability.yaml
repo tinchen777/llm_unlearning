@@ -1,0 +1,47 @@
+# @package eval.tofu.metrics.unlearning_detectability
+# UNLEARNING DETECTABILITY (UD): can an observer tell WHAT was unlearned? Black box (the TAS attack of arXiv:2609.03662 scores the answers with
+# a refusal score; we also count gibberish and canned / looping answers): how well the anomaly score of a model's answers separates its answers
+# to the forgotten prompts from those to the others (`bb_tas`: refusal score only = the attack, `bb`: + degenerate + near-duplicate answers).
+# White box: `wb_sup` (best linear probe, an ORACLE upper bound) and `wb_unsup` (unsupervised outlier score, `anom_auc` of the activation probe),
+# as the excess over the retain model's probe (`probe_ref_path`: the TOFU_EVAL.json of scripts/eval/baseline_probe.sh) if it exists.
+# agg_value = `ud`: `bb` (headline, the black-box threat model of the paper) or the maximum with `wb_unsup` (`aggregate: max`); `ud_max` always.
+# Reads the answers / activations of the metrics below (computed once, shared with the top-level ones of the same name).
+
+defaults:
+  - .@pre_compute.forget_responses: forget_responses
+  - .@pre_compute.retain_responses: retain_responses
+  - .@pre_compute.holdout_responses: holdout_responses
+  - .@pre_compute.neighbor_responses: neighbor_responses
+  - .@pre_compute.activation_probe: activation_probe
+
+pre_compute:
+  forget_responses:
+    access_key: forget
+  retain_responses:
+    access_key: retain
+  holdout_responses:
+    access_key: holdout
+  neighbor_responses:
+    access_key: neighbor
+  activation_probe:
+    access_key: activation
+
+reference_logs:
+  retain_model_probe:
+    path: ${eval.tofu.probe_ref_path}
+    include:
+      activation_probe:
+        access_key: activation_probe
+
+handler: unlearning_detectability
+aggregate: bb # bb | max
+dup_threshold: 0.8 # Jaccard similarity of word 3-gram sets from which two answers of a set are one canned answer
+tas_threshold: 0.5 # lambda of TAS: refusal score >= 0.5 counts as a refusal (the rates)
+qa_per_author: 20 # TOFU: the 20 QAs of an author are contiguous (entity level)
+
+expose_prefix: ud
+expose:
+  - bb_tas
+  - bb
+  - wb_sup
+  - wb_unsup

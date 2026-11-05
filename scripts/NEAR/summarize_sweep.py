@@ -13,7 +13,7 @@ import json
 import os
 import re
 
-KEYS = ("rougeL_recall", "answer_logprob", "refusal_rate", "degenerate_rate", "unseen_gap")
+KEYS = ("rougeL_recall", "answer_logprob", "refusal_rate", "degenerate_rate", "unseen_gap", "ud", "footprint")  # ud / footprint: newer selections
 
 
 def load(task_dir):
@@ -49,8 +49,8 @@ def main():
 
     first = rows[0]["sel"]
     un, seen = first["forget_unsteered"], first["unseen_unsteered"]["mean"]
-    print(f"unsteered forget : " + "  ".join(f"{k}={fmt(un.get(k))}" for k in KEYS if k != "unseen_gap"))
-    print(f"unseen (goal)    : " + "  ".join(f"{k}={fmt(seen.get(k))}" for k in KEYS if k != "unseen_gap"))
+    print(f"unsteered forget : " + "  ".join(f"{k}={fmt(un.get(k))}" for k in KEYS[:4]))
+    print(f"unseen (goal)    : " + "  ".join(f"{k}={fmt(seen.get(k))}" for k in KEYS[:4]))
     print()
     if args.top:
         pairs = [(r, layer, v) for r in rows for layer, v in r["sel"]["per_layer"].items() if v["degenerate_rate"] <= args.max_degenerate]

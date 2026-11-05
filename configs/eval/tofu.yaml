@@ -30,5 +30,7 @@ holdout_split: holdout??
 retain_split: retain??
 output_dir: null
 retain_logs_path: ${paths.root_dir}/saves/eval/TOFU/tofu_${model.base_name}_${retain_split}/TOFU_EVAL.json
+# the retain model's probe (scripts/eval/baseline_probe.sh): the clean reference of the white-box detectability numbers (optional)
+probe_ref_path: ${paths.root_dir}/saves/eval/retain/${model.base_name}/${forget_split}/TOFU_EVAL.json
 question_key: question # question or paraphrased_question
 batch_size: 8

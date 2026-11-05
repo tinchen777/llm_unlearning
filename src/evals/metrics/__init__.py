@@ -14,6 +14,7 @@ from .memorization import (
 )
 from .privacy import ks_test, privleak, rel_diff
 from .activation import activation_probe
+from .detectability import unlearning_detectability
 from .mia import (
     mia_loss,
     mia_min_k,
@@ -113,6 +114,7 @@ _register_metric_fn(probability_w_options)
 _register_metric_fn(rouge)
 _register_metric_fn(responses)
 _register_metric_fn(activation_probe)
+_register_metric_fn(unlearning_detectability)
 _register_metric_fn(truth_ratio)
 _register_metric_fn(ks_test)
 _register_metric_fn(hm_aggregate)

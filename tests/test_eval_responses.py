@@ -69,7 +69,8 @@ def run_eval(assets: Path, out_root: Path, task: str, max_samples: str, extra=()
         hf = f"{metric(split)}.data.eval.dataset.args.hf_args"
         args += [f"{hf}.path=json", f"~{hf}.name", f"+{hf}.data_files={assets / 'data' / (split + '.json')}"]
     for split in ("forget", "retain", "holdout", "neighbor"):
-        args += [f"{metric(split)}.generation_args.max_new_tokens=6", f"{metric(split)}.loader_args.max_samples={max_samples}"]
+        args += [f"{metric(split)}.generation_args.max_new_tokens=6", f"{metric(split)}.loader_args.max_samples={max_samples}",
+                 f"{metric(split)}.text_metrics_args.tas_embedder={assets / 'encoder'}"]  # the semantic channel of the TAS refusal score, on the tiny encoder
     # the activations: the same local data
     act = "eval.tofu.metrics.activation_probe"
     args += [f"{act}.loader_args.max_samples={max_samples}", f"{act}.data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}"]
@@ -107,6 +108,18 @@ def test_responses_metric_exposes_its_summary_and_keeps_the_records(assets, tmp_
         assert len(json.loads((out / f"{name}_responses.json").read_text())) == 8
     neighbor = json.loads((out / "neighbor_responses.json").read_text())
     assert {r["author_id"] for r in neighbor} <= {5, 6}, "the metadata of the neighbour csv reaches the records"
+
+    # the TAS refusal score and the repetition of every answer, and the detectability computed from the answers and the probe
+    for name in sizes:
+        main = logs[f"{name}_responses"]
+        assert all(0.0 <= r["tas_refusal"] <= 1.0 and "repetition" in r for r in main["value_by_index"].values())
+        assert {"tas_refusal_mean", "tas_refusal_rate", "repetition_mean", "dup_rate"} <= set(main["summary"])
+        assert summary[f"{name}_tas_refusal_rate"] == main["summary"]["tas_refusal_rate"]
+    ud = logs["unlearning_detectability"]
+    assert ud["agg_value"] == ud["summary"]["ud"] == ud["summary"]["bb"] and 0.0 <= ud["agg_value"] <= 1.0
+    assert {"bb", "bb_tas", "wb_sup", "wb_unsup", "ud_max", "forget_tas_rate", "benign_tas_rate"} <= set(ud["summary"])
+    assert summary["ud_bb"] == ud["summary"]["bb"] and summary["ud_wb_unsup"] == ud["summary"]["wb_unsup"]
+    assert "anom_auc[forget | benign]" in next(iter(logs["activation_probe"]["value_by_layer"].values()))
 
     # no max_samples -> every sample
     full = run_eval(assets, tmp_path / "out", "resp_full", "null")

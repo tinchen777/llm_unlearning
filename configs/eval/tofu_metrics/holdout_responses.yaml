@@ -27,6 +27,7 @@ handler: responses
 text_metrics: ALL # ALL | [rouge_scores, is_refusal, is_degenerate, is_hallucination, word_count, answer_logprob]
 text_metrics_args:
   hallucination_rouge: 0.3 # confident answer with rougeL_recall below this = hallucination
+  tas_embedder: sentence-transformers/all-MiniLM-L6-v2 # semantic channel of the TAS refusal score (null: regexes only; regexes alone when it cannot be loaded)
 
 expose_prefix: holdout
 expose:
@@ -35,3 +36,5 @@ expose:
   - refusal_rate
   - degenerate_rate
   - hallucination_rate
+  - tas_refusal_rate
+  - dup_rate

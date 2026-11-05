@@ -36,6 +36,7 @@ from data import SplitData
 from model import get_model_and_tokenizer
 from model.arch import get_decoder_layers
 from model.intervene.steer import Steerer
+from evals.detect.scores import black_box
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
@@ -84,6 +85,12 @@ def main(cfg: TrackingConfig):
     per layer and the ranking, read it before trusting the automatic choice) and `responses_steer_l<l>.json` (same folder).
 
     Candidates: `select.layers` (explicit), else `select.layer_fraction` (window of relative depths), else all layers.
+
+    Detectability (arXiv:2609.03662: refusals give away WHAT was unlearned): for every layer the black-box detectability `ud` of the steered
+    forget answers (`evals.detect.scores.black_box`: how well the TAS refusal score / anomaly score tells them from the unsteered answers to
+    the unseen splits; 0 = not at all) and the `footprint` of the shift (coeff * ||r_UV|| / ||mean forget activation||, a proxy of its white-box
+    visibility) are recorded. `select.ud_weight` / `select.footprint_weight` (default 0 = off) add them to the criterion, `select.max_ud` drops
+    the layers whose steered answers are more detectable.
 
     Args:
         cfg (TrackingConfig): `experiment=unlearn/tofu/NEAR` (uses `data.*`, `select`); needs r_uv.pt of src/METHOD/NEAR/r_uv.py.
@@ -143,16 +150,16 @@ def main(cfg: TrackingConfig):
         model, tokenizer, cfg["generation_args"],
         output_dir=config_dir(output_dir, k, coeff, mode),
         text_metrics="ALL",
-        hallucination_rouge=float(sel_cfg["hallucination_rouge"])
+        hallucination_rouge=float(sel_cfg["hallucination_rouge"]),
+        tas_embedder=sel_cfg.get("tas_embedder", None),  # semantic channel of the TAS refusal score (null: regexes only)
     ).set_split_data(split_data)
 
     # Reference behaviour of the unsteered model: forget (seen) vs the unseen splits
     with step_logging(logger, "#1", "get unsteered reference", cfg=sel_cfg["unseen_splits"], ensure_cfg=True) as unseen_splits:
         _, original = res_collector.eval("forget", desc="forget / unsteered")
-        unseen_parts = {
-            s: res_collector.eval(s, desc=f"{s} / unsteered")[1]
-            for s in unseen_splits
-        }
+        unseen_records, unseen_parts = {}, {}
+        for s in unseen_splits:
+            unseen_records[s], unseen_parts[s] = res_collector.eval(s, desc=f"{s} / unsteered")
         unseen = {
             key: sum(p[key] for p in unseen_parts.values()) / len(unseen_parts)
             for key in ("rougeL_recall", "answer_logprob", "refusal_rate", "degenerate_rate", "hallucination_rate")
@@ -170,18 +177,24 @@ def main(cfg: TrackingConfig):
                     authors = forget_authors(batch["index"], qa_per_author, author_offset)
                     steerer.set(torch.stack([r_author[a] for a in authors]), prompt_len=batch["input_ids"].shape[1])
 
-                _, steered = res_collector.eval(
+                steered_records, steered = res_collector.eval(
                     "forget",
                     desc=f"forget / steer layer {layer}",
                     before_batch=before_batch,
                     save_name=f"responses_steer_l{layer}"
                 )
             steered["unseen_gap"] = unseen_gap(steered, original, unseen)
+            detect = black_box(steered_records, unseen_records)  # the steered answers against the unsteered answers to the unseen splits
+            steered["ud"] = float(detect["bb"] or 0.0)
+            steered["ud_tas"] = float(detect["bb_tas"] or 0.0)
+            r_norm = sum(r[:, li, :].norm(dim=-1).mean().item() for r in saved["r_uv"][k].values()) / len(saved["r_uv"][k])
+            f_norm = sum(m[:, li, :].norm(dim=-1).mean().item() for m in saved["forget_means"].values()) / len(saved["forget_means"])
+            steered["footprint"] = coeff * r_norm / f_norm
             per_layer[layer] = steered
             logger.info(
                 f"layer {layer:>2}: unseen_gap={steered['unseen_gap']:.3f}  rougeL_recall={steered['rougeL_recall']:.3f}  "
                 f"answer_logprob={steered['answer_logprob']:.3f}  refusal={steered['refusal_rate']:.2f}  "
-                f"degenerate={steered['degenerate_rate']:.2f}"
+                f"degenerate={steered['degenerate_rate']:.2f}  ud={steered['ud']:.2f}  footprint={steered['footprint']:.2f}"
             )
 
         criterion = str(sel_cfg["criterion"])
@@ -189,10 +202,22 @@ def main(cfg: TrackingConfig):
         if not valid:
             logger.warning("Every layer exceeds select.max_degenerate; selecting among all layers.")
             valid = candidates
+        max_ud = sel_cfg.get("max_ud", None)
+        if max_ud is not None:
+            detectable = [_l for _l in valid if per_layer[_l]["ud"] <= float(max_ud)]
+            if detectable:
+                valid = detectable
+            else:
+                logger.warning(f"Every layer exceeds select.max_ud={max_ud}; ignoring it.")
+        ud_weight, footprint_weight = float(sel_cfg.get("ud_weight", 0.0)), float(sel_cfg.get("footprint_weight", 0.0))
         if criterion not in ("unseen_gap", "rougeL_recall", "answer_logprob"):
             raise ValueError(f"select.criterion must be unseen_gap | rougeL_recall | answer_logprob, got `{criterion}`.")
         # unseen_gap: look like a stranger; rougeL_recall / answer_logprob (lower is better): largest knowledge removal
-        ranking = sorted(valid, key=lambda _l: per_layer[_l][criterion])
+        if criterion == "answer_logprob" and (ud_weight or footprint_weight):
+            raise ValueError("select.ud_weight / footprint_weight add to a criterion in [0, ~1]: use unseen_gap or rougeL_recall.")
+        for _l in candidates:  # the criterion + the detectability terms: lower is better
+            per_layer[_l]["selection_score"] = per_layer[_l][criterion] + ud_weight * per_layer[_l]["ud"] + footprint_weight * per_layer[_l]["footprint"]
+        ranking = sorted(valid, key=lambda _l: per_layer[_l]["selection_score"])
         selected = ranking[0]
         save_logs({
             "selected_layer": selected,
@@ -203,6 +228,7 @@ def main(cfg: TrackingConfig):
             "r_uv_path": str(r_uv_path), "forget_split": saved["forget_split"], "num_forget": saved["num_forget"],
             "model": saved["model"], "candidates": candidates,
             "max_degenerate": float(sel_cfg["max_degenerate"]),
+            "max_ud": None if max_ud is None else float(max_ud), "ud_weight": ud_weight, "footprint_weight": footprint_weight,
             "forget_unsteered": original,
             "unseen_unsteered": {"mean": unseen, **unseen_parts},
             "per_layer": {str(_l): v for _l, v in per_layer.items()},
