@@ -199,6 +199,7 @@ def test_near_w_down_can_train_on_the_answer_tokens_too(assets, tmp_path):
 
 
 def test_layer_increments_add_up_to_the_vector_of_the_last_layer():
+    sys.path.insert(0, str(ROOT / "src"))
     from METHOD._common.editing import layer_increments
 
     r = {5: {"a": torch.tensor([1.0, 0.0]), "b": torch.tensor([0.0, 1.0])},
