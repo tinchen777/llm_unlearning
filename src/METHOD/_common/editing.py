@@ -1,6 +1,7 @@
 """Pieces of the W_down editing pipeline shared by LUNAR and NEAR (the methods differ in r_UV and in the layer selection).
 
 - `train_w_down_layers`          : train (AdamW or closed form) W_down of every layer on the recorded forget / retain tokens
+- `layer_increments`             : split the shift over several edited layers (total = that of the last layer)
 - `resolve_candidate_layers`     : candidate layers of a layer selection (explicit list / window of relative depths / all)
 """
 
@@ -62,6 +63,20 @@ def train_w_down_layers(
         }
         new_weights[_l] = w
     return per_layer, new_weights
+
+
+def layer_increments(r_by_layer: Dict[int, Dict[Any, torch.Tensor]]) -> Dict[int, Dict[Any, torch.Tensor]]:
+    """Split the shift over several edited layers so that the TOTAL is that of editing the last layer alone.
+
+    `r_by_layer[layer][author]` is the unlearning vector at the output of `layer`: it already holds everything the layers below added to
+    the difference between the neighbours and the forget prompts. So the first edited layer takes all of its r_UV and every next one
+    the increment to the previous edited layer: sum over the layers = r_UV of the last layer (telescoping). Adding the whole r_UV of
+    every layer instead would count the lower layers again and again (the residual stream carries the shift upwards)."""
+    layers = sorted(r_by_layer)
+    return {
+        _l: {a: (r if i == 0 else r - r_by_layer[layers[i - 1]][a]) for a, r in r_by_layer[_l].items()}
+        for i, _l in enumerate(layers)
+    }
 
 
 def resolve_candidate_layers(sel: Any, available: Sequence[int]) -> List[int]:

@@ -196,3 +196,41 @@ def test_near_w_down_can_train_on_the_answer_tokens_too(assets, tmp_path):
                           "wdown.include_answer=true", "wdown.layer_selection_path=" + str(sel_path), "wdown.layers=[1]",
                           "wdown.shift_mode=eoi"], cwd=ROOT, capture_output=True, text=True, timeout=900)
     assert bad.returncode != 0
+
+
+def test_layer_increments_add_up_to_the_vector_of_the_last_layer():
+    from METHOD._common.editing import layer_increments
+
+    r = {5: {"a": torch.tensor([1.0, 0.0]), "b": torch.tensor([0.0, 1.0])},
+         7: {"a": torch.tensor([3.0, 1.0]), "b": torch.tensor([1.0, 4.0])},
+         6: {"a": torch.tensor([2.0, 0.5]), "b": torch.tensor([0.5, 2.0])}}
+    inc = layer_increments(r)
+    assert list(inc) == [5, 6, 7]
+    assert torch.equal(inc[5]["a"], r[5]["a"])  # the lowest layer takes its whole vector
+    for author in "ab":
+        assert torch.allclose(sum(inc[_l][author] for _l in inc), r[7][author])  # telescoping
+
+
+def test_near_w_down_edits_several_layers_with_shares_of_the_shift(assets, tmp_path):
+    out_root = tmp_path / "out"
+    args = common_args(assets, out_root, "NEAR", "multi")
+    args += [f"data.neighbor.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+             "basic.author_offset=5", "basic.k=2", "basic.shift_mode=all", "ruv.ks=[1,2]", "ruv.batch_size=8",
+             "select.max_samples=8", "select.batch_size=4", "select.layer_fraction=null",
+             "wdown.epochs=2", "wdown.batch_size=32", "wdown.max_gen_samples=8", "wdown.gen_batch_size=4",
+             "wdown.retain_max_samples=16", "wdown.responses_splits=[forget]", "wdown.save_model=false"]
+    run("NEAR/r_uv.py", args)
+    run("NEAR/select_layer.py", args)
+    sel_path = out_root / "saves" / "NEAR" / "multi" / "k2_c1_all" / "layer_selection.json"
+
+    for name, extra in (("seq", ["wdown.sequential=true"]), ("indep", [])):
+        run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[2,1]", "wdown.multi_layer=increment",
+                                      f"task_name=multi_{name}"] + extra)
+        summary = json.loads((out_root / "saves" / "NEAR" / f"multi_{name}" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+        assert summary["layers"] == [1, 2] and summary["multi_layer"] == "increment" and summary["sequential"] == bool(extra)
+        assert set(summary["achieved_vs_intended"]) == {"1", "2"} and set(summary["per_layer"]) == {"1", "2"}
+
+    bad = subprocess.run([sys.executable, str(ROOT / "src" / "METHOD" / "NEAR/w_down.py"), *args,
+                          f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.multi_layer=nonsense"],
+                         cwd=ROOT, capture_output=True, text=True, timeout=900)
+    assert bad.returncode != 0 and "multi_layer" in bad.stdout + bad.stderr

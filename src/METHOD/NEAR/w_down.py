@@ -52,7 +52,7 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
-from METHOD._common.editing import train_w_down_layers
+from METHOD._common.editing import layer_increments, train_w_down_layers
 from METHOD._common.lineage import check_r_uv_identity, model_name, pick, resolve_r_uv_path
 
 if TYPE_CHECKING:
@@ -110,6 +110,11 @@ def main(cfg: TrackingConfig):
             logger.info(f"wdown.layers=auto -> layer {train_layers} from {sel_path}")
         else:
             train_layers = [int(_l) for _l in layers_cfg]
+        train_layers = sorted(set(train_layers))
+        multi_layer = str(wd_cfg.get("multi_layer", "same"))
+        if multi_layer not in ("same", "increment"):
+            raise ValueError(f"wdown.multi_layer must be `same` or `increment`, got `{multi_layer}`.")
+        sequential = bool(wd_cfg.get("sequential", False))
 
         if selection is not None:
             r_uv_path = resolve_r_uv_path(selection.get("r_uv_path"), Path(str(sel_path)))
@@ -129,14 +134,22 @@ def main(cfg: TrackingConfig):
         positions, qa_per_author, author_offset = saved["positions"], saved["qa_per_author"], saved["author_offset"]
         if shift_mode == "all" and ref_position not in positions:
             raise ValueError(f"ref_position={ref_position} is not one of the saved positions {positions}.")
-        # r_layer[layer][author] -> [n_pos, d]
-        r_layer = {
+        # r_full[layer][author] -> [n_pos, d]: the unlearning vector at the output of the layer
+        r_full = {
             _l: {a: r[:, saved["layers"].index(_l), :] for a, r in saved["r_uv"][k].items()}
             for _l in train_layers
         }
-        logger.info(f"K={k}, layers={train_layers}, coeff={coeff}, shift_mode={shift_mode}, positions={positions}")
+        # r_layer: what each edited layer adds. `same`: its whole r_UV (one layer: the usual); `increment`: the share of this layer, so
+        # that the sum over the edited layers is the r_UV of the last one (see `layer_increments`)
+        r_layer = layer_increments(r_full) if multi_layer == "increment" else r_full
+        logger.info(
+            f"K={k}, layers={train_layers}, coeff={coeff}, shift_mode={shift_mode}, positions={positions}, "
+            f"multi_layer={multi_layer}, sequential={sequential}"
+        )
 
     tag = f"k{k}_l{'-'.join(str(l) for l in train_layers)}_c{coeff:g}_{shift_mode}" + ("_cf" if solver == "closed_form" else "")
+    if len(train_layers) > 1:
+        tag += f"_{multi_layer}" + ("_seq" if sequential else "")
     run_dir = make_run_dir(output_dir, k, coeff, shift_mode, train_layers, solver)  # <output_dir>/k<K>_c<coeff>_<mode>/l<layers>[_cf]/
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -194,33 +207,46 @@ def main(cfg: TrackingConfig):
         # probabilities, feeds the model the whole text), for the forget samples (shifted) and the retain ones (kept) alike
         forget_loader = split_data["forget"].loader(batch_size=wd_cfg["batch_size"], max_samples=None)  # prompts: the effect check below
         as_trained = (lambda data: data.with_generation_mode(False)) if include_answer else (lambda data: data)
-        forget_tokens = collect_mlp_tokens(
-            model, as_trained(split_data["forget"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None),
-            train_layers, shift_fn=shift_fn, desc="forget (+shift)"
-        )
+        # fresh loaders of the SAME tokens in the SAME order (no shuffle, fixed subsets): `sequential` records the inputs again
+        make_forget_loader = lambda: as_trained(split_data["forget"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None)
+        make_retain_loader = lambda s: as_trained(split_data[s]).loader(batch_size=wd_cfg["batch_size"], max_samples=wd_cfg["retain_max_samples"])
+        forget_tokens = collect_mlp_tokens(model, make_forget_loader(), train_layers, shift_fn=shift_fn, desc="forget (+shift)")
         retain_parts = [
-            collect_mlp_tokens(
-                model,
-                as_trained(split_data[s]).loader(
-                    batch_size=wd_cfg["batch_size"],
-                    max_samples=wd_cfg["retain_max_samples"]
-                ),
-                train_layers,
-                desc=f"retain / {s}"
-            )
+            collect_mlp_tokens(model, make_retain_loader(s), train_layers, desc=f"retain / {s}")
             for s in wd_cfg["retain_splits"]
         ]
         retain_tokens = {_l: tuple(torch.cat([p[_l][i] for p in retain_parts]) for i in range(2)) for _l in train_layers}
         num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
         logger.info(f"tokens: {num_tokens}")
 
-    # Train every layer on the recorded data (independent of each other), then write the weights
+    # Train every layer on the recorded data, then write the weights. Default: the layers are independent (all tokens were recorded on
+    # the ORIGINAL model). `sequential`: from the lowest layer up, after each layer the inputs of the next one are recorded again on the
+    # model edited so far, with the SAME targets (original output (+ shift for forget)): a layer also repairs what the edits below did to its input
     with step_logging(logger, "#3", "W_down training"):
-        per_layer, new_weights = train_w_down_layers(
-            model, train_layers, forget_tokens, retain_tokens, wd_cfg, seed, solver=solver
-        )
-        for _l, w in new_weights.items():
-            apply_w_down(model, _l, w)
+        if sequential:
+            per_layer, new_weights = {}, {}
+            for i, _l in enumerate(train_layers):
+                if i > 0:
+                    fx = collect_mlp_tokens(model, make_forget_loader(), [_l], desc=f"forget inputs, layer {_l}, edited below")[_l][0]
+                    rx = torch.cat([
+                        collect_mlp_tokens(model, make_retain_loader(s), [_l], desc=f"retain / {s} inputs, layer {_l}")[_l][0]
+                        for s in wd_cfg["retain_splits"]
+                    ])
+                    if len(fx) != len(forget_tokens[_l][1]) or len(rx) != len(retain_tokens[_l][1]):
+                        raise RuntimeError("The recorded tokens changed between the passes (the loaders must be deterministic).")
+                    forget_tokens[_l], retain_tokens[_l] = (fx, forget_tokens[_l][1]), (rx, retain_tokens[_l][1])
+                layer_info, layer_weight = train_w_down_layers(
+                    model, [_l], {_l: forget_tokens[_l]}, {_l: retain_tokens[_l]}, wd_cfg, seed, solver=solver
+                )
+                per_layer.update(layer_info)
+                new_weights.update(layer_weight)
+                apply_w_down(model, _l, layer_weight[_l])
+        else:
+            per_layer, new_weights = train_w_down_layers(
+                model, train_layers, forget_tokens, retain_tokens, wd_cfg, seed, solver=solver
+            )
+            for _l, w in new_weights.items():
+                apply_w_down(model, _l, w)
         torch.save(
             {
                 "layers": train_layers, "k": k, "coeff": coeff,
@@ -247,7 +273,7 @@ def main(cfg: TrackingConfig):
             cos, ratio = [], []
             for a in new_means:
                 achieved = (new_means[a][:, j] - saved["forget_means"][a][:, li]).flatten()
-                r = r_layer[_l][a]
+                r = r_full[_l][a]  # the shift accumulated up to this layer: c * r_UV (exact for one layer / `increment`)
                 intended = (coeff * (r if shift_mode == "eoi" else r[positions.index(ref_position)].expand_as(r))).flatten()
                 cos.append(torch.nn.functional.cosine_similarity(achieved, intended, dim=0).item())
                 ratio.append((achieved.norm() / intended.norm()).item())
@@ -263,7 +289,7 @@ def main(cfg: TrackingConfig):
             "layer_selection_path": str(sel_path) if sel_path is not None else None, "r_uv_path": str(r_uv_path),
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
-            "include_answer": include_answer, "num_tokens": num_tokens,
+            "include_answer": include_answer, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},
@@ -272,7 +298,7 @@ def main(cfg: TrackingConfig):
             "responses": {"before": responses_before, "after": responses_after},
             "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV "
                     "(per author, averaged). Exact for a single edited layer; with several layers the deeper ones "
-                    "also contain the effect of the upstream edits.",
+                    "also contain the effect of the upstream edits (exact with multi_layer=increment: the shift accumulated up to a layer is coeff*r_UV of it).",
         }, run_dir / "w_down_summary.json")  # type: ignore
         for _l, v in achieved_vs_intended.items():
             logger.info(f"layer {_l}: achieved vs intended shift: cos={v['cos']:.3f}, norm ratio={v['norm_ratio']:.3f}")

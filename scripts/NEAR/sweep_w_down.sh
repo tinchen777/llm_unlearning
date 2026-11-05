@@ -8,7 +8,12 @@
 #   RETAIN_WEIGHTS="3 10" bash scripts/NEAR/sweep_w_down.sh 0                      # default: coeff 7, layer 9
 #   COEFF=12 LAYER=6 RETAIN_WEIGHTS="3" bash scripts/NEAR/sweep_w_down.sh 1
 #   INCLUDE_ANSWER=1 RETAIN_WEIGHTS="1 3" bash scripts/NEAR/sweep_w_down.sh 0      # prompt AND answer tokens (variants named ..._ans)
+#   LAYER=8,9,10 COEFF=7 MULTI_LAYER=increment SEQUENTIAL=1 RETAIN_WEIGHTS="1" bash scripts/NEAR/sweep_w_down.sh 0   # several layers
 #   DRY_RUN=1 bash scripts/NEAR/sweep_w_down.sh                                    # only print the commands
+#
+# Several layers (LAYER=8,9,10): MULTI_LAYER=same = every layer adds coeff * its whole r_UV (the lower layers' shift is counted again by the
+# layers above); MULTI_LAYER=increment = every layer adds its share, so the TOTAL is coeff * r_UV of the last layer (the effect of editing
+# that layer alone, spread over several); SEQUENTIAL=1 = a layer is trained on its inputs AFTER the lower edits (and repairs their side effects).
 #
 # `retain_weight` is the factor of the retain term of the loss  forget_weight * MSE(forget tokens) + retain_weight * MSE(retain tokens):
 # larger = the retain / neighbor tokens keep their original MLP output more strictly, the forgetting gets weaker. Compare with the run
@@ -23,6 +28,8 @@ COEFF=${COEFF:-7}
 LAYER=${LAYER:-9}
 read -r -a RETAIN_WEIGHTS <<< "${RETAIN_WEIGHTS:-3 10}"
 INCLUDE_ANSWER=${INCLUDE_ANSWER:-0}
+MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
+SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
 # where r_uv.pt and the layer selection of this setting are (stages 1-2 of the default run)
 export SELECT_TASK_NAME=${SELECT_TASK_NAME:-single/near_tofu_${MODEL}_${FORGET_SPLIT}}
@@ -35,7 +42,12 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     variant=${variant}_ans
     extra="${extra} wdown.include_answer=true"
   fi
-  variant=${variant}_c${COEFF}_l${LAYER}
+  if [[ "${LAYER}" == *,* ]]; then
+    extra="${extra} wdown.multi_layer=${MULTI_LAYER}"
+    variant=${variant}_${MULTI_LAYER}
+    if [ "${SEQUENTIAL}" = 1 ]; then extra="${extra} wdown.sequential=true"; variant=${variant}_seq; fi
+  fi
+  variant=${variant}_c${COEFF}_l${LAYER//,/-}
   echo "################  ${variant}: ${extra}  ################"
   TASK_NAME=single/${variant} EXTRA_W_DOWN="${extra}" \
     K=${K} COEFF=${COEFF} MODE=all W_DOWN_LAYER="[${LAYER}]" \
