@@ -1,0 +1,271 @@
+{
+    "achieved_vs_intended": {
+        "8": {
+            "cos": 0.9964938759803772,
+            "norm_ratio": 0.896523208732202
+        }
+    },
+    "coeff": 2.0,
+    "hyperparameters": {
+        "batch_size": 64,
+        "epochs": 20,
+        "forget_weight": 1.0,
+        "lr": 0.005,
+        "lr_gamma": 0.9,
+        "retain_max_samples": "match_forget",
+        "retain_splits": [
+            "retain"
+        ],
+        "retain_weight": 1.0,
+        "weight_decay": 0.0
+    },
+    "layer_selection_path": "saves/LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/c2_all/layer_selection.json",
+    "layers": [
+        8
+    ],
+    "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV. Exact for a single edited layer; with several layers the deeper ones also contain the effect of the upstream edits.",
+    "num_tokens": {
+        "forget": 2406,
+        "retain": 2222
+    },
+    "per_layer": {
+        "8": {
+            "forget_mse_after": 0.003811309462473577,
+            "forget_mse_after_rounded": 0.003811362180131134,
+            "forget_mse_before": 0.019443884553853808,
+            "history": [
+                {
+                    "epoch": 1,
+                    "forget_mse": 0.01482711048600705,
+                    "lr": 0.005,
+                    "retain_mse": 0.015280222139938883
+                },
+                {
+                    "epoch": 2,
+                    "forget_mse": 0.005865830364391992,
+                    "lr": 0.0045000000000000005,
+                    "retain_mse": 0.005777974686536349
+                },
+                {
+                    "epoch": 3,
+                    "forget_mse": 0.005339358124489847,
+                    "lr": 0.004050000000000001,
+                    "retain_mse": 0.004977136200882103
+                },
+                {
+                    "epoch": 4,
+                    "forget_mse": 0.00468117949601851,
+                    "lr": 0.0036450000000000007,
+                    "retain_mse": 0.004654136902995799
+                },
+                {
+                    "epoch": 5,
+                    "forget_mse": 0.004543882433178001,
+                    "lr": 0.003280500000000001,
+                    "retain_mse": 0.004284280229752001
+                },
+                {
+                    "epoch": 6,
+                    "forget_mse": 0.004463484700720169,
+                    "lr": 0.002952450000000001,
+                    "retain_mse": 0.004284095539907484
+                },
+                {
+                    "epoch": 7,
+                    "forget_mse": 0.004290747493015308,
+                    "lr": 0.002657205000000001,
+                    "retain_mse": 0.004146670493738432
+                },
+                {
+                    "epoch": 8,
+                    "forget_mse": 0.004235360458934386,
+                    "lr": 0.002391484500000001,
+                    "retain_mse": 0.00401935205598803
+                },
+                {
+                    "epoch": 9,
+                    "forget_mse": 0.004022260404829132,
+                    "lr": 0.002152336050000001,
+                    "retain_mse": 0.0038499306323692985
+                },
+                {
+                    "epoch": 10,
+                    "forget_mse": 0.003975613447102277,
+                    "lr": 0.001937102445000001,
+                    "retain_mse": 0.0038948141614367302
+                },
+                {
+                    "epoch": 11,
+                    "forget_mse": 0.0040083885082582895,
+                    "lr": 0.001743392200500001,
+                    "retain_mse": 0.0036700848539016747
+                },
+                {
+                    "epoch": 12,
+                    "forget_mse": 0.003870995641735039,
+                    "lr": 0.001569052980450001,
+                    "retain_mse": 0.0037863235798125203
+                },
+                {
+                    "epoch": 13,
+                    "forget_mse": 0.0037098187389538475,
+                    "lr": 0.0014121476824050009,
+                    "retain_mse": 0.0036013535542511626
+                },
+                {
+                    "epoch": 14,
+                    "forget_mse": 0.0039003551937639713,
+                    "lr": 0.0012709329141645008,
+                    "retain_mse": 0.0036373541163476674
+                },
+                {
+                    "epoch": 15,
+                    "forget_mse": 0.0037186917370969526,
+                    "lr": 0.0011438396227480508,
+                    "retain_mse": 0.003535486004119249
+                },
+                {
+                    "epoch": 16,
+                    "forget_mse": 0.003814299431580462,
+                    "lr": 0.0010294556604732458,
+                    "retain_mse": 0.0034495131909161023
+                },
+                {
+                    "epoch": 17,
+                    "forget_mse": 0.0036100581423134394,
+                    "lr": 0.0009265100944259213,
+                    "retain_mse": 0.003418689207664054
+                },
+                {
+                    "epoch": 18,
+                    "forget_mse": 0.00359774560446998,
+                    "lr": 0.0008338590849833291,
+                    "retain_mse": 0.0034210073614591046
+                },
+                {
+                    "epoch": 19,
+                    "forget_mse": 0.0034944284094595595,
+                    "lr": 0.0007504731764849962,
+                    "retain_mse": 0.0033806858976420605
+                },
+                {
+                    "epoch": 20,
+                    "forget_mse": 0.0037460999538827884,
+                    "lr": 0.0006754258588364966,
+                    "retain_mse": 0.003328868573972661
+                }
+            ],
+            "retain_mse_after": 0.0029462439642630647,
+            "retain_mse_after_rounded": 0.002946281089748379,
+            "retain_mse_before": 1.360686264012569e-08
+        }
+    },
+    "r_uv_path": "saves/LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget01_LUNAR_harmful/r_uv.pt",
+    "ref_position": -1,
+    "responses": {
+        "after": {
+            "forget": {
+                "answer_logprob": -4.599522165954113,
+                "answer_prob": 0.027485203464699504,
+                "degenerate_rate": 0.0625,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.4375,
+                "mean_words": 54.1875,
+                "n": 32,
+                "refusal_rate": 0.53125,
+                "repetition_mean": 0.12286401680450715,
+                "rouge1_recall": 0.08198853484245534,
+                "rougeL_f1": 0.042421455827682364,
+                "rougeL_recall": 0.06674400719032024,
+                "tas_refusal_mean": 0.53125,
+                "tas_refusal_rate": 0.53125
+            },
+            "holdout": {
+                "answer_logprob": -2.5992851965129375,
+                "answer_prob": 0.10644396213483717,
+                "degenerate_rate": 0.0625,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.4375,
+                "mean_words": 48.78125,
+                "n": 32,
+                "refusal_rate": 0.15625,
+                "repetition_mean": 0.11625150583423502,
+                "rouge1_recall": 0.29859084637398153,
+                "rougeL_f1": 0.2012419910453746,
+                "rougeL_recall": 0.2524095842792219,
+                "tas_refusal_mean": 0.15625,
+                "tas_refusal_rate": 0.15625
+            },
+            "retain": {
+                "answer_logprob": -0.7867253320291638,
+                "answer_prob": 0.5172023983892461,
+                "degenerate_rate": 0.0,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.28125,
+                "mean_words": 34.375,
+                "n": 32,
+                "refusal_rate": 0.0,
+                "repetition_mean": 0.008715062111801241,
+                "rouge1_recall": 0.5035817093622322,
+                "rougeL_f1": 0.4357006879162278,
+                "rougeL_recall": 0.46513556246359694,
+                "tas_refusal_mean": 0.0625,
+                "tas_refusal_rate": 0.0625
+            }
+        },
+        "before": {
+            "forget": {
+                "answer_logprob": -0.11126216161937919,
+                "answer_prob": 0.897360303988099,
+                "degenerate_rate": 0.0,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.0625,
+                "mean_words": 26.1875,
+                "n": 32,
+                "refusal_rate": 0.0,
+                "repetition_mean": 0.0,
+                "rouge1_recall": 0.8706265738261588,
+                "rougeL_f1": 0.8753733082228207,
+                "rougeL_recall": 0.8589689978078127,
+                "tas_refusal_mean": 0.0,
+                "tas_refusal_rate": 0.0
+            },
+            "holdout": {
+                "answer_logprob": -2.2109444215893745,
+                "answer_prob": 0.1496261555077802,
+                "degenerate_rate": 0.0,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.3125,
+                "mean_words": 26.15625,
+                "n": 32,
+                "refusal_rate": 0.0,
+                "repetition_mean": 0.0010775862068965504,
+                "rouge1_recall": 0.45280069445339866,
+                "rougeL_f1": 0.37938960550648126,
+                "rougeL_recall": 0.3780012252315112,
+                "tas_refusal_mean": 0.0,
+                "tas_refusal_rate": 0.0
+            },
+            "retain": {
+                "answer_logprob": -0.12995598884299397,
+                "answer_prob": 0.8813665978627323,
+                "degenerate_rate": 0.0,
+                "dup_rate": 0.0,
+                "hallucination_rate": 0.0,
+                "mean_words": 27.84375,
+                "n": 32,
+                "refusal_rate": 0.0,
+                "repetition_mean": 0.0,
+                "rouge1_recall": 0.8438718867800201,
+                "rougeL_f1": 0.8045925016147849,
+                "rougeL_recall": 0.8158016253710093,
+                "tas_refusal_mean": 0.0,
+                "tas_refusal_rate": 0.0
+            }
+        }
+    },
+    "ridge": null,
+    "shift_mode": "all",
+    "solver": "adam",
+    "tag": "c2_l8_all"
+}

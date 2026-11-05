@@ -42,8 +42,8 @@ fi
 #   core (the baselines of the paper): GradAscent GradDiff NPO SimNPO IdkDPO RMU
 #   more in src/trainer: CEU WGA UNDIAL SatImp PDU BoundedGradDiff
 if [ -z "${METHODS}" ]; then
-  # METHODS=(GradAscent GradDiff NPO SimNPO IdkDPO RMU)
-  METHODS=(IdkDPO RMU)
+  METHODS=(GradAscent GradDiff NPO SimNPO IdkDPO RMU)
+  # METHODS=(IdkDPO RMU)
 else
   read -r -a METHODS <<< "${METHODS}"
 fi

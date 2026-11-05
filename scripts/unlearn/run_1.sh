@@ -16,14 +16,14 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 GPU_ID=${1:-0}
 
 BASE_MODELS=(
-  # Llama-3.2-1B-Instruct
-  Llama-3.2-3B-Instruct
+  Llama-3.2-1B-Instruct
+  # Llama-3.2-3B-Instruct
   # Llama-3.1-8B-Instruct
 )
 
 # "forget_split holdout_split retain_split neighbor_split author_offset"
 SPLIT_SETS=(
-  "forget01 holdout01 retain99 neighbor01 199"
+  # "forget01 holdout01 retain99 neighbor01 199"
   "forget05 holdout05 retain95 neighbor05 191"
   "forget10 holdout10 retain90 neighbor10 181"
 )
