@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--metric", default="unseen_gap", help="metric the best layer of a setting is taken by (lowest); default: the selected layer")
     parser.add_argument("--top", type=int, default=0, help="instead: the N best (setting, layer) pairs over ALL settings, by unseen_gap, among those with degenerate_rate <= --max-degenerate")
     parser.add_argument("--max-degenerate", type=float, default=0.1)
+    parser.add_argument("--pareto", action="store_true", help="the (setting, layer) pairs on the Pareto frontier of (footprint, unseen_gap) among those with degenerate_rate <= --max-degenerate: the smallest footprint for a given closeness to the unseen behaviour")
     parser.add_argument("--mode", default=None, help="only this shift mode (eoi | all)")
     args = parser.parse_args()
     rows = load(args.task_dir)
@@ -52,6 +53,22 @@ def main():
     print(f"unsteered forget : " + "  ".join(f"{k}={fmt(un.get(k))}" for k in KEYS[:4]))
     print(f"unseen (goal)    : " + "  ".join(f"{k}={fmt(seen.get(k))}" for k in KEYS[:4]))
     print()
+    if args.pareto:
+        pairs = [(r, layer, v) for r in rows for layer, v in r["sel"]["per_layer"].items()
+                 if v["degenerate_rate"] <= args.max_degenerate and v.get("footprint") is not None]
+        pairs.sort(key=lambda t: (t[2]["footprint"], t[2]["unseen_gap"]))
+        front, best_gap = [], float("inf")
+        for r, layer, v in pairs:  # increasing footprint: keep a pair if it is closer to the unseen behaviour than every pair with a smaller footprint
+            if v["unseen_gap"] < best_gap:
+                front.append((r, layer, v))
+                best_gap = v["unseen_gap"]
+        head = f"{'mode':>4} {'K':>2} {'coeff':>6} {'layer':>5}  " + "  ".join(f"{k[:14]:>14}" for k in KEYS)
+        print(f"Pareto frontier (smaller footprint, smaller unseen_gap), degenerate_rate <= {args.max_degenerate}:")
+        print(head)
+        print("-" * len(head))
+        for r, layer, v in front:
+            print(f"{r['mode']:>4} {r['k']:>2} {r['coeff']:>6g} {layer:>5}  " + "  ".join(f"{fmt(v.get(k)):>14}" for k in KEYS))
+        return
     if args.top:
         pairs = [(r, layer, v) for r in rows for layer, v in r["sel"]["per_layer"].items() if v["degenerate_rate"] <= args.max_degenerate]
         pairs.sort(key=lambda t: t[2]["unseen_gap"])

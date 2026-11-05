@@ -54,6 +54,9 @@ SUFFIX=""
 EXTRA_ARGS=()
 if [ -n "${LR}" ]; then EXTRA_ARGS+=("trainer.args.learning_rate=${LR}"); SUFFIX+="_lr${LR}"; fi
 if [ -n "${EPOCHS}" ]; then EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS}"); SUFFIX+="_ep${EPOCHS}"; fi
+# DTYPE=float32: fp32 weights (+ bf16 autocast = fp32 master weights). The default is bf16 weights, in which an Adam step of lr 1e-5 is largely
+# rounded away (only a fraction of the weights change at all), so an unlearning run can look much weaker than it is.
+if [ "${DTYPE}" = float32 ]; then EXTRA_ARGS+=("model.pretrained.dtype=float32"); SUFFIX+="_fp32"; fi
 
 # Output: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT><SUFFIX>/   (like saves/NEAR/..., grouped by method, then by model and forget
 # set; e.g. all the runs of one method are siblings: +vis.run_folders='[[saves/tofu_unlearn/NPO, "*"]]'). `mode` stays `unlearn` (the
