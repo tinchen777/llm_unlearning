@@ -2,7 +2,7 @@
 
 每次有进度就追加一条，只写关键点。结果由用户跑完后给出，再补"结果"一栏。
 
-## 1. 1B 自己微调 full 模型训练不好  （2026-11-04）
+## 1. 1B 自己微调 full 模型训练不好  （2026-11-04）已完结：1B 的模型坏，直接使用 full或 retain 进行实验
 - **问题**：用 `unsloth/Llama-3.2-1B-Instruct` 微调成 full，1B 训不好，3B/8B 正常。
 - **假设与对照**：先猜是纯 bf16 训练下 lr 1e-5 的更新被舍入吃掉 → 写了 `scripts/finetune/compare_precision.sh`（fp32 与 bf16 各训 3 个 epoch）。
 - **结果**：两次的 `checkpoint-0`（训练前）评测完全一样且是乱码：`forget_Q_A_Prob`=1.09e-7，ROUGE=0，生成 `oooo…`，每 token loss≈21.6（均匀猜词表才 11.8）。**基座权重加载就是坏的**，与精度无关；bf16 假设没有被验证（也没被推翻），对比实验无意义，已停。
@@ -16,4 +16,7 @@
 - **解决方法**：只跑选层（不训练）扫系数×模式×层（`scripts/NEAR/sweep_select.sh`、`sweep_fine.sh`，汇总 `summarize_sweep.py --top`）。
 - **结果**：`eoi` 只在最后两层有作用（可能只改回答开头，偏浅）；`all` 模式有明确有效区间：系数 12/第 6 层（`unseen_gap` 0.26，ROUGE 0.39，退化 0）、系数 7/第 9 层（0.31，退化 0）、系数 8/第 9 层（0.27，退化 0.05）。回答变成通顺的编造/回避式回答，简单事实不变。
 - **下一步**：训练 W_down：`K=5 COEFF=12 MODE=all W_DOWN_LAYER=[6] bash scripts/NEAR/single_run.sh 0 "3 4"`；备选 `COEFF=7 W_DOWN_LAYER=[9]`。看 `achieved_vs_intended`、`forget_quality`、`model_utility`、retain ROUGE。
+运行脚本
+K=5 COEFF=12 MODE=all W_DOWN_LAYER=[6] bash scripts/NEAR/single_run.sh 0 "3 4"
+
 - **待办**：LUNAR 用 `FORGET_HF_SPLIT=train` 重跑（与 NEAR 同一 40 条 forget）；baseline 对比等 bf16/加载问题澄清后再下结论；forget05 才是 NEAR 预期的优势场景。
