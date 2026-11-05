@@ -17,6 +17,8 @@ data:
       args:
         hf_args:
           data_files: ${paths.data_dir}tofu/tofu_${eval.tofu.neighbor_split}.csv
+        row_filter:
+          split: heldout # only the held-out neighbours: the train ones define r_UV / are kept by W_down
         question_key: ${eval.tofu.question_key}
         generation_mode: true
         extra_keys:

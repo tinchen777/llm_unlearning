@@ -24,6 +24,21 @@ def load_hf_dataset(path: str, add_index: bool = False, **kwargs) -> HFDataset:
         raise RuntimeError(f"Failed to load dataset from path: {path} with arguments: {kwargs}") from e
 
 
+def filter_rows(dataset: HFDataset, row_filter: Optional[Dict[str, Any]]) -> HFDataset:
+    """Keep the rows whose columns match `row_filter` ({column: value} or {column: [values]}; all columns must match). `None` / `{}`: all rows.
+    Used to split one csv into parts, e.g. the neighbour data: `split: train` (reference of r_UV, retained tokens) / `split: heldout` (evaluation)."""
+    if not row_filter:
+        return dataset
+    missing = [c for c in row_filter if c not in dataset.column_names]
+    if missing:
+        raise KeyError(f"row_filter {dict(row_filter)}: the dataset has no column(s) {missing}; columns: {dataset.column_names}.")
+    wanted = {c: (set(v) if isinstance(v, (list, tuple, set)) else {v}) for c, v in row_filter.items()}
+    filtered = dataset.filter(lambda row: all(row[c] in values for c, values in wanted.items()))
+    if len(filtered) == 0:
+        raise ValueError(f"row_filter {dict(row_filter)} keeps no row of the dataset ({len(dataset)} rows).")
+    return filtered
+
+
 def get_map_kwargs(
     dataset: HFDataset,
     keep_in_memory_threshold_mb: int = 512,

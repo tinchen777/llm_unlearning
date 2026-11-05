@@ -76,6 +76,30 @@ def check_neighbors(forget_author_set: Set[Any], nb_by_author: Mapping[Any, Sequ
         raise ValueError(f"Need at least max(ks)={max(ks)} neighbours per author, but got {short} (author: #neighbours).")
 
 
+def ranked_neighbor_order(
+    author_ids: Iterable[Any],
+    neighbor_ids: Iterable[Any],
+    ranks: Iterable[Any],
+) -> Dict[Any, List[Any]]:
+    """The neighbours of every author ordered by their `train_rank` (1 = first): the K-neighbour reference is `order[a][:K]`, nested in K.
+    A neighbour has ONE rank (the same on all its rows), the ranks of an author are 1..n without gaps (the csv of the heldout neighbours
+    has rank -1: filter them out before, see `row_filter`)."""
+    found: Dict[Any, Dict[Any, int]] = {}
+    for a, n, r in zip(author_ids, neighbor_ids, ranks):
+        r = int(r)
+        if found.setdefault(a, {}).setdefault(n, r) != r:
+            raise ValueError(f"neighbour {n!r} of author {a!r} has two different train_rank values ({found[a][n]} and {r}).")
+    order = {}
+    for a, by_neighbor in sorted(found.items(), key=lambda kv: str(kv[0])):
+        ordered = sorted(by_neighbor, key=lambda n: by_neighbor[n])
+        got = [by_neighbor[n] for n in ordered]
+        if got != list(range(1, len(got) + 1)):
+            raise ValueError(f"train_rank of the neighbours of author {a!r} must be 1..{len(got)} (each once), got {got}: "
+                             "is the held-out part (rank -1) still in the data? (`row_filter: {split: train}`)")
+        order[a] = ordered
+    return order
+
+
 def nested_neighbor_order(nb_by_author: Mapping[Any, Sequence[Any]], seed: int) -> Dict[Any, List[Any]]:
     """One random permutation of the neighbours of every author (deterministic given `seed`,
     independent of the order of the csv rows). The K-neighbour reference is `order[a][:K]`."""

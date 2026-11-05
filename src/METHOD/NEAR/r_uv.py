@@ -41,7 +41,7 @@ from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.lineage import model_name
 from METHOD.NEAR._utils.neighbors import (
-    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, summarize_r_uv,
+    check_neighbors, compute_r_uv, forget_authors, nested_neighbor_order, neighbors_by_author, ranked_neighbor_order, summarize_r_uv,
 )
 
 if TYPE_CHECKING:
@@ -92,7 +92,19 @@ def main(cfg: TrackingConfig):
         forget_author_set = set(forget_authors(range(len(forget_data.dataset)), qa_per_author, author_offset))  # type: ignore  # (author_id, ...)
         check_neighbors(forget_author_set, _nb_by_author, ks)
 
-        order = nested_neighbor_order({a: _nb_by_author[a] for a in forget_author_set}, seed=seed)
+        # which neighbours form the K-neighbour reference: the first K by `train_rank` (the neighbours are the TRAIN part of the csv, held-out
+        # ones are for evaluation only), or `ruv.order: random`: the first K of a fixed random order (a csv without ranks)
+        order_mode = str(ruv_cfg.get("order", "rank"))
+        if order_mode == "rank":
+            if "train_rank" not in _neighbor_data.column_names:
+                raise ValueError("ruv.order=rank needs the column `train_rank` in the neighbour data (add it to `extra_keys` of data.neighbor), "
+                                 "or use ruv.order=random.")
+            ranked = ranked_neighbor_order(_neighbor_data["author_id"], _neighbor_data["neighbor_id"], _neighbor_data["train_rank"])
+            order = {a: ranked[a] for a in forget_author_set}
+        elif order_mode == "random":
+            order = nested_neighbor_order({a: _nb_by_author[a] for a in forget_author_set}, seed=seed)
+        else:
+            raise ValueError(f"ruv.order must be `rank` or `random`, got `{order_mode}`.")
         logger.info(
             f"{len(forget_author_set)} forget author(s), neighbours per author: "
             f"{ {a: len(_nb_by_author[a]) for a in sorted(forget_author_set)} }, ks={ks}"
@@ -129,6 +141,7 @@ def main(cfg: TrackingConfig):
             "r_uv": r_uv,  # {K: {author: Tensor[n_pos, n_layers, d]}}, = mean(reference) - mean(forget)
             "ks": ks,
             "neighbor_order": order,  # the first K entries of order[author] are the K neighbours used
+            "neighbor_order_mode": order_mode,
             "forget_means": forget_means,  # the "before" activations (reference for later diagnostics)
             "forget_counts": forget_counts,
             "neighbor_counts": {key: c for key, c in neighbor_counts.items() if key[0] in forget_author_set},

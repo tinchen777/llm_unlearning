@@ -89,7 +89,7 @@ def run_eval(assets: Path, out_root: Path, task: str, max_samples: str, extra=()
 @pytest.mark.smoke
 def test_responses_metric_exposes_its_summary_and_keeps_the_records(assets, tmp_path):
     out = run_eval(assets, tmp_path / "out", "resp", "8")
-    sizes = {"forget": 40, "retain": 40, "holdout": 20, "neighbor": 24}
+    sizes = {"forget": 40, "retain": 40, "holdout": 20, "neighbor": 8}  # neighbor: the held-out neighbours only
     logs = json.loads((out / "TOFU_EVAL.json").read_text())
     summary = json.loads((out / "TOFU_SUMMARY.json").read_text())
     for name in sizes:

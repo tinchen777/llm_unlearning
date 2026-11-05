@@ -22,7 +22,7 @@ TARGET_MODEL=tofu/tofu_${MODEL}_full
 
 TASK_NAME=test/near_tofu_${MODEL}_${FORGET_SPLIT}
 
-read -r -a KS <<< "${KS_LIST:-1 5 15}"
+read -r -a KS <<< "${KS_LIST:-1 3 5 10}"
 # number of neighbours per author used as the reference (must be in ruv.ks); e.g. KS_LIST="5"
 COEFF=${COEFF:-1.0}
 # forget target = original MLP output + COEFF * r_UV (LUNAR README: 2.0)

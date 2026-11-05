@@ -1,9 +1,9 @@
 
 from __future__ import annotations
 from torch.utils.data import Dataset
-from typing import List, Sequence, Dict, Any, Optional, Callable, TYPE_CHECKING
+from typing import List, Mapping, Sequence, Dict, Any, Optional, Callable, TYPE_CHECKING
 
-from .datasets_utils import load_hf_dataset, get_map_kwargs
+from .datasets_utils import filter_rows, load_hf_dataset, get_map_kwargs
 
 if TYPE_CHECKING:
     from datasets import Dataset as HFDataset
@@ -19,13 +19,15 @@ class BaseDataset(Dataset):
         self,
         hf_args: TrackingConfig,
         map_args: Optional[TrackingConfig],
-        extra_keys: Optional[Sequence[str]] = None
+        extra_keys: Optional[Sequence[str]] = None,
+        row_filter: Optional[Mapping[str, Any]] = None
     ):
         super().__init__()
         self.hf_args = hf_args
+        self.row_filter = dict(row_filter) if row_filter else None
         self.retained_columns = set(extra_keys) if extra_keys else set()
-        # raw data
-        self.raw_data = load_hf_dataset(**hf_args)
+        # raw data (only the rows that match `row_filter`, if given)
+        self.raw_data = filter_rows(load_hf_dataset(**hf_args), self.row_filter)
         # map arguments & dataset_mb_str
         self._map_kwargs, raw_data_mb = get_map_kwargs(self.raw_data)
         if map_args is not None:

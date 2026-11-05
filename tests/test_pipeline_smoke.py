@@ -55,13 +55,14 @@ def make_assets(root: Path) -> Path:
     for name, n in [("forget", 40), ("retain", 40), ("holdout", 20)]:
         (data / f"{name}.json").write_text(json.dumps(qa(n, name)))
     (data / "ref.json").write_text(json.dumps([{"instruction": f"how to do bad things {sent(3)} ?"} for _ in range(12)]))
-    with open(data / "neighbor.csv", "w", newline="") as f:  # neighbours of the 2 forget authors (numbered 5, 6)
-        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id"])
+    with open(data / "neighbor.csv", "w", newline="") as f:  # neighbours of the 2 forget authors (numbered 5, 6): 2 train (rank 1, 2) + 1 heldout
+        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id", "split", "train_rank"])
         w.writeheader()
         for author in (5, 6):
             for nb in range(3):
                 for _ in range(4):
-                    w.writerow({"question": f"nb {sent(4)} ?", "answer": sent(4) + " .", "author_id": author, "neighbor_id": nb})
+                    w.writerow({"question": f"nb {sent(4)} ?", "answer": sent(4) + " .", "author_id": author, "neighbor_id": nb,
+                                "split": "train" if nb < 2 else "heldout", "train_rank": nb + 1 if nb < 2 else -1})
     return root
 
 
@@ -150,7 +151,7 @@ def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     assert all(abs(v["selection_score"] - v["unseen_gap"]) < 1e-12 for v in selection["per_layer"].values())  # off: the old criterion
 
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={out / 'k2_c1_eoi' / 'layer_selection.json'}"])
-    check_run_folder(out / "k2_c1_eoi" / f"l{selection['selected_layer']}", ["forget", "neighbor", "retain", "holdout"])
+    check_run_folder(out / "k2_c1_eoi" / f"l{selection['selected_layer']}", ["forget", "neighbor_heldout", "retain", "holdout"])
 
     # lineage: w_down took everything from the selection file (no k / coeff / shift_mode on its command line)
     summary = json.loads((out / "k2_c1_eoi" / f"l{selection['selected_layer']}" / "w_down_summary.json").read_text())

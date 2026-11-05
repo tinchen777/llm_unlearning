@@ -15,10 +15,12 @@ defaults:
   - /generation@generation_args: default
   - /data/packs@data.forget: default_left
   - /data/packs@data.neighbor: default_left
+  - /data/packs@data.neighbor_heldout: default_left
   - /data/packs@data.retain: default_left
   - /data/packs@data.holdout: default_left
   - override /data: null
   - override /data/datasets@data.neighbor.dataset: TOFU/TOFU_QA_csv
+  - override /data/datasets@data.neighbor_heldout.dataset: TOFU/TOFU_QA_csv
 
 mode: NEAR
 forget_split: forget10
@@ -34,12 +36,35 @@ data:
         hf_args:
           name: ${forget_split}
         generation_mode: true
+  # The neighbour csv has a `split` column: `train` neighbours (10 per author, ranked by `train_rank`, K = the first K by rank) define r_UV and
+  # are kept as retained tokens by W_down; `heldout` neighbours (5 per author) are only for evaluating (selection reference, responses).
   neighbor:
     dataset:
       name: TOFU_gen_QA_neighbor
       args:
         hf_args:
           data_files: ${paths.data_dir}tofu/tofu_${neighbor_split}.csv
+        row_filter:
+          split: train
+        generation_mode: true
+        extra_keys:
+          - author_id
+          - neighbor_id
+          - train_rank
+    collator:
+      args:
+        metadata_keys:
+          - author_id
+          - neighbor_id
+          - train_rank
+  neighbor_heldout:
+    dataset:
+      name: TOFU_gen_QA_neighbor_heldout
+      args:
+        hf_args:
+          data_files: ${data.neighbor.dataset.args.hf_args.data_files}
+        row_filter:
+          split: heldout
         generation_mode: true
         extra_keys:
           - author_id
@@ -124,7 +149,8 @@ probe:
 # ---- src/METHOD/NEAR/r_uv.py : r_UV per forget author, ablated over the number K of neighbours -----------
 ruv:
   batch_size: 32
-  ks: [1, 5, 15] # K neighbours per author used as reference (nested: the first K of a fixed random order)
+  ks: [1, 3, 5, 10] # K neighbours per author used as reference (nested: the K train neighbours with the smallest `train_rank`; 10 train neighbours per author)
+  order: rank # rank = by `train_rank` | random = the first K of a fixed random order (a csv without ranks)
   qa_per_author: ${basic.qa_per_author}
   author_offset: ${basic.author_offset}
 
@@ -150,7 +176,7 @@ select:
   # candidate layers (null -> `layer_fraction`, else every layer of r_uv.pt)
   layer_fraction: null
   # window of relative depths, e.g. [0.4, 0.8]; LUNAR's selected layers are at 50-75 % of the depth
-  unseen_splits: [neighbor, holdout]
+  unseen_splits: [neighbor_heldout, holdout]
   # the behaviour the steered forget answers should match
   criterion: unseen_gap
   # unseen_gap (look like a stranger) | rougeL_recall | answer_logprob (max knowledge removal)
@@ -214,7 +240,7 @@ wdown:
   # forget tokens per step, plus the same number of random retain tokens (LUNAR: 64)
   weight_decay: 0.0
   # LUNAR uses AdamW's default 0.01
-  responses_splits: [forget, neighbor, retain, holdout]
+  responses_splits: [forget, neighbor_heldout, retain, holdout]
   # splits whose responses are written before / after the edit
   max_gen_samples: 32
   # fixed random subset per split
