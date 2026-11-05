@@ -24,6 +24,7 @@ case "${FORGET_SPLIT}" in forget005) _OFFSET=200 ;; forget05) _OFFSET=191 ;; for
 AUTHOR_OFFSET=${AUTHOR_OFFSET:-${_OFFSET}}           # makes the author numbering of the forget rows equal to `author_id` of the neighbour csv (forget01: 199, forget005: 200, forget05: 191, forget10: 181)
 
 K=${K:-5}                                     # neighbours per author used as the reference
+RUV_KS=${RUV_KS:-${K}}                        # the K values r_uv.pt (stage 1) is computed for, e.g. RUV_KS=1,3,5,10 for the K ablation (K must be one of them)
 COEFF=${COEFF:-1.0}                           # forget target = original MLP output + COEFF * r_UV
 MODE=${MODE:-eoi}                             # all = the paper (r_UV on every token) | eoi = end-of-instruction tokens only
 SOLVER=${SOLVER:-adam}                        # adam | closed_form
@@ -82,7 +83,7 @@ if has_stage 1; then
   # r_UV of every K in ruv.ks (here only K): saves/NEAR/${TASK_NAME}/r_uv.pt
   run "[1] r_uv" python src/METHOD/NEAR/r_uv.py \
     experiment=unlearn/tofu/NEAR model=${TARGET_MODEL} "${SPLITS[@]}" \
-    "ruv.ks=[${K}]" basic.author_offset=${AUTHOR_OFFSET} \
+    "ruv.ks=[${RUV_KS}]" basic.author_offset=${AUTHOR_OFFSET} \
     task_name=${SELECT_TASK_NAME} ${EXTRA_R_UV}
 fi
 
