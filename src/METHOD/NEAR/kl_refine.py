@@ -10,13 +10,17 @@ edited model says. Here the W_down of the edited layers are trained TOGETHER thr
 The KL is on the first `n_tokens` answer tokens: the edited model, given a forget prompt and the answer of a (train) neighbour of that
 question, should predict that answer like the ORIGINAL model does for the neighbour prompt itself. Only the original model is needed
 (`ref_model`, a frozen copy taken before any edit); no retain model.
+Optional (`forget_prob_weight` mu > 0): + mu * relu(log p_true - log `forget_prob_target`), p_true = the (teacher forced) probability of the TRUE forget answer,
+a hinge that pushes it down to the retain model's level (~0.17) and not beyond: the KL above shapes the beginning of the answer like a neighbour's but does not
+lower the probability of the true answer tokens (the evaluation measures that).
 `rel_MSE` = MSE / mean(target^2) of the layer, so the three terms have comparable scale.
 """
 from __future__ import annotations
 import logging
+import math
 import random
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -126,6 +130,16 @@ def capture_mlp_out(model: Any, layers: Sequence[int]):
             h.remove()
 
 
+def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: torch.Tensor, target: float) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Hinge on the probability of the TRUE answer: per sample p = exp(mean token log-prob of the answer tokens) (the `forget_Q_A_Prob` of the evaluation,
+    teacher forced), loss = mean(relu(log p - log target)): it only acts while a sample is still MORE likely than `target` (the retain model's ~0.17), so
+    the answers are pushed down to the level of a model that never saw them and no further (no over-forgetting). Returns (loss, mean p of the batch)."""
+    logp = torch.log_softmax(logits[:, :-1].float(), dim=-1).gather(-1, input_ids[:, 1:].unsqueeze(-1)).squeeze(-1)
+    mask = (labels[:, 1:] != -100).float()
+    mean_logp = (logp * mask).sum(1) / mask.sum(1).clamp_min(1.0)
+    return F.relu(mean_logp - math.log(target)).mean(), mean_logp.exp().mean().detach()
+
+
 def _rel_mse(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
     """MSE over the real tokens, divided by the mean square of the target (a relative error)."""
     m = mask.bool().unsqueeze(-1)
@@ -153,6 +167,7 @@ def refine_w_down(
     (fp32, cpu) and a history. The weights are NOT written into `model`."""
     steps, lr = int(cfg["steps"]), float(cfg["lr"])
     kl_w, n_tokens, kl_bs = float(cfg["weight"]), int(cfg["n_tokens"]), int(cfg["batch_size"])
+    prob_w, prob_target = float(cfg.get("forget_prob_weight", 0.0) or 0.0), float(cfg.get("forget_prob_target", 0.17))
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
     rng = random.Random(seed)
     device = model.device
@@ -174,11 +189,12 @@ def refine_w_down(
 
             # (a) activations: forget tokens must move by the shift, retain / neighbour tokens must stay
             loss_f = loss_r = 0.0
+            loss_p, prob_now = torch.zeros((), device=device), 0.0
             for kind, batch in (("forget", fb), ("retain", rb)):
                 inputs = to_dev(batch)
                 with torch.no_grad():
                     ref_model(**inputs)
-                model(**inputs)
+                out = model(**inputs)
                 mask = inputs["attention_mask"]
                 for _l in layers:
                     target = ref_out[_l].float()
@@ -190,6 +206,10 @@ def refine_w_down(
                     else:
                         loss_r = loss_r + term
                 part = (forget_weight * loss_f) if kind == "forget" else (retain_weight * loss_r)
+                if kind == "forget" and prob_w > 0:  # the true answers of the forget samples must not stay more likely than the retain model would give them
+                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), prob_target)
+                    part = part + prob_w * loss_p
+                    prob_now = float(p_mean)
                 part.backward()
                 terms[kind] = float((loss_f if kind == "forget" else loss_r).detach())
                 edited_out.clear()
@@ -210,7 +230,7 @@ def refine_w_down(
                 ref_out.clear()
 
             optimizer.step()
-            history.append({"step": step + 1, "forget_rel_mse": terms["forget"], "retain_rel_mse": terms["retain"], "kl": float(loss_kl.detach())})
+            history.append({"step": step + 1, "forget_rel_mse": terms["forget"], "retain_rel_mse": terms["retain"], "kl": float(loss_kl.detach()), "forget_prob_penalty": float(loss_p.detach()), "forget_prob": prob_now})
             if (step + 1) % 10 == 0 or step == 0:
                 logger.info(f"KL refine {step + 1}/{steps}  forget_rel_mse={terms['forget']:.4g}  retain_rel_mse={terms['retain']:.4g}  kl={float(loss_kl.detach()):.4g}")
         new_weights = {_l: w.detach().cpu() for _l, w in weights.items()}

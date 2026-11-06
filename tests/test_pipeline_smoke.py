@@ -285,8 +285,10 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     run("NEAR/select_layer.py", args)
     sel_path = out_root / "saves" / "NEAR" / "klr" / "k2_c1_all" / "layer_selection.json"
     kl = ["wdown.kl.enabled=true", "wdown.kl.steps=3", "wdown.kl.batch_size=4", "wdown.kl.n_tokens=3",
-          "wdown.kl.retain_max_samples=8"]
+          "wdown.kl.retain_max_samples=8", "wdown.kl.forget_prob_weight=1", "wdown.kl.forget_prob_target=0.05"]
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl, "task_name=klr_on"])
     summary = json.loads((out_root / "saves" / "NEAR" / "klr_on" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert summary["kl"]["steps"] == 3 and len(summary["kl"]["history"]) == 3
     assert all(h["kl"] >= 0 for h in summary["kl"]["history"])
+    assert summary["kl"]["forget_prob_weight"] == 1 and all(0 <= h["forget_prob"] <= 1 and h["forget_prob_penalty"] >= 0 for h in summary["kl"]["history"])
+    assert any(h["forget_prob"] > 0 for h in summary["kl"]["history"])

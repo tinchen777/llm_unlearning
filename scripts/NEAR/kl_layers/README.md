@@ -13,3 +13,7 @@ the r_uv.pt of `single_v2/near_tofu_<MODEL>_forget01_ks`, K=5, and skip runs tha
 
 Each of 1-3: c {1, 1.5, 2} x KL {off, 1} on one layer set = 6 runs (3 of them are the "off" controls). `DRY_RUN=1` prints the runs.
 Read: forget_Q_A_Prob / mia_loss / extraction_strength, model_utility and retain ROUGE, ud_wb_unsup, ud_bb and the first words of forget_responses.json.
+
+Added after near_line/17:
+    bash scripts/NEAR/kl_layers/5_forget_prob.sh 0         # KL + hinge on the TRUE answer's probability (FP_WEIGHT 1, 3; layers 11-13, c 1 and 1.5)
+    bash scripts/NEAR/kl_layers/6_large_c.sh 1             # c8 and c10 on layers 7-9 without KL: is c7 the limit?

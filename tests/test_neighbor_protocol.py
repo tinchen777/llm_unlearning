@@ -66,3 +66,20 @@ def test_r_uv_uses_the_train_neighbours_by_rank_and_the_evaluation_the_heldout_o
     run("NEAR/r_uv.py", args + ["ruv.order=random", "task_name=proto_random"])
     random_saved = torch.load(out_root / "saves" / "NEAR" / "proto_random" / "r_uv.pt", weights_only=False)
     assert random_saved["neighbor_order_mode"] == "random" and set(random_saved["neighbor_order"][5]) == {0, 1}
+
+
+def test_forget_prob_penalty_is_a_hinge_on_the_true_answer_probability():
+    import math
+    import torch
+    from METHOD.NEAR.kl_refine import forget_prob_penalty
+    vocab = 5
+    ids = torch.tensor([[0, 1, 2]])
+    labels = torch.tensor([[-100, 1, 2]])  # the two answer tokens
+    logits = torch.zeros(1, 3, vocab)  # uniform: p = 1/5 per answer token
+    loss, p = forget_prob_penalty(logits, ids, labels, target=0.1)
+    assert abs(float(p) - 0.2) < 1e-6 and abs(float(loss) - (math.log(0.2) - math.log(0.1))) < 1e-6
+    loss, _ = forget_prob_penalty(logits, ids, labels, target=0.5)  # already below the target: no penalty
+    assert float(loss) == 0.0
+    logits.requires_grad_(True)
+    forget_prob_penalty(logits, ids, labels, target=0.1)[0].backward()
+    assert logits.grad is not None and logits.grad.abs().sum() > 0

@@ -233,6 +233,8 @@ wdown:
     n_tokens: 8 # first answer tokens of the neighbour answer that the KL compares
     batch_size: 8 # (forget prompt, neighbour answer) pairs per step; a forget / retain batch is wdown.batch_size
     retain_max_samples: 128 # per retain split
+    forget_prob_weight: 0.0 # mu: hinge on the probability of the TRUE forget answer (the evaluation's forget_Q_A_Prob), 0 = off; pushes it down to forget_prob_target, not beyond
+    forget_prob_target: 0.17 # the retain model's forget_Q_A_Prob on forget01 (1B); use the retain model's value of the setting
   answer_coeff: null # include_answer only: factor on `coeff` for the ANSWER tokens (e.g. 0.5); null = the same shift as the prompt
   retain_splits: [retain, neighbor]
   retain_max_samples: 512

@@ -32,6 +32,8 @@ ANSWER_COEFF=${ANSWER_COEFF:-}            # only with INCLUDE_ANSWER=1: factor o
 KL_WEIGHT=${KL_WEIGHT:-}               # non-empty: stage 2 (end-to-end refinement with the KL term, needs INCLUDE_ANSWER=1), e.g. KL_WEIGHT=1; KL_STEPS / KL_LR optional
 KL_STEPS=${KL_STEPS:-}
 KL_LR=${KL_LR:-}
+FP_WEIGHT=${FP_WEIGHT:-}                 # with KL_WEIGHT: mu of the hinge on the probability of the TRUE forget answer (wdown.kl.forget_prob_weight), FP_TARGET (default 0.17) its level
+FP_TARGET=${FP_TARGET:-}
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -64,6 +66,8 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     variant=${variant}_kl${KL_WEIGHT}
     if [ -n "${KL_STEPS}" ]; then extra="${extra} wdown.kl.steps=${KL_STEPS}"; variant=${variant}_s${KL_STEPS}; fi
     if [ -n "${KL_LR}" ]; then extra="${extra} wdown.kl.lr=${KL_LR}"; variant=${variant}_lr${KL_LR}; fi
+    if [ -n "${FP_WEIGHT}" ]; then extra="${extra} wdown.kl.forget_prob_weight=${FP_WEIGHT}"; variant=${variant}_fp${FP_WEIGHT}; fi
+    if [ -n "${FP_TARGET}" ]; then extra="${extra} wdown.kl.forget_prob_target=${FP_TARGET}"; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"
