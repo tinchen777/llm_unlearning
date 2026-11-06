@@ -17,6 +17,10 @@
 | metric_line | 4 | UD 黑盒/白盒已实现；发现两处缺口：怪词（流畅度）抓不到，白盒 NEAR 反而比 LUNAR 差 |
 | data_line | 4 | train/heldout 协议已落地；配对字段 `qa_id` + `source_question`，`forget_idx` 的编号相对 forget10 |
 
+## 论文用的总梳理
+
+`paper_notes/1_实验与结论梳理_data_metric_NEAR.md`：按 data / metric / NEAR 三个方面汇总已做的实验、结论证据级别、局限和待做，并列出可写/暂时不能写的 claim 与建议的图表。
+
 ## 常用约定
 
 - 实验结果都在 `saves/`：训练 `saves/NEAR/single_v2/<变体>/`，评测 `saves/eval/NEAR/single_v2/<变体>_k5_l<层>_c<系数>_all/`；r_uv 与选层在 `saves/NEAR/single_v2/near_tofu_<模型>_<forget>[_ks]/`。
