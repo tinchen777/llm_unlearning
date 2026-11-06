@@ -38,7 +38,17 @@ SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train 
 # where r_uv.pt and the layer selection of this setting are (stages 1-2 of the default run), and the folder prefix of the variants
 # (saves/NEAR/<OUT_PREFIX>/<variant>/, saves/eval/NEAR/<OUT_PREFIX>/<variant>_k.../): e.g. OUT_PREFIX=single_v2 for the runs of the new neighbour protocol
 OUT_PREFIX=${OUT_PREFIX:-single}
-export SELECT_TASK_NAME=${SELECT_TASK_NAME:-${OUT_PREFIX}/near_tofu_${MODEL}_${FORGET_SPLIT}}
+# no SELECT_TASK_NAME given: the folder of the default run (saves/NEAR/<OUT_PREFIX>/near_tofu_<MODEL>_<FORGET>) or, if it has no selection for this
+# K / COEFF, that of the steering sweep (..._ks, which holds the selections of the other coefficients)
+if [ -z "${SELECT_TASK_NAME:-}" ]; then
+  SELECT_TASK_NAME=${OUT_PREFIX}/near_tofu_${MODEL}_${FORGET_SPLIT}
+  sel_file() { echo "saves/NEAR/$1/k${K}_c$(printf "%g" "${COEFF}")_all/layer_selection.json"; }
+  if [ ! -f "$(sel_file "${SELECT_TASK_NAME}")" ] && [ -f "$(sel_file "${SELECT_TASK_NAME}_ks")" ]; then
+    echo "no selection for K=${K} COEFF=${COEFF} in ${SELECT_TASK_NAME}: using ${SELECT_TASK_NAME}_ks" >&2
+    SELECT_TASK_NAME=${SELECT_TASK_NAME}_ks
+  fi
+fi
+export SELECT_TASK_NAME
 GPU_ID=${1:-0}
 
 for rw in "${RETAIN_WEIGHTS[@]}"; do
