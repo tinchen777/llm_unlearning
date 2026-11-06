@@ -19,9 +19,11 @@ def checkpoints(run):
     return sorted(out, key=lambda t: t[0])
 
 
-def best_epoch(cks, tol):
+def best_epoch(cks, tol, base_fallback=None):
     """`(step, summary, satisfied)`: the checkpoint with the best forget quality whose utility is >= (1 - tol) * the utility at step 0."""
     base = next((s.get("model_utility") for step, s in cks if step == 0), None)
+    if base is None:  # this run has no step-0 evaluation: the original model of the same setting (found in another run)
+        base = base_fallback
     usable = [(step, s) for step, s in cks if step > 0 and s.get("model_utility") is not None]
     if not usable:
         return None
@@ -42,10 +44,13 @@ def main():
     args = parser.parse_args()
 
     rows = []
-    for run in sorted(glob.glob(os.path.join(args.root, "*", f"tofu_{args.model}_{args.forget}*"))):
+    runs = sorted(glob.glob(os.path.join(args.root, "*", f"tofu_{args.model}_{args.forget}*")))
+    step0 = [s.get("model_utility") for run in runs for step, s in checkpoints(run) if step == 0 and s.get("model_utility") is not None]
+    fallback = max(step0) if step0 else None  # the original model is the same in every run of this model / forget split
+    for run in runs:
         method = os.path.basename(os.path.dirname(run))
         name = os.path.basename(run).replace(f"tofu_{args.model}_{args.forget}", "") or "(default lr)"
-        picked = best_epoch(checkpoints(run), args.tol)
+        picked = best_epoch(checkpoints(run), args.tol, fallback)
         if picked:
             rows.append((method, name, *picked))
     f = lambda v: "    -" if v is None else f"{v:5.3f}"
