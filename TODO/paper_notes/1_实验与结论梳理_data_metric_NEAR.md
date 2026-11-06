@@ -1,6 +1,6 @@
 # 论文用：实验与结论梳理（data / metric / NEAR 方法）
 
-> 截至 near_line/17、baseline_line/4、metric_line/4、data_line/4。数字出处在对应的 line 文件里（路径写在那里）。
+> 截至 near_line/18、baseline_line/5、metric_line/4、data_line/4。配套文档：`2_NEAR方法文档.md`（方法的完整描述，写 Method 一节用）、`3_讨论纪要与阶段结论.md`（讨论过程、决策理由、可挪用的表述）。数字出处在对应的 line 文件里（路径写在那里）。
 > 所有实验：Llama-3.2-1B-Instruct 官方 full / retain99 模型，TOFU forget01（作者 199、200，40 条），K=5，**单次运行**（无多种子）。
 > 标记：**【稳】** 多个配置/协议下一致；**【初步】** 单个配置或解释未经干预验证；**【待做】** 还没做。
 
@@ -14,6 +14,7 @@
 | 最佳配置（B+答案 token，c7，层 7-9）的 Prob/extraction/MIA 与 retain 模型接近；utility 0.57（retain 0.60），LUNAR 默认设置 0.27 | 与调好参的 baseline / LUNAR 的"公平"优劣：它们的调参预算有限（只调 lr 两档 / 只扫系数），baseline 无 UD |
 | 加 KL 第二阶段后，forget 回答是流畅的"另一位虚构作者"，黑盒 `ud_bb`=0，怪词（"Basis…"）消失；在 12 个（层集, 系数）组合上一致地把 Prob 再降 0.25–0.3，utility 只少 0.01–0.02（§3.8） | 白盒痕迹已降低：KL 改变不了它，它由（系数, 层）决定；遗忘到 retain 水平的所有配置 `wb_unsup`≈0.99 |
 | 黑盒 TAS 打分/可检测度指标已实现，LUNAR 按作者聚合 `entity_bb`=1.0（一个作者 15% 拒答就能认出） | `forget_quality` 的任何排序：n=40 时它是离散台阶（见 §2.5） |
+| NEAR 的遗忘可以到 retain 水平以下：c8（层 7-9）Prob 0.142（retain 0.169），utility 0.558，retain 生成 0.569；LUNAR c1.5 Prob 0.115 但 utility 0.396（§3.7）。"LUNAR 遗忘更好"是因为它把概率质量放在拒答上（forget 回答 55–70% 是拒答），不是更像 retain（§2.4） | "NEAR 的遗忘上限"：c10 以上没试（1B 缺 c10 选层文件），3B/8B 未验证 |
 | 邻居数据按 train/heldout 分离后，对 NEAR 结果影响很小（Prob 0.163→0.161），r_UV 对没见过的邻居泛化良好（cos 0.85–0.96） | 数据审计结论（重复、泄漏、风格、属性匹配）：**还没做** |
 
 ---
@@ -69,6 +70,8 @@
 4. **指标盲区：怪词**【稳】：B+ans c7 的 12/40 forget 回答以 "Basis to …" 开头（"Basil" 的近邻词），`ud_bb` 只有 0.046；answer_coeff 后变成 "Beneer/Benever"，仍抓不到。加 KL 后消失。首词集中度不适合做指标（forget 集只有两位作者，以作者名开头本来正常）。
 5. **白盒**（near_line/13）：见 §3.4。
 
+6. **`forget_Q_A_Prob` 衡量的是概率质量去了哪里，不是生成的句子**（teacher forcing：给定问题，标准答案各 token 的平均概率 exp(−平均交叉熵)，再对样本取平均）。LUNAR 把概率质量集中到拒答句上，标准答案的 token 被压得比 retain 模型（0.169）还低（c1.5：0.115；c2：0.024），所以"看起来遗忘得很干净"，对应 mia 掉到 0.10–0.43、对 forget 的 TAS 拒答率 0.55–0.70、ROUGE 0.07–0.10；NEAR 不拒答（拒答率 0），回答是通顺的另一个说法，ROUGE 0.26–0.29（retain 0.42），幻觉率 0.50–0.575（retain 0.325）：口气像、信息点是错的。**因此评价标准是"与 retain 相近"，而不是"越低越好"**；过度遗忘本身是可被发现的痕迹。
+
 ### 2.5 读指标时的注意（附录可写）
 - `forget_quality`（KS 检验 p 值）在 n=40 时 D 只取 k/40，p 值是离散台阶（0.766/0.405/0.266/0.165/0.097/0.054/0.029/0.014…）；差 1 个样本位置就能让 p 在台阶间跳；**不要拿它给 forget01 上的配置排序**；建议报 D 或在 forget05/10 上报。
 - 主要遗忘指标改用连续量：`forget_Q_A_Prob`（retain≈0.17）、`extraction_strength`（≈0.06）、`mia_loss`（≈0.48，0.5=不可区分；显著 >0.5 说明 forget 样本更"熟"）。
@@ -118,6 +121,7 @@ r_UV（每个作者：K 个邻居问题的 eoi 位置平均激活 − forget 问
 
 ### 3.6 与 LUNAR / baseline 的对照（forget01，near_line/9, 12；baseline_line/2, 3, 4）
 > **协议更新（baseline_line/4）**：baseline 以后统一用 5 个 epoch、固定学习率（1e-4 起）、带探针和 fast 评测（1B / 3B / 8B 相同）；下面的数字是旧的 10-epoch（20 步）结果，以新协议的结果为准，出来后更新。
+> **学习率教训（baseline_line/5）**：新协议下 lr 1e-4 对 GradAscent、GradDiff 过大：1B 的 GradAscent 第 2 步 Prob 0.158 / utility 0.428，第 4 步起 Prob 0、utility 0；8B 的 GradAscent 同样，GradDiff 在 8B 第 2 步 utility 就只有 0.036。每个 epoch 才评一次，第一个评测点往往已越过"遗忘到位"的位置。因此分方法设学习率（GradAscent、GradDiff、RMU：1B/3B 5e-5、8B 2e-5；NPO、SimNPO、IdkDPO：1B/3B 1e-4、8B 5e-5）。
 - 匹配点"遗忘到 retain 水平"（Prob≈0.1–0.2，mia≈0.4–0.55）：NEAR B+ans（Prob 0.206，mia 0.531，utility **0.569**，retain ROUGE 0.588，`ud_bb` 0.046）；NEAR+KL（0.227，0.724，0.553，0.551，0.0）。
 - 调过 lr 的 baseline（best epoch，lr {5e-5, 1e-4}，20 步）：IdkDPO 1e-4（0.132，0.461，utility 0.414，retain ROUGE 0.339）；RMU 1e-4 step2（0.152，0.414，0.412，0.285）；NPO 1e-4 step2（0.184，0.438，0.444，0.329）；SimNPO/GA/GradDiff 1e-4 遗忘不到位（Prob 0.27–0.31，mia 0.71–0.81）且 utility 0.43–0.48。全部没有满足"utility ≥ 95% 原模型（0.597）"。默认 lr 基本不遗忘。
 - LUNAR（系数扫描）：c1.5 Prob 0.115，utility 0.396，`ud_bb` 0.52；c2 utility 0.269；forget005 c1.5/c2：utility 0.44，`ud_bb` 0.475/0.25；c0.5/c1 几乎不遗忘。
@@ -129,7 +133,7 @@ r_UV（每个作者：K 个邻居问题的 eoi 位置平均激活 − forget 问
 - 最小白盒痕迹：小系数（c1–c2，浅层）`wb_unsup` 低到 0.1–0.5，但此时几乎不遗忘（Prob ≥ 0.55）。
 - 最稳的黑盒：加 KL 的 c7（Prob 0.227、mia 0.724、`ud_bb` 0、无怪词），utility 0.553。
 - **与 LUNAR 的差距**：LUNAR 的遗忘更"深"：c1.5 Prob 0.115 / mia 0.426 / extraction 0.026，c2 Prob 0.024 / mia 0.101（远低于 retain 的 0.483，过度遗忘，`privleak` +65）。在 retain 水平附近（Prob 0.1–0.2、mia 0.43–0.53）两者遗忘强度相当（NEAR 0.206 / 0.531，LUNAR c1.5 0.115 / 0.426），LUNAR 略强约 0.09（Prob 绝对值）；代价悬殊：utility 0.569 对 0.396（差 0.17），retain ROUGE 0.588 对 0.478（差 0.11），`ud_bb` 0.046 对 0.521，白盒 `wb_unsup` 0.996 对 0.566（LUNAR 更小，但它的低值对应已被破坏的模型）。LUNAR 能把 Prob 压到 0.02 只是因为它把模型破坏了（utility 0.27）。
-- **没有被验证的**：NEAR 在多层配置下没试过比 c7 更大的系数（c8–c12）；单层 steering 里 c10 在 l7-9 退化率 12–30%。因此"NEAR 遗忘不如 LUNAR 强"不是已经证实的，而是在已试配置内成立。
+- **c7 不是上限（补充）**：c8（层 7-9，答案 token，不加 KL）Prob **0.142**（低于 retain 的 0.169）、extraction 0.039、mia 0.443、utility 0.558、retain 生成 0.569，代价是 `ud_bb` 0.046→0.125（更多回避式回答，仍无乱码），白盒仍 0.996。与 LUNAR c1.5（Prob 0.115，utility 0.396）相比 utility 高 0.16。主配置仍用 c7（黑盒更干净），c8 作为"可以更强"的证据。c10 没有跑成（1B 缺选层文件），预计过度遗忘，不补。
 
 ### 3.8 小系数 + KL、深层与 300 步（near_line/15、17）
 - 假设：把行为交给 KL、激活留在邻居附近，用小系数降低白盒痕迹。结果【稳】：**没有做到 retain 水平**（c1–c4 × 层 7-9 / 9-11 / 10-12 / 11-13 × {off, KL}：最好 Prob 0.475、mia 0.931）；遗忘到位仍需要 c7，而 c7 的 `wb_unsup` ≈ 0.99。
@@ -153,6 +157,7 @@ r_UV（每个作者：K 个邻居问题的 eoi 位置平均激活 − forget 问
 ---
 
 ## 4. 论文里最值得展示的图表（建议）
+> 主 Pareto 图和匹配表由 `scripts/analysis/pareto.py` 生成（`saves/analysis/pareto/`）：x = `forget_Q_A_Prob`（反转，越往右遗忘越多），y = utility / retain 生成 / 白盒痕迹 / 黑盒痕迹；NEAR、NEAR+KL、LUNAR 三个颜色，baseline 灰色（按方法用形状区分），retain / full 为星。匹配表规则：Prob ≤ 0.25 且 |mia − retain 的 mia| ≤ 0.25 的点里取 utility 最高者；从未进入该区域的方法标 * 并给出最接近的点。baseline 默认只取 5-epoch 协议（`--epochs 5`）。
 1. 方法流水线图 + steering 有效区间热力图（系数 × 层，`unseen_gap`/退化率）。
 2. 多层分摊 ablation 表：单层 / A / B / C（独立 vs 顺序）→ 说明 `increment` 和 `sequential` 的必要性。
 3. 主对比表：NEAR(+KL) / LUNAR(调参) / baselines(调参)：Prob、extraction、mia、utility、retain ROUGE、拒答率、`ud_bb`、`entity_bb`、`wb_unsup`。
@@ -163,3 +168,4 @@ r_UV（每个作者：K 个邻居问题的 eoi 位置平均激活 − forget 问
 ## 5. 复现信息
 - 输出：`saves/NEAR/single_v2/<变体>/`，评测 `saves/eval/NEAR/single_v2/<变体>_k5_l<层>_c<系数>_all/`；r_uv 与选层在 `.../near_tofu_Llama-3.2-1B-Instruct_forget01[_ks]/`（`_ks` 含 K 消融与各系数选层）。
 - 脚本：`scripts/NEAR/{single_run,sweep_select,sweep_fine,sweep_w_down,sweep_footprint,sweep_kl}.sh`，`scripts/LUNAR/{single_run,sweep_coeff}.sh`，`scripts/unlearn/tune.sh`，`scripts/eval/baseline_probe.sh`，`scripts/analysis/{baseline_table,detectability_table}.py`。
+- 新增脚本（本轮）：`scripts/NEAR/sweep_kl.sh`、`scripts/NEAR/kl_layers/{0..6}.sh`（小系数 + KL 的层/系数网格、300 步检验、铰链、c8/c10）、`scripts/analysis/pareto.py`；`EVAL_PROFILE=fast`（`configs/eval/tofu_fast.yaml`）；baseline 的 `EPOCHS` 默认 5、`TAG`、`EXTRA_TRAIN`（`scripts/unlearn/_common.sh`）；`scripts/unlearn/tune.sh` 默认 `PROBE=1` + fast。

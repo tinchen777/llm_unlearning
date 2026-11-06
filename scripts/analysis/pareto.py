@@ -53,7 +53,7 @@ def collect(near, lunar, baselines, model, forget, epochs="5"):
         kl = re.search(r"_kl(\d+(?:\.\d+)?)", name)
         family = "NEAR+KL" if kl and float(kl.group(1)) > 0 else "NEAR"
         points.append({"family": family, "method": family, "run": name.split("_k5_")[0], **s})
-    for d in sorted(glob.glob(os.path.join(lunar, f"*_{forget}_*"))):
+    for d in sorted(glob.glob(os.path.join(lunar, f"*_{model}_{forget}_*"))):
         s = read_summary(os.path.join(d, "TOFU_SUMMARY.json"))
         if s is not None:
             m = re.search(r"_c([\d.]+)_l", os.path.basename(d))

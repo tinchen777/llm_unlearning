@@ -15,14 +15,17 @@
 
 | 线 | 最新文件 | 一句话状态 |
 |---|---|---|
-| near_line | 17 | 最佳配置 B+答案 token（c7，层 7-9）；加 KL 第二阶段后黑盒无痕迹（无拒答、无怪词）且遗忘保住；白盒 `ud_wb_unsup` 仍 0.95–0.996；来源已查明：c·r_UV 把 forget 激活推到邻居均值之外（13） |
-| baseline_line | 3 | 调参后 baseline（lr 1e-4 等）与 LUNAR 遗忘到 retain 水平时 utility 只有 0.40–0.44（NEAR 0.55–0.57）；baseline 的 UD、更细调参仍缺 |
+| near_line | 18 | 最佳配置 B+答案 token（c7，层 7-9）；加 KL 第二阶段后黑盒无痕迹（无拒答、无怪词）且遗忘保住；白盒 `ud_wb_unsup` 仍 0.95–0.996；来源已查明：c·r_UV 把 forget 激活推到邻居均值之外（13） |
+| baseline_line | 5 | 调参后 baseline（lr 1e-4 等）与 LUNAR 遗忘到 retain 水平时 utility 只有 0.40–0.44（NEAR 0.55–0.57）；baseline 的 UD、更细调参仍缺 |
 | metric_line | 4 | UD 黑盒/白盒已实现；发现两处缺口：怪词（流畅度）抓不到，白盒 NEAR 反而比 LUNAR 差 |
 | data_line | 4 | train/heldout 协议已落地；配对字段 `qa_id` + `source_question`，`forget_idx` 的编号相对 forget10 |
 
 ## 论文用的总梳理
 
-`paper_notes/1_实验与结论梳理_data_metric_NEAR.md`：按 data / metric / NEAR 三个方面汇总已做的实验、结论证据级别、局限和待做，并列出可写/暂时不能写的 claim 与建议的图表。
+`paper_notes/`：
+- `1_实验与结论梳理_data_metric_NEAR.md`：按 data / metric / NEAR 汇总已做的实验、结论证据级别、局限和待做，列出可写/暂时不能写的 claim 与建议的图表。
+- `2_NEAR方法文档.md`：方法的完整描述（符号、r_UV、选层、W_down、多层 `increment` / `sequential`、KL / 铰链、评测协议、与 LUNAR 的区别、局限），写 Method 一节用。
+- `3_讨论纪要与阶段结论.md`：讨论过程里的判断、证据、决策理由、更正记录和可直接改写的表述草稿；§11 是可挪用的主结果表。
 
 ## 常用约定
 

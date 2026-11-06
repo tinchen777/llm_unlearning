@@ -80,5 +80,5 @@ def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
     assert pareto.front([p for p in points if p["family"] == "NEAR"])[0]["forget_Q_A_Prob"] == 0.2
     out = tmp_path / "out"
     pareto.write_csv(points, str(out) + ".csv")
-    pareto.plot(points, {"retain": summary(0.17, 0.6)}, 0.25, str(tmp_path / "p.png"))
-    assert (tmp_path / "p.png").stat().st_size > 1000
+    pareto.plot(points, {"retain": summary(0.17, 0.6)}, 0.25, str(tmp_path / "p"))  # writes p.png and p.pdf
+    assert (tmp_path / "p.png").stat().st_size > 1000 and (tmp_path / "p.pdf").stat().st_size > 1000
