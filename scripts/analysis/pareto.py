@@ -149,7 +149,7 @@ BASE_MARKERS = dict(zip(BASELINES, ["v", "^", "<", ">", "P", "X"]))
 GRAY, INK, MUTED, SURFACE, GRID = "#8a8984", "#0b0b0b", "#52514e", "#fcfcfb", "#e6e5e1"
 
 
-def plot(points, refs, tau, out_png):
+def plot(points, refs, tau, out_name):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -201,7 +201,8 @@ def plot(points, refs, tau, out_png):
     fig.suptitle(f"Forgetting vs utility and detectability  (shaded: forget Prob <= {tau}; lines: non-dominated points; the table also bounds mia_loss)", x=0.01, ha="left", fontsize=12, color=INK)
     fig.text(0.99, 0.012, "forget01, 1B; one run per point, n=40", ha="right", fontsize=8, color=MUTED)
     fig.tight_layout(rect=(0, 0.07, 1, 0.97))
-    fig.savefig(out_png, dpi=160, facecolor=SURFACE)
+    fig.savefig(out_name + ".png", dpi=160, facecolor=SURFACE)
+    fig.savefig(out_name + ".pdf", dpi=160, facecolor=SURFACE)
 
 
 def main():
@@ -230,8 +231,8 @@ def main():
         os.makedirs(args.out, exist_ok=True)
         write_csv(points, os.path.join(args.out, "points.csv"))
         if not args.no_plot:
-            plot(points, refs, args.tau, os.path.join(args.out, "pareto.png"))
-            print(f"\nwritten: {args.out}/pareto.png, points.csv")
+            plot(points, refs, args.tau, os.path.join(args.out, "pareto"))
+            print(f"\nwritten: {args.out}/pareto.png, {args.out}/pareto.pdf, points.csv")
 
 
 if __name__ == "__main__":
