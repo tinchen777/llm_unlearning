@@ -1,0 +1,33 @@
+# @package eval.tofu
+# FAST profile of `tofu.yaml` (select with `eval=tofu_fast`, scripts: EVAL_PROFILE=fast): the metrics every analysis of near_line / baseline_line uses, for sweeps
+# and ablations. The values are computed exactly as in `tofu.yaml`, so fast and full results can be merged in one table; run the full profile only for the
+# configurations that go into the paper (the edited models are saved: `single_run.sh ... "4"` re-evaluates without training).
+# Dropped (not used so far, or redundant): mia_gradnorm (per-sample backward pass), mia_zlib, mia_min_k_plus_plus, mia_min_k + privleak,
+# exact_memorization (redundant with forget_Q_A_Prob / extraction_strength), forget_truth_ratio + forget_quality (+ the PARA / PERT variants it needs):
+# on forget01 (n=40) forget_quality is a discrete step function and not used to rank configurations.
+defaults:
+  - tofu_metrics:
+    - forget_Q_A_Prob
+    - forget_Q_A_ROUGE
+    - model_utility
+    - extraction_strength
+    - mia_loss
+    - forget_responses
+    - retain_responses
+    - holdout_responses
+
+    # - mia_reference # set reference model path appropriately
+    # - forget_Q_A_gibberish
+
+metrics: {}
+handler: TOFUEvaluator
+overwrite: false
+forget_split: forget??
+holdout_split: holdout??
+retain_split: retain??
+output_dir: null
+retain_logs_path: ${paths.root_dir}/saves/eval/TOFU/tofu_${model.base_name}_${retain_split}/TOFU_EVAL.json
+# the retain model's probe (scripts/eval/baseline_probe.sh): the clean reference of the white-box detectability numbers (optional)
+probe_ref_path: ${paths.root_dir}/saves/eval/retain/${model.base_name}/${forget_split}/TOFU_EVAL.json
+question_key: question # question or paraphrased_question
+batch_size: 8

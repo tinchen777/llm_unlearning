@@ -37,6 +37,10 @@ EXTRA_R_UV=${EXTRA_R_UV:-}
 EXTRA_SELECT=${EXTRA_SELECT:-}
 EXTRA_W_DOWN=${EXTRA_W_DOWN:-}
 EXTRA_EVAL=${EXTRA_EVAL:-}
+# EVAL_PROFILE=fast: the stage-4 evaluation without the metrics that are not used in sweeps (configs/eval/tofu_fast.yaml: no mia_gradnorm / zlib / min_k(++),
+# privleak, exact_memorization, forget_quality); the other values are computed as in the full profile. Default: full.
+EVAL_PROFILE=${EVAL_PROFILE:-full}
+if [ "${EVAL_PROFILE}" = fast ]; then EXTRA_EVAL="eval=tofu_fast ${EXTRA_EVAL}"; elif [ "${EVAL_PROFILE}" != full ]; then echo "EVAL_PROFILE must be full or fast" >&2; exit 1; fi
 
 # TOFU_EVAL.json of the retain model: the reference of forget quality and privleak (None without it)
 RETAIN_LOGS_PATH=${RETAIN_LOGS_PATH:-saves/eval/TOFU/tofu_${MODEL}_${RETAIN_SPLIT}/TOFU_EVAL.json}
