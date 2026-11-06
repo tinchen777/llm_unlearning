@@ -34,8 +34,8 @@ def test_scripts_are_valid_shell():
 def test_method_defaults_are_not_overridden(method):
     out = compose(method, ENV_3B_FORGET05)
     # grouped by method, then by model and forget set: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT>
-    assert f"task_name: {method}/tofu_Llama-3.2-3B-Instruct_forget05" in out
-    assert f"output_dir: saves/tofu_unlearn/{method}/tofu_Llama-3.2-3B-Instruct_forget05" in out
+    assert f"task_name: {method}/tofu_Llama-3.2-3B-Instruct_forget05_ep5" in out
+    assert f"output_dir: saves/tofu_unlearn/{method}/tofu_Llama-3.2-3B-Instruct_forget05_ep5" in out
     assert "forget_split: forget05" in out and "retain_split: retain95" in out and "holdout_split: holdout05" in out
     assert "saves/eval/TOFU/tofu_Llama-3.2-3B-Instruct_retain95/TOFU_EVAL.json" in out
     if method == "SimNPO":
@@ -47,6 +47,12 @@ def test_method_defaults_are_not_overridden(method):
 def test_idk_dpo_uses_the_idk_forget_data_and_the_dpo_trainer():
     out = compose("IdkDPO", ENV_3B_FORGET05)
     assert "handler: DPO" in out and "TOFU_balanced_unlearn_idk" in out and "eval_on_start: false" in out.lower()
+
+
+def test_the_baseline_protocol_is_5_epochs_and_marked_in_the_folder_name():
+    out = compose("GradDiff", ENV_3B_FORGET05)
+    assert "num_train_epochs: 5" in out and "tofu_Llama-3.2-3B-Instruct_forget05_ep5" in out
+    assert "num_train_epochs: 10" in compose("GradDiff", ENV_3B_FORGET05 + " export EPOCHS=10;")
 
 
 def test_tuning_overrides_go_into_the_trainer_args_and_the_folder_name():

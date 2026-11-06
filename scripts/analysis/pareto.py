@@ -7,7 +7,7 @@ saved (TOFU_SUMMARY.json): no model is run.
 Points
 - NEAR / NEAR+KL: every run folder of `--near` whose name has `_kl<w>` (w > 0) is NEAR+KL, the others are NEAR (kl0 = end-to-end training without the KL term).
 - LUNAR: the run folders of `--lunar` of this forget split (the coefficient sweep).
-- baselines: EVERY epoch checkpoint (step > 0) of every run of `--baselines` (a run `X` is replaced by its re-run `X_ud`, which has the probe / ud_*) (so a method with several learning rates / epochs is a cloud of points, not
+- baselines: the runs of the protocol `--epochs` (default 5, folder name `_ep5`; `all` for every run), EVERY epoch checkpoint (step > 0) of every run of `--baselines` (a run `X` is replaced by its re-run `X_ud`, which has the probe / ud_*) (so a method with several learning rates / epochs is a cloud of points, not
   the one "best epoch" of baseline_table.py).
 - references: the retain and the full model (saves/eval/{retain,full}/<model>/<forget>).
 
@@ -42,7 +42,7 @@ def read_summary(path):
     return out if out["forget_Q_A_Prob"] is not None and out["model_utility"] is not None else None
 
 
-def collect(near, lunar, baselines, model, forget):
+def collect(near, lunar, baselines, model, forget, epochs="5"):
     """List of points `{family, method, run, <KEYS>}`; family is NEAR | NEAR+KL | LUNAR | baseline."""
     points = []
     for d in sorted(glob.glob(os.path.join(near, "*"))):
@@ -59,6 +59,8 @@ def collect(near, lunar, baselines, model, forget):
             m = re.search(r"_c([\d.]+)_l", os.path.basename(d))
             points.append({"family": "LUNAR", "method": "LUNAR", "run": f"c{m.group(1)}" if m else os.path.basename(d), **s})
     for run in sorted(glob.glob(os.path.join(baselines, "*", f"tofu_{model}_{forget}*"))):
+        if epochs != "all" and not re.search(rf"_ep{epochs}(?:_|$)", os.path.basename(run)):  # another protocol (e.g. the earlier 10-epoch runs)
+            continue
         if os.path.isdir(run + "_ud"):  # the re-run of this setting with the probe (TAG=_ud, with ud_*) replaces the TOFU-only run
             continue
         method = os.path.basename(os.path.dirname(run))
@@ -209,13 +211,15 @@ def main():
     ap.add_argument("--near", default="saves/eval/NEAR/single_v2")
     ap.add_argument("--lunar", default="saves/eval/LUNAR/single")
     ap.add_argument("--baselines", default="saves/tofu_unlearn")
+    ap.add_argument("--epochs", default="5", help="baseline protocol: only the runs trained with this many epochs (folder name _ep<N>); `all` = every run, "
+                    "also the earlier 10-epoch / 20-step runs without the suffix")
     ap.add_argument("--tau", type=float, default=0.25)
     ap.add_argument("--mia-tol", type=float, default=0.25, help="retain-like: |mia_loss - mia_loss of the retain model| <= this")
     ap.add_argument("--out", default=None, help="folder for pareto.png, points.csv, matched.md (default: only the table)")
     ap.add_argument("--no-plot", action="store_true")
     args = ap.parse_args()
 
-    points = collect(args.near, args.lunar, args.baselines, args.model, args.forget)
+    points = collect(args.near, args.lunar, args.baselines, args.model, args.forget, args.epochs)
     if not points:
         sys.exit("no points found")
     refs = references(args.model, args.forget)

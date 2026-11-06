@@ -64,16 +64,18 @@ def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
     put(lunar / "lunar_tofu_M_forget01_LUNAR_harmful_c1.5_l8_all", summary(0.11, 0.40, ud_bb=0.5))
     put(lunar / "lunar_tofu_M_forget05_LUNAR_harmful_c1.5_l8_all", summary(0.01, 0.10))  # another forget split: not collected
     for step, (prob, util, mia) in {0: (0.9, 0.6, 1.0), 2: (0.15, 0.45, 0.45), 4: (0.01, 0.30, 0.02)}.items():
-        put(base / "NPO" / "tofu_M_forget01" / f"checkpoint-{step}" / "evals", summary(prob, util, mia))
-    (base / "NPO" / "tofu_M_forget01" / "checkpoint-9" / "evals").mkdir(parents=True)  # no summary: skipped
-    put(base / "RMU" / "tofu_M_forget01_lr5e-5" / "checkpoint-2" / "evals", summary(0.3, 0.5))
-    put(base / "RMU" / "tofu_M_forget01_lr5e-5_ud" / "checkpoint-2" / "evals", summary(0.3, 0.5, ud_wb_unsup=0.9))  # the re-run with the probe replaces it
+        put(base / "NPO" / "tofu_M_forget01_ep5" / f"checkpoint-{step}" / "evals", summary(prob, util, mia))
+    (base / "NPO" / "tofu_M_forget01_ep5" / "checkpoint-9" / "evals").mkdir(parents=True)  # no summary: skipped
+    put(base / "RMU" / "tofu_M_forget01_lr5e-5_ep5" / "checkpoint-2" / "evals", summary(0.3, 0.5))
+    put(base / "RMU" / "tofu_M_forget01_lr5e-5_ep5_ud" / "checkpoint-2" / "evals", summary(0.3, 0.5, ud_wb_unsup=0.9))  # the re-run with the probe replaces it
 
     points = pareto.collect(str(near), str(lunar), str(base), "M", "forget01")
     assert sorted(p["family"] for p in points) == ["LUNAR", "NEAR", "NEAR", "NEAR+KL", "baseline", "baseline", "baseline"]
-    assert [p["run"] for p in points if p["method"] == "RMU"] == ["lr5e-5_ud@2"] and [p for p in points if p["method"] == "RMU"][0]["ud_wb_unsup"] == 0.9  # step 0 and the split 05 run are left out
+    assert [p["run"] for p in points if p["method"] == "RMU"] == ["lr5e-5_ep5_ud@2"] and [p for p in points if p["method"] == "RMU"][0]["ud_wb_unsup"] == 0.9  # step 0 and the split 05 run are left out
     rows = {r["method"]: r for r in pareto.matched(points, tau=0.25, mia_centre=0.48, mia_tol=0.25)}
-    assert rows["NPO"]["run"] == "default@2" and rows["NPO"]["reached"]   # the over-forgetting step 4 (mia 0.02) is not retain-like
+    put(base / "NPO" / "tofu_M_forget01" / "checkpoint-2" / "evals", summary(0.01, 0.9))  # the earlier 10-epoch protocol (no _ep suffix): not collected
+    assert len(pareto.collect(str(near), str(lunar), str(base), "M", "forget01", "all")) == len(points) + 1
+    assert rows["NPO"]["run"] == "ep5@2" and rows["NPO"]["reached"]   # the over-forgetting step 4 (mia 0.02) is not retain-like
     assert rows["NEAR"]["model_utility"] == 0.57 and rows["NEAR+KL"]["reached"]
     assert pareto.front([p for p in points if p["family"] == "NEAR"])[0]["forget_Q_A_Prob"] == 0.2
     out = tmp_path / "out"

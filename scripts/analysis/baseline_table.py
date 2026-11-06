@@ -41,12 +41,15 @@ def main():
     parser.add_argument("--tol", type=float, default=0.05)
     parser.add_argument("--forget", default="forget01")
     parser.add_argument("--model", default="Llama-3.2-1B-Instruct")
+    parser.add_argument("--epochs", default="5", help="only the runs trained with this many epochs (folder name _ep<N>; the baseline protocol); `all` = every run")
     args = parser.parse_args()
 
     rows = []
     runs = sorted(glob.glob(os.path.join(args.root, "*", f"tofu_{args.model}_{args.forget}*")))
     step0 = [s.get("model_utility") for run in runs for step, s in checkpoints(run) if step == 0 and s.get("model_utility") is not None]
     fallback = max(step0) if step0 else None  # the original model is the same in every run of this model / forget split
+    if args.epochs != "all":
+        runs = [r for r in runs if re.search(rf"_ep{args.epochs}(?:_|$)", os.path.basename(r))]
     for run in runs:
         method = os.path.basename(os.path.dirname(run))
         name = os.path.basename(run).replace(f"tofu_{args.model}_{args.forget}", "") or "(default lr)"

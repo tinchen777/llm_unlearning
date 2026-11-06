@@ -54,11 +54,15 @@ else
 fi
 
 # Optional, for tuning a method (the checkpoint is selected by forget quality with the model utility within 5 % of the
-# original, see the paper): LR=5e-6 EPOCHS=5 -> trainer.args.* and a suffix in the output folder name.
+# original, see the paper): LR=5e-6 EPOCHS=5 -> trainer.args.* and a suffix in the output folder name (EPOCHS defaults to 5, see below).
 SUFFIX=""
 EXTRA_ARGS=()
 if [ -n "${LR}" ]; then EXTRA_ARGS+=("trainer.args.learning_rate=${LR}"); SUFFIX+="_lr${LR}"; fi
-if [ -n "${EPOCHS}" ]; then EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS}"); SUFFIX+="_ep${EPOCHS}"; fi
+# EPOCHS: the baseline protocol is 5 epochs (the OpenUnlearning setting) for every model size; on forget01 (40 samples, 2 optimizer steps per epoch) that is
+# 10 steps, evaluated after every epoch. The folder name always carries `_ep<EPOCHS>` so runs of another protocol (the earlier 10-epoch / 20-step runs have
+# no such suffix) are never mixed up: scripts/analysis/pareto.py and baseline_table.py take `--epochs 5` by default.
+EPOCHS=${EPOCHS:-5}
+EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS}"); SUFFIX+="_ep${EPOCHS}"
 # DTYPE=float32: fp32 weights (+ bf16 autocast = fp32 master weights). The default is bf16 weights, in which an Adam step of lr 1e-5 is largely
 # rounded away (only a fraction of the weights change at all), so an unlearning run can look much weaker than it is.
 if [ "${DTYPE}" = float32 ]; then EXTRA_ARGS+=("model.pretrained.dtype=float32"); SUFFIX+="_fp32"; fi
