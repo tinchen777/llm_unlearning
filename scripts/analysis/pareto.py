@@ -7,7 +7,7 @@ saved (TOFU_SUMMARY.json): no model is run.
 Points
 - NEAR / NEAR+KL: every run folder of `--near` whose name has `_kl<w>` (w > 0) is NEAR+KL, the others are NEAR (kl0 = end-to-end training without the KL term).
 - LUNAR: the run folders of `--lunar` of this forget split (the coefficient sweep).
-- baselines: EVERY epoch checkpoint (step > 0) of every run of `--baselines` (so a method with several learning rates / epochs is a cloud of points, not
+- baselines: EVERY epoch checkpoint (step > 0) of every run of `--baselines` (a run `X` is replaced by its re-run `X_ud`, which has the probe / ud_*) (so a method with several learning rates / epochs is a cloud of points, not
   the one "best epoch" of baseline_table.py).
 - references: the retain and the full model (saves/eval/{retain,full}/<model>/<forget>).
 
@@ -59,6 +59,8 @@ def collect(near, lunar, baselines, model, forget):
             m = re.search(r"_c([\d.]+)_l", os.path.basename(d))
             points.append({"family": "LUNAR", "method": "LUNAR", "run": f"c{m.group(1)}" if m else os.path.basename(d), **s})
     for run in sorted(glob.glob(os.path.join(baselines, "*", f"tofu_{model}_{forget}*"))):
+        if os.path.isdir(run + "_ud"):  # the re-run of this setting with the probe (TAG=_ud, with ud_*) replaces the TOFU-only run
+            continue
         method = os.path.basename(os.path.dirname(run))
         suffix = os.path.basename(run).replace(f"tofu_{model}_{forget}", "") or "_default"
         for path in glob.glob(os.path.join(run, "checkpoint-*", "evals", "TOFU_SUMMARY.json")):

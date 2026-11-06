@@ -38,6 +38,11 @@ if [ "${PROBE}" = 1 ]; then
   )
 fi
 
+# EVAL_PROFILE=fast: the TOFU metrics of configs/eval/tofu_fast.yaml (no mia_gradnorm / zlib / min_k(++), privleak, exact_memorization, forget_quality: the
+# epoch cannot then be picked with baseline_table.py, use scripts/analysis/pareto.py). Default: full.
+EVAL_PROFILE=${EVAL_PROFILE:-full}
+if [ "${EVAL_PROFILE}" = fast ]; then SPLIT_ARGS+=("eval=tofu_fast"); elif [ "${EVAL_PROFILE}" != full ]; then echo "EVAL_PROFILE must be full or fast" >&2; exit 1; fi
+
 # The methods to run. Override with e.g.  METHODS="GradDiff NPO" bash scripts/unlearn/1_unlearn.sh
 #   core (the baselines of the paper): GradAscent GradDiff NPO SimNPO IdkDPO RMU
 #   more in src/trainer: CEU WGA UNDIAL SatImp PDU BoundedGradDiff
@@ -57,6 +62,8 @@ if [ -n "${EPOCHS}" ]; then EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS
 # DTYPE=float32: fp32 weights (+ bf16 autocast = fp32 master weights). The default is bf16 weights, in which an Adam step of lr 1e-5 is largely
 # rounded away (only a fraction of the weights change at all), so an unlearning run can look much weaker than it is.
 if [ "${DTYPE}" = float32 ]; then EXTRA_ARGS+=("model.pretrained.dtype=float32"); SUFFIX+="_fp32"; fi
+# TAG=_ud: any extra suffix of the output folder, e.g. to re-run a setting with PROBE=1 next to its earlier TOFU-only run instead of over it.
+SUFFIX+="${TAG}"
 
 # Output: saves/tofu_unlearn/<METHOD>/tofu_<MODEL>_<FORGET_SPLIT><SUFFIX>/   (like saves/NEAR/..., grouped by method, then by model and forget
 # set; e.g. all the runs of one method are siblings: +vis.run_folders='[[saves/tofu_unlearn/NPO, "*"]]'). `mode` stays `unlearn` (the
