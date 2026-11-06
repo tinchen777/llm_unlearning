@@ -13,7 +13,10 @@
 ## 结果
 未跑。当前 `pareto.py` 默认（`--epochs 5`）下没有 baseline 点，等 5-epoch 的运行出来后才有；`--epochs all` 仍可看到旧的 20 步结果。
 
-## 下一步
-1. 重跑 1B forget01：`LRS="5e-5 1e-4 2e-4" bash scripts/unlearn/tune.sh <GPU>`（6 个方法 × 3 个学习率，每个 10 步；10 步里预热占 1 个 epoch，所以学习率要比默认 1e-5 大）。
-2. 方法自带的超参（NPO 的 β、GradDiff 的 retain 权重、RMU 的层和系数、IdkDPO 的 β）和 fp32 对照放到第二轮，保持"每个方法相同数量的配置"。
-3. 之后 3B / 8B 用同一协议（`MODEL=... bash scripts/unlearn/tune.sh`）。
+## 下一步（时间紧：不做学习率网格，固定学习率）
+1. 1B forget01 先只跑 `LRS="1e-4"`，6 个方法各一个运行（每个 10 步）：
+   `METHODS="GradAscent GradDiff" LRS="1e-4" bash scripts/unlearn/tune.sh 0`（NPO SimNPO → GPU 1，IdkDPO RMU → GPU 2）。
+   依据：20 步的旧数据里 lr 1e-4 对多数方法在前 2–4 步就到了足够的遗忘强度；每个 epoch 都评测，选 epoch 本身就是隐式调参。
+2. 看 `pareto.py`：只对明显没到位（SimNPO 之前没进入 retain 区域，可能要更大 lr）或过度遗忘（GradAscent、RMU，可能要 5e-5）的方法补第二个学习率。
+3. 1B 定下后，3B / 8B **沿用同一学习率、每个方法只跑一个运行**，不再调参；论文里写"学习率在 1B 上选定，其余规模沿用"。风险：大模型的最优学习率通常更小，沿用可能偏强，靠选更早的 epoch 补救。
+4. 方法自带的超参（NPO 的 β、GradDiff 的 retain 权重、RMU 的层和系数、IdkDPO 的 β）和 fp32 对照不做；论文里如实写 baseline 的调参预算（比 NEAR 小很多）。
