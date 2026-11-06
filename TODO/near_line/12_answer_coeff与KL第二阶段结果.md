@@ -28,13 +28,13 @@ c6（无 KL）：l5-9 Prob 0.208 / mia 0.577 / utility 0.536 / Basis 11；l6-9 0
 - "Basis" 不是随系数渐变：c4 为 0，c5 为 1–2，c6 起 10–12，阈值在 c5 与 c6 之间。
 
 ## 与 LUNAR / baseline 对照（forget01）
-- LUNAR（untuned 系数扫描）：c1 Prob 0.518 / utility 0.561 / ud_bb 0.012；c1.5 Prob 0.115 / utility 0.396 / ud_bb 0.52；c2 utility 0.269 / ud_bb 0.21。LUNAR 的 `wb_unsup` 为 0.41–0.57，NEAR 为 0.95–0.996。
+- LUNAR（untuned 系数扫描）：c1 Prob 0.518 / utility 0.561 / ud_bb 0.012；c1.5 Prob 0.115 / utility 0.396 / ud_bb 0.52；c2 utility 0.269 / ud_bb 0.21。LUNAR 的 `wb_unsup`：c0.5 0.41、c1 0.82、c1.5 0.57、c2 0.57（forget01）；NEAR 0.95–0.996。**修正（见 13）**：原稿写成"0.41–0.57"漏了 c1 的 0.82；LUNAR c1.5/c2 虽然 `wb_unsup` 低，但模型已被破坏（utility 0.27–0.40），遗忘很弱的 c1 与 NEAR c4（0.82–0.88）相当，所以"NEAR 白盒比 LUNAR 差"不成立。
 - baseline 调 lr 后（best epoch）：GA lr1e-4 Prob 0.297 / utility 0.462；GradDiff 1e-4 0.273 / 0.477；NPO 1e-4 0.184 / 0.444；SimNPO 1e-4 0.305 / 0.427；IdkDPO 5e-5 0.299 / 0.512。默认 lr 几乎不遗忘（Prob 0.34–0.90）。
 - NEAR KL 三层（Prob 0.227、utility 0.553）在同等 Prob 下 utility 高于上述 baseline 约 0.07–0.11；LUNAR c1.5 的遗忘更强（Prob 0.115）但 utility 0.396 且 52% 的回答被 UD 判为痕迹。
 
 ## 结论与注意
 1. 加 KL 后 NEAR 在黑盒上做到了"无拒答、无怪词、遗忘保住"，这是论文要的卖点。
-2. **白盒痕迹是 NEAR 的明显短板**：`wb_unsup` 0.95–0.996，而 LUNAR 只有 0.41–0.57。当前不能声称 NEAR 全面更隐蔽，只能说黑盒更隐蔽。原因待查（NEAR 对所有位置加同一偏移，可能让 forget 激活整体偏离 benign 分布）。
+2. **白盒痕迹是 NEAR 的明显短板**：`wb_unsup` 0.95–0.996。与 LUNAR 的比较见 13（需按遗忘强度匹配，原稿"LUNAR 只有 0.41–0.57"有误）。当前只能说黑盒更隐蔽。
 3. mia_loss 在 KL 版升高（0.72–0.82），不等于遗忘变差，需结合 Prob/extraction 看，但要在论文里说明。
 4. forget_quality 在 n=40 上很噪（0.054–0.766 之间乱跳），不做结论。
 5. 全部是单次运行，没有重复种子。baseline 与 LUNAR 的调参仍不充分。

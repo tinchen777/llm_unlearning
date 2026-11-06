@@ -13,7 +13,7 @@
 
 | 线 | 最新文件 | 一句话状态 |
 |---|---|---|
-| near_line | 12 | 最佳配置 B+答案 token（c7，层 7-9）；加 KL 第二阶段后黑盒无痕迹（无拒答、无怪词）且遗忘保住；白盒 `ud_wb_unsup` 仍 0.95–0.996，是最大短板 |
+| near_line | 13 | 最佳配置 B+答案 token（c7，层 7-9）；加 KL 第二阶段后黑盒无痕迹（无拒答、无怪词）且遗忘保住；白盒 `ud_wb_unsup` 仍 0.95–0.996；来源已查明：c·r_UV 把 forget 激活推到邻居均值之外（13） |
 | metric_line | 4 | UD 黑盒/白盒已实现；发现两处缺口：怪词（流畅度）抓不到，白盒 NEAR 反而比 LUNAR 差 |
 | data_line | 4 | train/heldout 协议已落地；配对字段 `qa_id` + `source_question`，`forget_idx` 的编号相对 forget10 |
 
