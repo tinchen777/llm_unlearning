@@ -66,6 +66,9 @@ EXTRA_ARGS+=("trainer.args.num_train_epochs=${EPOCHS}"); SUFFIX+="_ep${EPOCHS}"
 # DTYPE=float32: fp32 weights (+ bf16 autocast = fp32 master weights). The default is bf16 weights, in which an Adam step of lr 1e-5 is largely
 # rounded away (only a fraction of the weights change at all), so an unlearning run can look much weaker than it is.
 if [ "${DTYPE}" = float32 ]; then EXTRA_ARGS+=("model.pretrained.dtype=float32"); SUFFIX+="_fp32"; fi
+# EXTRA_TRAIN: more Hydra overrides of the trainer, space separated, NOT part of the folder name; meant for memory (a large model on one GPU) with the SAME
+# effective batch (8 x 4 = 32): EXTRA_TRAIN="trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true"
+if [ -n "${EXTRA_TRAIN}" ]; then read -r -a _extra_train <<< "${EXTRA_TRAIN}"; EXTRA_ARGS+=("${_extra_train[@]}"); fi
 # TAG=_ud: any extra suffix of the output folder, e.g. to re-run a setting with PROBE=1 next to its earlier TOFU-only run instead of over it.
 SUFFIX+="${TAG}"
 

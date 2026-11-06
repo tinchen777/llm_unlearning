@@ -55,6 +55,12 @@ def test_the_baseline_protocol_is_5_epochs_and_marked_in_the_folder_name():
     assert "num_train_epochs: 10" in compose("GradDiff", ENV_3B_FORGET05 + " export EPOCHS=10;")
 
 
+def test_extra_train_overrides_reach_the_trainer_but_not_the_folder_name():
+    out = compose("GradDiff", "export EXTRA_TRAIN='trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true';")
+    assert "per_device_train_batch_size: 2" in out and "gradient_accumulation_steps: 16" in out and "gradient_checkpointing: true" in out
+    assert "forget01_ep5" in out and "_bs" not in out
+
+
 def test_tuning_overrides_go_into_the_trainer_args_and_the_folder_name():
     out = compose("GradDiff", "export LR=5e-6 EPOCHS=5;")
     assert "learning_rate: 5.0e-06" in out and "num_train_epochs: 5" in out
