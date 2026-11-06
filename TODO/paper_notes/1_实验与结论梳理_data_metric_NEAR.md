@@ -116,11 +116,11 @@ r_UV（每个作者：K 个邻居问题的 eoi 位置平均激活 − forget 问
   - 单层 l9：Prob 0.457→0.355，mia 0.883→0.822（遗忘更强），`wb_sup` 0.718→0.64，`wb_unsup` 0.985→0.953，utility 0.568→0.553。
   - 代价：激活偏移保真度略降（achieved cos：l7 0.96，l8 0.82，l9 0.77）。
 
-### 3.6 与 LUNAR / baseline 的对照（forget01，near_line/9, 12, 14）
+### 3.6 与 LUNAR / baseline 的对照（forget01，near_line/9, 12；baseline_line/2, 3）
 - 匹配点"遗忘到 retain 水平"（Prob≈0.1–0.2，mia≈0.4–0.55）：NEAR B+ans（Prob 0.206，mia 0.531，utility **0.569**，retain ROUGE 0.588，`ud_bb` 0.046）；NEAR+KL（0.227，0.724，0.553，0.551，0.0）。
 - 调过 lr 的 baseline（best epoch，lr {5e-5, 1e-4}，20 步）：IdkDPO 1e-4（0.132，0.461，utility 0.414，retain ROUGE 0.339）；RMU 1e-4 step2（0.152，0.414，0.412，0.285）；NPO 1e-4 step2（0.184，0.438，0.444，0.329）；SimNPO/GA/GradDiff 1e-4 遗忘不到位（Prob 0.27–0.31，mia 0.71–0.81）且 utility 0.43–0.48。全部没有满足"utility ≥ 95% 原模型（0.597）"。默认 lr 基本不遗忘。
 - LUNAR（系数扫描）：c1.5 Prob 0.115，utility 0.396，`ud_bb` 0.52；c2 utility 0.269；forget005 c1.5/c2：utility 0.44，`ud_bb` 0.475/0.25；c0.5/c1 几乎不遗忘。
-- 结论【方向稳，幅度需谨慎】：匹配遗忘程度时 NEAR 的 utility 高约 0.12–0.17，retain ROUGE 高约 0.12–0.30；baseline 的 UD 未测，调参预算有限（见 near_line/14）。
+- 结论【方向稳，幅度需谨慎】：匹配遗忘程度时 NEAR 的 utility 高约 0.12–0.17，retain ROUGE 高约 0.12–0.30；baseline 的 UD 未测，调参预算有限（见 baseline_line/3）。
 
 ### 3.7 未解决 / 待做
 1. **白盒痕迹**：小系数 + KL（在跑，`sweep_kl.sh`）；每个位置的离群分；训练时加"与 benign 分布距离"的惩罚；比较要按遗忘强度匹配。

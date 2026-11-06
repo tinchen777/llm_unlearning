@@ -1,4 +1,4 @@
-# 8 LUNAR 与 NEAR 的同口径对比；forget005（一个作者 = 作者 200）
+# 2 LUNAR 与 NEAR 的同口径对比；forget005（一个作者 = 作者 200）
 
 ## 问题
 

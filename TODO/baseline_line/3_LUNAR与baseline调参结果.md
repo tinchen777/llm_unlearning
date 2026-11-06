@@ -1,4 +1,4 @@
-# 14 LUNAR 与 baseline 调参结果（forget01，1B）
+# 3 LUNAR 与 baseline 调参结果（forget01，1B）
 
 ## 问题
 调参之后，baseline 与 LUNAR 能否在"遗忘到 retain 水平"的同时保持 utility？与 NEAR 的公平比较。

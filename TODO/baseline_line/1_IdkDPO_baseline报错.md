@@ -16,4 +16,4 @@ configs/eval/tofu.yaml 的 retain_split 默认 'retain??'（必须由实验配�
 
 ## 下一步
 
-待用户确认 IdkDPO 跑通。另：baseline 目前 forget_quality≈0.003~0.007（≈full，基本没遗忘），疑似 bf16+lr1e-5 更新偏弱（见 1），对比前要先解决。
+待用户确认 IdkDPO 跑通。另：baseline 目前 forget_quality≈0.003~0.007（≈full，基本没遗忘），疑似 bf16+lr1e-5 更新偏弱（见 `near_line/1`），对比前要先解决。
