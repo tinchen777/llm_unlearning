@@ -7,6 +7,8 @@
 #   bash scripts/NEAR/sweep_kl.sh [GPU_ID]                       # COEFFS="2 4"  x  KL_WEIGHTS="off 1 3"  x  LAYER_SETS="7,8,9"   (6 runs, finished ones are skipped)
 #   COEFFS="2" KL_WEIGHTS="off 1" LAYER_SETS="11,12" bash scripts/NEAR/sweep_kl.sh 1     # does the KL advantage hold on layers closer to the output?
 #   KL_WEIGHTS="0 1" ...    # `0` = end-to-end refinement WITHOUT the KL term (separates "more training" from "the KL term")
+#   KL_STEPS=300 KL_LR=2e-5 ...         # more refinement steps / another lr of the KL stage (they are part of the run name)
+#   EVAL_PROFILE=fast ...               # the fast evaluation profile (configs/eval/tofu_fast.yaml)
 #   DRY_RUN=1 bash scripts/NEAR/sweep_kl.sh                      # only print the runs
 #
 # Read the result: forget_Q_A_Prob / mia_loss / extraction_strength (forgetting; retain model 0.169 / 0.483 / 0.062), model_utility and retain ROUGE (cost),
@@ -38,7 +40,7 @@ for coeff in "${COEFFS[@]}"; do
   for layers in "${LAYER_SETS[@]}"; do
     tag=${layers//,/-}
     for kl in "${KL_WEIGHTS[@]}"; do
-      if [ "${kl}" = off ]; then kl_env=""; variant=rw1_ans_increment_seq_c${coeff}_l${tag}; else kl_env=${kl}; variant=rw1_ans_kl${kl}_increment_seq_c${coeff}_l${tag}; fi
+      if [ "${kl}" = off ]; then kl_env=""; variant=rw1_ans_increment_seq_c${coeff}_l${tag}; else kl_env=${kl}; variant=rw1_ans_kl${kl}${KL_STEPS:+_s${KL_STEPS}}${KL_LR:+_lr${KL_LR}}_increment_seq_c${coeff}_l${tag}; fi   # KL_STEPS / KL_LR: passed on to sweep_w_down.sh (same naming)
       done_file=saves/eval/NEAR/${OUT_PREFIX}/${variant}_k5_l${tag}_c${coeff}_all/TOFU_EVAL.json
       if [ "${SKIP_DONE}" = 1 ] && [ -f "${done_file}" ]; then echo "skip (done): ${variant}"; continue; fi
       echo "################  coeff=${coeff} layers=${layers} kl=${kl}  ->  ${variant}  ################"
