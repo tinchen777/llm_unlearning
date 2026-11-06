@@ -41,3 +41,39 @@ def test_the_tuning_scripts_are_valid_and_print_their_runs():
     assert out.count("1_unlearn.sh") == 4 and "DTYPE=float32" in out and "LR=1e-4" in out
     out = subprocess.run(["bash", "scripts/LUNAR/sweep_coeff.sh", "0"], cwd=ROOT, capture_output=True, text=True, env={"DRY_RUN": "1", "PATH": "/usr/bin:/bin", "COEFFS": "0.5 1", "FORGET_SPLITS": "forget005"}).stdout
     assert "c0.5_all" in out and "c1_all" in out and "forget_split=forget005" in out
+
+
+def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
+    import importlib.util
+    import json
+    spec = importlib.util.spec_from_file_location("pareto", ROOT / "scripts" / "analysis" / "pareto.py")
+    pareto = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pareto)
+
+    def summary(prob, util, mia=0.5, **more):
+        return {"forget_Q_A_Prob": prob, "model_utility": util, "mia_loss": mia, "extraction_strength": 0.05, "retain_rougeL_recall": 0.5, **more}
+
+    def put(path, data):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "TOFU_SUMMARY.json").write_text(json.dumps(data))
+
+    near, lunar, base = tmp_path / "near", tmp_path / "lunar", tmp_path / "base"
+    put(near / "rw1_ans_increment_seq_c7_l7-8-9_k5_l7-8-9_c7_all", summary(0.2, 0.57, ud_wb_unsup=0.99))
+    put(near / "rw1_ans_kl1_increment_seq_c7_l7-8-9_k5_l7-8-9_c7_all", summary(0.22, 0.55))
+    put(near / "rw1_ans_kl0_increment_seq_c2_l11-12_k5_l11-12_c2_all", summary(0.75, 0.58))  # kl0 = no KL term: plain NEAR
+    put(lunar / "lunar_tofu_M_forget01_LUNAR_harmful_c1.5_l8_all", summary(0.11, 0.40, ud_bb=0.5))
+    put(lunar / "lunar_tofu_M_forget05_LUNAR_harmful_c1.5_l8_all", summary(0.01, 0.10))  # another forget split: not collected
+    for step, (prob, util, mia) in {0: (0.9, 0.6, 1.0), 2: (0.15, 0.45, 0.45), 4: (0.01, 0.30, 0.02)}.items():
+        put(base / "NPO" / "tofu_M_forget01" / f"checkpoint-{step}" / "evals", summary(prob, util, mia))
+    (base / "NPO" / "tofu_M_forget01" / "checkpoint-9" / "evals").mkdir(parents=True)  # no summary: skipped
+
+    points = pareto.collect(str(near), str(lunar), str(base), "M", "forget01")
+    assert sorted(p["family"] for p in points) == ["LUNAR", "NEAR", "NEAR", "NEAR+KL", "baseline", "baseline"]  # step 0 and the split 05 run are left out
+    rows = {r["method"]: r for r in pareto.matched(points, tau=0.25, mia_centre=0.48, mia_tol=0.25)}
+    assert rows["NPO"]["run"] == "default@2" and rows["NPO"]["reached"]   # the over-forgetting step 4 (mia 0.02) is not retain-like
+    assert rows["NEAR"]["model_utility"] == 0.57 and rows["NEAR+KL"]["reached"]
+    assert pareto.front([p for p in points if p["family"] == "NEAR"])[0]["forget_Q_A_Prob"] == 0.2
+    out = tmp_path / "out"
+    pareto.write_csv(points, str(out) + ".csv")
+    pareto.plot(points, {"retain": summary(0.17, 0.6)}, 0.25, str(tmp_path / "p.png"))
+    assert (tmp_path / "p.png").stat().st_size > 1000
