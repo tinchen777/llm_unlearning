@@ -7,6 +7,7 @@
 |---|---|---|---|
 | `1_收尾与参考.md` | forget10 参考、8B RMU、8B LUNAR 连续曲线、8B 旧方法 c6 评测 | 四条互相独立，**全并行** | 与 2、3 无依赖；forget10 参考是第 5 步（forget10×1B）的前提 |
 | `2_forget05_1B.md` | forget05×1B 的 baseline、LUNAR（NEAR 新旧已在跑，不在此列） | baseline：先试跑 GA+NPO，**看轨迹后**再跑其余三个；LUNAR 与 baseline 并行 | baseline 的 lr 结论决定 3B 的 lr |
+| `scripts/exp/run_lanes.sh` | **一键脚本**：70GB 卡一条链（8B），40GB 卡一条链（3B/1B），失败不中断、可续跑；`bash scripts/exp/run_lanes.sh <大卡> <小卡>` | 两条链并行，链内按优先级串行 | 取代 `4_*` 的队列 A–E |
 | `4_今晚大实验_明天小实验.md` | 今晚：8B（forget05 的 NEAR/baseline/LUNAR、forget01 上游开销）与 3B forget05 NEAR 新旧；明天：1B/3B 的小实验与 forget10×1B | 队列 A–E 互相独立，各占一卡 | 依赖 3 的上游（3A-1、3A-2 已完成） |
 | `3_forget05_3B.md` | forget05×3B 的 NEAR 上游→旧→新、baseline、LUNAR | NEAR：上游（r_UV→选层）**串**，旧 / 新方法两条**并**；baseline、LUNAR 与 NEAR 并行 | baseline 的 lr 等 2 的试跑结论；NEAR 的层 / 步数可参考 forget05×1B 新旧结果 |
 
