@@ -299,3 +299,9 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
                                   "wdown.kl.forget_weight=0", "wdown.kl.forget_prob_target=0.2", "task_name=klr_nosteer"])
     ns = json.loads((out_root / "saves" / "NEAR" / "klr_nosteer" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert ns["kl"]["init"] == "original" and ns["per_layer"] == {} and len(ns["kl"]["history"]) == 3 and ns["kl"]["forget_weight"] == 0
+
+    # KL only (no hinge, the default `forget_prob_target: unseen` must not be parsed as a number when the hinge is off), no steering
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.kl.enabled=true", "wdown.kl.steps=2", "wdown.kl.batch_size=4",
+                                  "wdown.kl.n_tokens=3", "wdown.kl.retain_max_samples=8", "wdown.kl.init=original", "wdown.kl.forget_weight=0", "task_name=klr_klonly"])
+    ko = json.loads((out_root / "saves" / "NEAR" / "klr_klonly" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    assert ko["kl"]["forget_prob_weight"] == 0 and all(h["forget_prob_penalty"] == 0 for h in ko["kl"]["history"])

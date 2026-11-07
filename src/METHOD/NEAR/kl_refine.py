@@ -194,7 +194,9 @@ def refine_w_down(
     (fp32, cpu) and a history. The weights are NOT written into `model`."""
     steps, lr = int(cfg["steps"]), float(cfg["lr"])
     kl_w, n_tokens, kl_bs = float(cfg["weight"]), int(cfg["n_tokens"]), int(cfg["batch_size"])
-    prob_w, prob_target = float(cfg.get("forget_prob_weight", 0.0) or 0.0), float(cfg.get("forget_prob_target", 0.17))
+    prob_w = float(cfg.get("forget_prob_weight", 0.0) or 0.0)
+    # the target is only needed (and must be a number: w_down.py resolves `unseen`) when the hinge is on
+    prob_target = float(cfg.get("forget_prob_target", 0.17)) if prob_w > 0 else 0.17
     prob_mode = str(cfg.get("forget_prob_mode", "hinge"))
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
     rng = random.Random(seed)
