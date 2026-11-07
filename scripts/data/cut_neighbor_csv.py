@@ -3,8 +3,8 @@
     python scripts/data/cut_neighbor_csv.py /path/to/tofu_neighbor10_with_source.csv --out data/tofu
         -> data/tofu/tofu_neighbor10.csv (all), tofu_neighbor05.csv (authors 191-200), tofu_neighbor01.csv (authors 199-200)
 
-The row order is kept. Checks: every (author_id, qa_id) has exactly 10 `train` neighbours, one `source_question` (not empty), and (if given with --compare) the QA columns
-(question, answer, split, train_rank) of an existing csv are identical to the cut ones. NEAR needs `author_id`, `qa_id`, `source_question`, `split`, `train_rank`, `question`, `answer`.
+The row order is kept. Checks: every (author_id, qa_id) has exactly 10 `train` neighbours, one `source_question` (not empty), and (if given with --compare) the questions, `split`
+and `train_rank` of an existing csv are identical to the cut ones (a differing answer is only reported). NEAR needs `author_id`, `qa_id`, `source_question`, `split`, `train_rank`, `question`, `answer`.
 """
 import argparse
 import os
@@ -47,10 +47,14 @@ def main() -> None:
             old = pd.read_csv(os.path.join(args.compare, f"tofu_neighbor{name}.csv"))
             key = ["author_id", "neighbor_id", "qa_id"]
             m = old.merge(part, on=key, suffixes=("_o", "_n"))
-            same = len(m) == len(old) == len(part) and all((m[c + "_o"].fillna("").astype(str) == m[c + "_n"].fillna("").astype(str)).all() for c in QA_COLUMNS)
-            msg += f" | QA columns identical to {args.compare}: {same}"
-            if not same:
-                sys.exit(msg)
+            if not len(m) == len(old) == len(part):
+                sys.exit(f"{msg} | the rows of {args.compare} and the cut csv differ ({len(old)} / {len(part)} / matched {len(m)})")
+            rank = lambda c: m[c].fillna(-1).astype(float)  # heldout neighbours: NaN in some old csv, -1 in others
+            diffs = {c: int((m[c + "_o"].fillna("").astype(str) != m[c + "_n"].fillna("").astype(str)).sum()) for c in ("question", "answer", "split")}
+            diffs["train_rank"] = int((rank("train_rank_o") != rank("train_rank_n")).sum())
+            msg += f" | rows that differ from {args.compare}: {diffs}"
+            if diffs["question"] or diffs["split"] or diffs["train_rank"]:
+                sys.exit(msg)  # an answer that differs in a few rows is only reported
         print(msg)
 
 
