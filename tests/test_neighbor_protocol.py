@@ -114,3 +114,17 @@ def test_cost_meter_adds_up_stages_and_saves(tmp_path):
     got = json.loads((tmp_path / "x" / "cost.json").read_text())
     assert got["stages"]["a"]["seconds"] >= 0.04 and "b" in got["stages"] and got["trainable_params"] == 5
     assert got["total_seconds"] >= got["stages"]["a"]["seconds"]
+
+
+def test_cost_meter_nested_stage_is_not_counted_twice():
+    import time
+    from utils.cost import CostMeter
+    meter = CostMeter()
+    with meter.stage("outer"):
+        time.sleep(0.02)
+        with meter.stage("inner"):
+            time.sleep(0.05)
+    s = meter.summary()
+    assert s["stages"]["inner"]["seconds"] >= 0.05
+    assert s["stages"]["outer"]["seconds"] < 0.05  # the 0.02 s of its own part, not the 0.07 s
+    assert abs(s["total_seconds"] - (s["stages"]["outer"]["seconds"] + s["stages"]["inner"]["seconds"])) < 1e-9 and s["nested_stages_exclusive"]

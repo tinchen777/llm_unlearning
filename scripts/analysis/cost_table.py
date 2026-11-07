@@ -42,6 +42,11 @@ def rows(roots):
             if not s or "cost" not in s:
                 continue
             c = s["cost"]
+            stages = {k: dict(v) for k, v in c["stages"].items()}
+            if not c.get("nested_stages_exclusive") and "refine_kl_hinge" in stages and "stage1_regression" in stages:
+                # the first version of the meter did not subtract the nested refinement from the stage that contains it: do it here
+                stages["stage1_regression"]["seconds"] = max(0.0, stages["stage1_regression"]["seconds"] - stages["refine_kl_hinge"]["seconds"])
+            c = {**c, "stages": stages}
             yield (os.path.relpath(os.path.dirname(path), root)[:64], sum(v["seconds"] for v in c["stages"].values()), c["peak_allocated_gb"],
                    c.get("trainable_params"), upstream_seconds(s), ", ".join(f"{k} {v['seconds']:.0f}s" for k, v in c["stages"].items()))
         for path in sorted(glob.glob(os.path.join(root, "**", "cost.json"), recursive=True)):
