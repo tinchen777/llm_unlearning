@@ -7,7 +7,7 @@ forget05 每个 epoch 约 7 步，5 个 epoch 共约 35 步，是 forget01（10 
 **[串] 2a → 2b**（2b 要看 2a 的轨迹后再决定是否调 lr）；**2c 与 2a / 2b 并行**。
 
 ```
-# 2a. 试跑：GradAscent（2e-5）接 NPO（5e-5），同一进程顺序跑
+# 2a. 试跑：GradAscent（2e-5）接 NPO（5e-5），同一进程顺序跑 `on 1`
 FORGET_SPLIT=forget05 HOLDOUT_SPLIT=holdout05 RETAIN_SPLIT=retain95 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 EVAL_PROFILE=full LRS="2e-5" METHODS="GradAscent" bash scripts/unlearn/tune.sh <GPU> ; FORGET_SPLIT=forget05 HOLDOUT_SPLIT=holdout05 RETAIN_SPLIT=retain95 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 EVAL_PROFILE=full LRS="5e-5" METHODS="NPO" bash scripts/unlearn/tune.sh <GPU>
 ```
 ```

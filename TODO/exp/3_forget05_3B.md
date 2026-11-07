@@ -10,11 +10,11 @@ export FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGH
 
 ## A. NEAR（3A 上游 **[串]** → 3B 旧 ∥ 3C 新 **[并]**）
 ```
-# 3A-1. 上游：r_UV（K=1,3,5,10）。必须先于 3A-2
+# 3A-1. 上游：r_UV（K=1,3,5,10）。必须先于 3A-2 `Done`
 RUV_KS=1,3,5,10 TASK_NAME=forget05_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget05_ks bash scripts/NEAR/single_run.sh <GPU> "1"
 ```
 ```
-# 3A-2. 选层（c8，窗口 25%–75% 深度；forget01 上 c8→层 14）。必须在 3A-1 之后；开销数据（cost_select_*.json）同时产生
+# 3A-2. 选层（c8，窗口 25%–75% 深度；forget01 上 c8→层 14）。必须在 3A-1 之后；开销数据（cost_select_*.json）同时产生 `DONE`
 TASK_NAME=forget05_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget05_ks COEFFS="8" MODES="all" LAYER_FRACTION="[0.25,0.75]" bash scripts/NEAR/sweep_select.sh <GPU>
 ```
 ```
