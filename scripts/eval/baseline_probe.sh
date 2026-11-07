@@ -7,6 +7,7 @@
 #   bash scripts/eval/baseline_probe.sh [GPU_ID]
 #   KINDS="full" bash scripts/eval/baseline_probe.sh 0       # only some kinds
 #   ONLY_SPLITS="forget005 forget01" bash scripts/eval/baseline_probe.sh 0   # only some forget sets
+#   ONLY_MODELS="Llama-3.2-1B-Instruct" bash scripts/eval/baseline_probe.sh 0   # only some base models
 #   DRY_RUN=1 bash scripts/eval/baseline_probe.sh            # only print what would run
 #   SKIP_EXISTING=1 bash scripts/eval/baseline_probe.sh      # skip the runs that already have a TOFU_SUMMARY.json
 #   CONTINUE_ON_ERROR=1 bash scripts/eval/baseline_probe.sh  # report the failures at the end instead of stopping
@@ -36,6 +37,8 @@ BASE_MODELS=(
   Llama-3.2-3B-Instruct
   Llama-3.1-8B-Instruct
 )
+# ONLY_MODELS="Llama-3.2-1B-Instruct" runs just these base models (space separated)
+if [ -n "${ONLY_MODELS}" ]; then read -r -a BASE_MODELS <<< "${ONLY_MODELS}"; fi
 
 # "forget_split holdout_split retain_split neighbor_split author_offset"
 SPLIT_SETS=(

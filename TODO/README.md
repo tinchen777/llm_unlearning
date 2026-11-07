@@ -29,6 +29,8 @@
 - `5_实验清单_必做选做.md`：按"L 形"安排（模型规模轴 forget01、遗忘集大小轴 forget05 / forget10）的方阵：每格每个方法 ✅ 已做 / 🔄 在跑 / ❗ 必做 / ○ 选做，运行量与执行顺序。
 - `3_讨论纪要与阶段结论.md`：讨论过程里的判断、证据、决策理由、更正记录和可直接改写的表述草稿；§11 是可挪用的主结果表。
 
+- `exp/`：待跑实验的单行命令（`1_收尾与参考`、`2_forget05_1B`、`3_forget05_3B`），标注哪些必须按顺序、哪些可并行；见 `exp/README.md`。
+
 ## 常用约定
 
 - 实验结果都在 `saves/`：1B 的训练 `saves/NEAR/single_v2/<变体>/`（`single*` 都是 1B；3B 试跑放 `Llama3B_v2`），评测 `saves/eval/NEAR/single_v2/<变体>_k5_l<层>_c<系数>_all/`；r_uv 与选层在 `saves/NEAR/single_v2/near_tofu_<模型>_<forget>[_ks]/`。
