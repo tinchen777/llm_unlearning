@@ -96,3 +96,21 @@ def test_forget_prob_penalty_match_mode_pulls_from_both_sides():
     assert float(forget_prob_penalty(logits, ids, labels, 0.5, "hinge")[0]) == 0
     with pytest.raises(ValueError, match="hinge"):
         forget_prob_penalty(logits, ids, labels, 0.2, "nope")
+
+
+def test_cost_meter_adds_up_stages_and_saves(tmp_path):
+    import json
+    import time
+    from utils.cost import CostMeter
+    meter = CostMeter()
+    with meter.stage("a"):
+        time.sleep(0.02)
+    with meter.stage("a"):  # entered again: the time adds up
+        time.sleep(0.02)
+    with meter.stage("b"):
+        pass
+    meter.extra["trainable_params"] = 5
+    meter.save(tmp_path / "x" / "cost.json")
+    got = json.loads((tmp_path / "x" / "cost.json").read_text())
+    assert got["stages"]["a"]["seconds"] >= 0.04 and "b" in got["stages"] and got["trainable_params"] == 5
+    assert got["total_seconds"] >= got["stages"]["a"]["seconds"]

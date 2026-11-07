@@ -37,6 +37,7 @@ from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
 from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.lineage import model_name
@@ -83,7 +84,8 @@ def main(cfg: TrackingConfig):
         forget_data, ref_data = split_data["forget"], split_data["ref"]
 
     # ==========
-    with step_logging(logger, "#1", "calculate r_UV"):
+    meter = CostMeter()
+    with step_logging(logger, "#1", "calculate r_UV"), meter.stage("r_uv"):
         # collector
         _positions = ruv_cfg.get("positions", None)
         act_collector = ActivationCollector(
@@ -112,6 +114,7 @@ def main(cfg: TrackingConfig):
         }, output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt {tuple(r_uv.shape)} (n_pos, n_layers, d) and r_uv_summary.json to {output_dir}")
 
+    meter.save(output_dir / "cost_r_uv.json")
 
 if __name__ == "__main__":
     main()

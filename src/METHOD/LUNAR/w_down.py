@@ -48,6 +48,7 @@ from model.hooks.collector import ActivationCollector
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.editing import train_w_down_layers
@@ -175,7 +176,8 @@ def main(cfg: TrackingConfig):
         )
 
     # Record the original (x, y) of every token and build the targets
-    with step_logging(logger, "#2", "MLP inputs / targets"):
+    meter = CostMeter()
+    with step_logging(logger, "#2", "MLP inputs / targets"), meter.stage("record_tokens"):
         def shift_fn(batch, layer, attention_mask):
             r = r_layer[layer].unsqueeze(0).expand(attention_mask.shape[0], -1, -1)  # the SAME r_UV for every row
             return coeff * build_shift(r, attention_mask, positions, shift_mode, ref_position)
@@ -199,7 +201,7 @@ def main(cfg: TrackingConfig):
         logger.info(f"tokens: {num_tokens}, retain samples per split: {n_retain}")
 
     # Train every layer on the recorded data (independent of each other), then write the weights
-    with step_logging(logger, "#3", "W_down training"):
+    with step_logging(logger, "#3", "W_down training"), meter.stage("stage1_regression"):
         per_layer, new_weights = train_w_down_layers(
             model, train_layers, forget_tokens, retain_tokens, wd_cfg, seed, solver=solver
         )
@@ -246,6 +248,7 @@ def main(cfg: TrackingConfig):
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},
             "per_layer": per_layer,
+            "cost": {**meter.summary(), "trainable_params": int(sum(w.numel() for w in new_weights.values())), "edited_layers": len(new_weights)},
             "achieved_vs_intended": achieved_vs_intended,
             "responses": {"before": responses_before, "after": responses_after},
             "note": "achieved_vs_intended: mean forget activation after vs before the edit, against coeff*r_UV. Exact for "

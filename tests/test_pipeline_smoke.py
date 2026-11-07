@@ -289,6 +289,10 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl, "task_name=klr_on"])
     summary = json.loads((out_root / "saves" / "NEAR" / "klr_on" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert summary["kl"]["steps"] == 3 and len(summary["kl"]["history"]) == 3
+    cost = summary["cost"]  # the cost of the stages (not the evaluation) is written with the result
+    assert set(cost["stages"]) == {"record_tokens", "stage1_regression", "refine_kl_hinge"} and cost["total_seconds"] > 0
+    assert cost["trainable_params"] > 0 and cost["edited_layers"] == 2
+    assert (out_root / "saves" / "NEAR" / "klr" / "cost_r_uv.json").exists() and list((out_root / "saves" / "NEAR" / "klr").glob("cost_select_*.json"))
     assert all(h["kl"] >= 0 for h in summary["kl"]["history"])
     assert summary["kl"]["forget_prob_weight"] == 1 and all(0 <= h["forget_prob"] <= 1 and h["forget_prob_penalty"] >= 0 for h in summary["kl"]["history"])
     assert any(h["forget_prob"] > 0 for h in summary["kl"]["history"])

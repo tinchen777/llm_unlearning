@@ -38,6 +38,7 @@ from model.arch import get_decoder_layers
 from model.intervene.steer import Steerer
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.editing import resolve_candidate_layers
@@ -125,7 +126,8 @@ def main(cfg: TrackingConfig):
     ).set_split_data(split_data)
 
     # ==========
-    with step_logging(logger, "#1", "steering per layer"):
+    meter = CostMeter()
+    with step_logging(logger, "#1", "steering per layer"), meter.stage("steering_sweep"):
         per_layer = {}
         for layer in candidates:
             r = saved["r_uv"][:, saved["layers"].index(layer), :]  # [n_pos, d]
@@ -165,6 +167,7 @@ def main(cfg: TrackingConfig):
         }, path)  # type: ignore
         logger.info(f"Selected layer {selected} (s1 - s2), ranking {ranking[:5]}; details in {path}")
 
+    meter.save(output_dir / f"cost_select_c{coeff:g}_{mode}.json")
 
 if __name__ == "__main__":
     main()

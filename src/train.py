@@ -11,6 +11,7 @@ from vis import plot_figures
 from utils.common import set_seed, get_cuda_visible_devices
 from utils.log import step_logging
 from utils.config import hydra_main
+from utils.cost import CostMeter
 
 if TYPE_CHECKING:
     from utils.config import TrackingConfig
@@ -65,10 +66,14 @@ def main(cfg: TrackingConfig):
     # ==========
     # TRAINING
     if trainer.args.do_train:
+        meter = CostMeter()
         with step_logging(logger, "#1", "training"):
-            trainer.train()
+            with meter.stage("train_incl_epoch_evals"):  # the per-epoch evaluations of the trainer are inside (they run in `train`)
+                trainer.train()
             trainer.save_state()
             trainer.save_model()
+        meter.extra["trainable_params"] = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
+        meter.save(f"{trainer.args.output_dir}/cost.json")
 
     # EVALUATION
     if trainer.args.do_eval and trainer.args.eval_strategy != "epoch":

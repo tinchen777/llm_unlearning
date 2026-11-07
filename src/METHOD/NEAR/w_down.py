@@ -50,6 +50,7 @@ from model.hooks.collector import ActivationCollector
 from model.intervene.edit import apply_w_down, build_shift, collect_mlp_tokens
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
@@ -212,7 +213,8 @@ def main(cfg: TrackingConfig):
         )
 
     # Record the original (x, y) of every token and build the targets
-    with step_logging(logger, "#2", "MLP inputs / targets"):
+    meter = CostMeter()
+    with step_logging(logger, "#2", "MLP inputs / targets"), meter.stage("record_tokens"):
         def shift_fn(batch, layer, attention_mask):
             authors = forget_authors(batch["index"], qa_per_author, author_offset)
             r = torch.stack([r_layer[layer][a] for a in authors])  # [bsz, n_pos, d]
@@ -245,7 +247,7 @@ def main(cfg: TrackingConfig):
     # Train every layer on the recorded data, then write the weights. Default: the layers are independent (all tokens were recorded on
     # the ORIGINAL model). `sequential`: from the lowest layer up, after each layer the inputs of the next one are recorded again on the
     # model edited so far, with the SAME targets (original output (+ shift for forget)): a layer also repairs what the edits below did to its input
-    with step_logging(logger, "#3", "W_down training"):
+    with step_logging(logger, "#3", "W_down training"), meter.stage("stage1_regression"):
         if kl_init == "original":
             # ablation: NO steering stage. The refinement starts from the ORIGINAL weights (no shift is ever trained in); with kl.forget_weight=0 it never sees the shift either
             per_layer = {}
@@ -276,7 +278,7 @@ def main(cfg: TrackingConfig):
                 apply_w_down(model, _l, w)
         kl_history = None
         if use_kl:
-            with step_logging(logger, "#3b", "end-to-end refinement with the KL term"):
+            with step_logging(logger, "#3b", "end-to-end refinement with the KL term"), meter.stage("refine_kl_hinge"):
                 groups = build_kl_pairs(
                     split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
                     qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
@@ -346,6 +348,7 @@ def main(cfg: TrackingConfig):
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
+            "cost": {**meter.summary(), "trainable_params": int(sum(w.numel() for w in new_weights.values())), "edited_layers": len(new_weights)},
             "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",

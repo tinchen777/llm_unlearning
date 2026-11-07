@@ -39,6 +39,7 @@ from model.intervene.steer import Steerer
 from evals.detect.scores import black_box
 from evals.response.collector import ResponseCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import config_dir, forget_authors, selection_path
@@ -167,7 +168,8 @@ def main(cfg: TrackingConfig):
         logger.info(f"forget (unsteered): {original}\nunseen (unsteered): {unseen}")
 
     # Steer every candidate layer
-    with step_logging(logger, "#2", "steering per layer"):
+    meter = CostMeter()
+    with step_logging(logger, "#2", "steering per layer"), meter.stage("steering_sweep"):
         per_layer = {}
         for layer in candidates:
             li = saved["layers"].index(layer)
@@ -238,6 +240,7 @@ def main(cfg: TrackingConfig):
             f"details in {selection_path(output_dir, k, coeff, mode)}"
         )
 
+    meter.save(output_dir / f"cost_select_k{k}_c{coeff:g}_{mode}.json")
 
 if __name__ == "__main__":
     main()

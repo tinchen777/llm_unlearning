@@ -37,6 +37,7 @@ from data.datasets.datasets_utils import get_eoi_positions
 from model import get_model_and_tokenizer
 from model.hooks.collector import ActivationCollector
 from utils.common import get_cuda_visible_devices, save_logs, set_seed
+from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD._common.lineage import model_name
@@ -112,7 +113,8 @@ def main(cfg: TrackingConfig):
 
     # ==========
     # Mean activation per author (forget questions) and per (author, neighbour) (neighbour questions)
-    with step_logging(logger, "#1", "calculate group mean activations"):
+    meter = CostMeter()
+    with step_logging(logger, "#1", "calculate group mean activations"), meter.stage("group_means"):
         # collector
         _positions = ruv_cfg.get("positions", None)
         act_collector = ActivationCollector(
@@ -135,7 +137,7 @@ def main(cfg: TrackingConfig):
         neighbor_means = {key: m for key, m in neighbor_means.items() if key[0] in forget_author_set}
 
     # r_UV for every K
-    with step_logging(logger, "#2", "calculate r_UV for each K"):
+    with step_logging(logger, "#2", "calculate r_UV for each K"), meter.stage("r_uv"):
         r_uv = compute_r_uv(forget_means, neighbor_means, order, ks)
         torch.save({
             "r_uv": r_uv,  # {K: {author: Tensor[n_pos, n_layers, d]}}, = mean(reference) - mean(forget)
@@ -156,6 +158,7 @@ def main(cfg: TrackingConfig):
         save_logs(summarize_r_uv(r_uv, forget_means, act_collector.layers), output_dir / "r_uv_summary.json")  # type: ignore
         logger.info(f"Saved r_uv.pt and r_uv_summary.json to {output_dir}")
 
+    meter.save(output_dir / "cost_r_uv.json")
 
 if __name__ == "__main__":
     main()
