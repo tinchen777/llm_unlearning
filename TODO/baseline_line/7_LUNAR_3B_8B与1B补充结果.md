@@ -30,3 +30,18 @@
    ```
 2. 3B NEAR 的 c8 / c10（near_line/21）出来后，在 3B 上画 Pareto（`pareto.py --model Llama-3.2-3B-Instruct --near saves/eval/NEAR/Llama3B_v2`）。
 3. UD 的黑盒通道需要加"首 token / 句式模板"或流畅度的检测（metric_line）：LUNAR 的 "I can tell you that" 和 markdown 片段、我们的 "Basis"，现有 TAS 都抓不到。
+
+## 补充（c1.75 / c2.5 / c3 的结果）与 forget05 / forget10 的待办
+| 模型 | c（选中层） | Prob | mia | utility | retain 生成 | `ud_bb` | 退化 | 备注 |
+|---|---|---|---|---|---|---|---|---|
+| 3B（retain 0.178 / 0.551 / 0.664） | 1.75（l20） | 0.353 | 0.821 | 0.582 | 0.720 | 0.219 | 0.025 | 40 条里 27 条以 "I" 开头 |
+| 8B（retain 0.139 / 0.488 / 0.617） | 2（l23） | 0.442 | 0.921 | 0.625 | 0.938 | 0.117 | 0 | |
+| 8B | **2.5（l14）** | 0.037 | 0.132 | 0.492 | 0.540 | 0.212 | 0.175 | 30/40 以 "**Step" 开头；**选中层变成 14** |
+| 8B | **3（l24）** | 0.032 | 0.086 | 0.570 | 0.787 | 0.464 | **0.6** | "**Warning:"、"**Note:" |
+
+- **8B 上 LUNAR 从 c2（Prob 0.442，未到 retain 水平）直接跳到 c2.5（Prob 0.037，过度遗忘）**，没有出现 retain 水平的点；原因之一是 LUNAR 对每个系数各自选层，选中层 l23 → l14 → l24 不连续（非单调）。要画连续曲线，需要固定层、只扫系数（`LAYERS="[23]"`，协议偏离 LUNAR 的选层，要在论文里说明）。
+- 8B 上 LUNAR 的痕迹是 markdown 加粗开头（"**Step"、"**Warning:"、"**Note:"），退化率高达 0.6，TAS 拒答率 0（现有 TAS 抓不到，退化 / 近重复通道抓到一部分）。
+
+## 待办（LUNAR 线与 baseline 线，按优先级）
+见 `paper_notes/4`；命令在本文件下方与 `near_line/18`。
+

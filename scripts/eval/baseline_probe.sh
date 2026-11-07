@@ -44,7 +44,7 @@ SPLIT_SETS=(
   # ONE author (author 200 = the last 20 rows of forget01). Its retain model is the official retain99 one (it never saw these authors
   # either), there is no retain995: forget quality / privleak are not meaningful for it. ONLY_SPLITS="forget005" runs just this one.
   "forget005 holdout01 retain99 neighbor005 200"
-  # "forget10 holdout10 retain90 neighbor10 181"
+  "forget10 holdout10 retain90 neighbor10 181"   # ONLY_SPLITS="forget10" runs just this one (the references of the forget10 table)
 )
 
 read -r -a KINDS <<< "${KINDS:-retain full}"   # retain first: its probe is the clean reference of the detectability numbers of the others
