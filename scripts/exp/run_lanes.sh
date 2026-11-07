@@ -5,6 +5,7 @@
 #
 #   bash scripts/exp/run_lanes.sh <BIG_GPU> <SMALL_GPU>            # both lanes in the background (nohup), logs in logs/exp/
 #   LANE=big bash scripts/exp/run_lanes.sh 0 1                     # only the big lane   (LANE=small: only the small lane)
+#   LANE=all bash scripts/exp/run_lanes.sh 0                       # ONE chain on ONE card: the big lane, then the small lane, both on <BIG_GPU>
 #   FG=1 LANE=big bash scripts/exp/run_lanes.sh 0 1                # in the foreground
 #   DRY_RUN=1 bash scripts/exp/run_lanes.sh 0 1                    # print the steps only
 #   WITH_COST=1 ...                                                # also re-run the 8B steering upstream for the cost table (overwrites layer_selection.json with the same result)
@@ -16,9 +17,11 @@ LOGDIR=logs/exp; DONE=${LOGDIR}/done; mkdir -p "${DONE}"
 
 if [ -z "${LANE_INNER}" ] && [ -z "${FG}" ] && [ -z "${DRY_RUN}" ]; then   # launcher: start the lanes in the background
   for l in big small; do
+    if [ "${LANE}" = all ]; then l=all; fi
     if [ -n "${LANE}" ] && [ "${LANE}" != "${l}" ]; then continue; fi
     LANE_INNER=${l} nohup bash "$0" "${BIG_GPU}" "${SMALL_GPU}" > "${LOGDIR}/${l}.log" 2>&1 &
     echo "lane ${l} started (pid $!), log ${LOGDIR}/${l}.log"
+    if [ "${l}" = all ]; then break; fi
   done
   exit 0
 fi
@@ -94,5 +97,6 @@ small() {
 }
 
 l=${LANE_INNER:-${LANE:-big}}
+if [ "${l}" = all ]; then SMALL_GPU=${BIG_GPU}; echo "lane all starts $(date)"; big; small; echo "lane all finished $(date)"; exit 0; fi
 if [ -n "${DRY_RUN}" ] && [ -z "${LANE}" ]; then echo "##### BIG (GPU ${BIG_GPU})"; big; echo "##### SMALL (GPU ${SMALL_GPU})"; small; exit 0; fi
 echo "lane ${l} starts $(date)"; ${l}; echo "lane ${l} finished $(date)"
