@@ -123,6 +123,9 @@ def main(cfg: TrackingConfig):
         sequential = bool(wd_cfg.get("sequential", False))
         kl_cfg = wd_cfg.get("kl", None) or {}
         use_kl = bool(kl_cfg.get("enabled", False))
+        kl_init = str(kl_cfg.get("init", "stage1")) if use_kl else "stage1"
+        if kl_init not in ("stage1", "original"):
+            raise ValueError(f"wdown.kl.init must be `stage1` or `original`, got `{kl_init}`.")
         if use_kl and not include_answer:
             raise ValueError("wdown.kl.enabled needs wdown.include_answer=true (the refinement trains on prompt + answer tokens).")
 
@@ -226,21 +229,22 @@ def main(cfg: TrackingConfig):
         # fresh loaders of the SAME tokens in the SAME order (no shuffle, fixed subsets): `sequential` records the inputs again
         make_forget_loader = lambda: as_trained(split_data["forget"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None)
         make_retain_loader = lambda s: as_trained(split_data[s]).loader(batch_size=wd_cfg["batch_size"], max_samples=wd_cfg["retain_max_samples"])
-        forget_tokens = collect_mlp_tokens(model, make_forget_loader(), train_layers, shift_fn=shift_fn, desc="forget (+shift)")
-        retain_parts = [
-            collect_mlp_tokens(model, make_retain_loader(s), train_layers, desc=f"retain / {s}")
-            for s in wd_cfg["retain_splits"]
-        ]
-        retain_tokens = {_l: tuple(torch.cat([p[_l][i] for p in retain_parts]) for i in range(2)) for _l in train_layers}
-        num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
+        if kl_init == "original":  # no steering stage: nothing to record (saves the CPU memory of the recorded tokens)
+            forget_tokens = retain_tokens = None
+            num_tokens = {"forget": 0, "retain": 0}
+        else:
+            forget_tokens = collect_mlp_tokens(model, make_forget_loader(), train_layers, shift_fn=shift_fn, desc="forget (+shift)")
+            retain_parts = [
+                collect_mlp_tokens(model, make_retain_loader(s), train_layers, desc=f"retain / {s}")
+                for s in wd_cfg["retain_splits"]
+            ]
+            retain_tokens = {_l: tuple(torch.cat([p[_l][i] for p in retain_parts]) for i in range(2)) for _l in train_layers}
+            num_tokens = {"forget": len(forget_tokens[train_layers[0]][0]), "retain": len(retain_tokens[train_layers[0]][0])}
         logger.info(f"tokens: {num_tokens}")
 
     # Train every layer on the recorded data, then write the weights. Default: the layers are independent (all tokens were recorded on
     # the ORIGINAL model). `sequential`: from the lowest layer up, after each layer the inputs of the next one are recorded again on the
     # model edited so far, with the SAME targets (original output (+ shift for forget)): a layer also repairs what the edits below did to its input
-    kl_init = str(kl_cfg.get("init", "stage1")) if use_kl else "stage1"
-    if kl_init not in ("stage1", "original"):
-        raise ValueError(f"wdown.kl.init must be `stage1` or `original`, got `{kl_init}`.")
     with step_logging(logger, "#3", "W_down training"):
         if kl_init == "original":
             # ablation: NO steering stage. The refinement starts from the ORIGINAL weights (no shift is ever trained in); with kl.forget_weight=0 it never sees the shift either
@@ -284,10 +288,14 @@ def main(cfg: TrackingConfig):
                     kl_run["forget_prob_target"] = estimate_unseen_prob(ref_model, as_trained(split_data["holdout"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None))
                     logger.info(f"forget_prob_target = {kl_run['forget_prob_target']:.4f} (original model on the holdout answers)")
                 kl_cfg_used = kl_run
+                # batch of the forget / retain sequences of the refinement: the logits [batch, seq, vocab] are the memory peak (vocab 128k), so it can be smaller than
+                # wdown.batch_size (64: the whole forget set at once): kl.fr_batch_size
+                fr_bs = int(kl_cfg.get("fr_batch_size") or wd_cfg["batch_size"])
+                forget_loaders = lambda: as_trained(split_data["forget"]).loader(batch_size=fr_bs, max_samples=None)
                 retain_loaders = lambda: [b for s_ in wd_cfg["retain_splits"] for b in as_trained(split_data[s_]).loader(
-                    batch_size=wd_cfg["batch_size"], max_samples=int(kl_cfg["retain_max_samples"]))]
+                    batch_size=fr_bs, max_samples=int(kl_cfg["retain_max_samples"]))]
                 refined = refine_w_down(
-                    model, ref_model, tokenizer, train_layers, new_weights, make_forget_loader, retain_loaders, shift_fn, groups,
+                    model, ref_model, tokenizer, train_layers, new_weights, forget_loaders, retain_loaders, shift_fn, groups,
                     kl_cfg_used, float(wd_cfg["forget_weight"] if kl_cfg.get("forget_weight") is None else kl_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
                 )
                 new_weights, kl_history = refined["weights"], refined["history"]
@@ -338,7 +346,7 @@ def main(cfg: TrackingConfig):
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

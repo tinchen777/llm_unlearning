@@ -235,6 +235,7 @@ wdown:
     retain_max_samples: 128 # per retain split
     forget_prob_weight: 0.0 # mu: hinge on the probability of the TRUE forget answer (the evaluation's forget_Q_A_Prob), 0 = off; pushes it down to forget_prob_target, not beyond
     forget_prob_target: unseen # a number, or `unseen` = the ORIGINAL model's probability on the answers of the holdout authors (no retain model needed; ~ the retain model's forget Prob: 1B 0.161 vs 0.169, 3B 0.159 vs 0.178, 8B 0.130 vs 0.139)
+    fr_batch_size: null # sequences per forget / retain batch of the refinement (null = wdown.batch_size = 64). The logits [batch, seq, vocab] are the memory peak: 8-16 for 3B / 8B (peak ~27 GB with 64 on the 1B model)
     init: stage1 # stage1: start from the steering regression of stage 1 | original: NO steering stage, start from the original weights (ablation: is the redirection needed at all?)
     forget_weight: null # weight of the forget activation-MSE (the steering anchor) in the refinement; null = wdown.forget_weight; 0 = KL / hinge only (with init: original = no steering at all)
     forget_prob_mode: hinge # hinge: only while MORE likely than the target (it overshoots: target 0.17 -> 0.08) | match: towards the target from either side

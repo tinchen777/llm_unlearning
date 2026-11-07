@@ -150,9 +150,11 @@ def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: t
     """Hinge on the probability of the TRUE answer: per sample p = exp(mean token log-prob of the answer tokens) (the `forget_Q_A_Prob` of the evaluation,
     teacher forced), loss = mean(relu(log p - log target)): it only acts while a sample is still MORE likely than `target` (the retain model's ~0.17), so
     the answers are pushed down to the level of a model that never saw them and no further (no over-forgetting). Returns (loss, mean p of the batch)."""
-    logp = torch.log_softmax(logits[:, :-1].float(), dim=-1).gather(-1, input_ids[:, 1:].unsqueeze(-1)).squeeze(-1)
-    mask = (labels[:, 1:] != -100).float()
-    mean_logp = (logp * mask).sum(1) / mask.sum(1).clamp_min(1.0)
+    mask = labels[:, 1:] != -100
+    # only the answer positions go through the (float32) log-softmax over the vocabulary: that is what costs the memory
+    sel = torch.log_softmax(logits[:, :-1][mask].float(), dim=-1).gather(-1, input_ids[:, 1:][mask].unsqueeze(-1)).squeeze(-1)
+    sums = torch.zeros(logits.shape[0], device=logits.device, dtype=sel.dtype).index_add(0, mask.nonzero()[:, 0], sel)
+    mean_logp = sums / mask.sum(1).clamp_min(1)
     if per_sample:
         return mean_logp.new_zeros(()), mean_logp.exp().detach()
     gap = mean_logp - math.log(target)
@@ -237,6 +239,7 @@ def refine_w_down(
                     part = part + prob_w * loss_p
                     prob_now = float(p_mean)
                 part.backward()
+                del out, part  # the logits of this batch are not needed any more (the peak memory)
                 terms[kind] = float((loss_f if kind == "forget" else loss_r).detach())
                 edited_out.clear()
                 ref_out.clear()
