@@ -67,7 +67,7 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     if [ -n "${KL_STEPS}" ]; then extra="${extra} wdown.kl.steps=${KL_STEPS}"; variant=${variant}_s${KL_STEPS}; fi
     if [ -n "${KL_LR}" ]; then extra="${extra} wdown.kl.lr=${KL_LR}"; variant=${variant}_lr${KL_LR}; fi
     if [ -n "${FP_WEIGHT}" ]; then extra="${extra} wdown.kl.forget_prob_weight=${FP_WEIGHT}"; variant=${variant}_fp${FP_WEIGHT}; fi
-    if [ -n "${FP_TARGET}" ]; then extra="${extra} wdown.kl.forget_prob_target=${FP_TARGET}"; fi
+    if [ -n "${FP_TARGET}" ]; then extra="${extra} wdown.kl.forget_prob_target=${FP_TARGET}"; variant=${variant}_ft${FP_TARGET}; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"
