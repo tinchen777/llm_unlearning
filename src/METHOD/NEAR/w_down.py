@@ -238,8 +238,15 @@ def main(cfg: TrackingConfig):
     # Train every layer on the recorded data, then write the weights. Default: the layers are independent (all tokens were recorded on
     # the ORIGINAL model). `sequential`: from the lowest layer up, after each layer the inputs of the next one are recorded again on the
     # model edited so far, with the SAME targets (original output (+ shift for forget)): a layer also repairs what the edits below did to its input
+    kl_init = str(kl_cfg.get("init", "stage1")) if use_kl else "stage1"
+    if kl_init not in ("stage1", "original"):
+        raise ValueError(f"wdown.kl.init must be `stage1` or `original`, got `{kl_init}`.")
     with step_logging(logger, "#3", "W_down training"):
-        if sequential:
+        if kl_init == "original":
+            # ablation: NO steering stage. The refinement starts from the ORIGINAL weights (no shift is ever trained in); with kl.forget_weight=0 it never sees the shift either
+            per_layer = {}
+            new_weights = {_l: get_out_proj(model, _l).weight.detach().float().cpu().clone() for _l in train_layers}
+        elif sequential:
             per_layer, new_weights = {}, {}
             for i, _l in enumerate(train_layers):
                 if i > 0:
@@ -281,7 +288,7 @@ def main(cfg: TrackingConfig):
                     batch_size=wd_cfg["batch_size"], max_samples=int(kl_cfg["retain_max_samples"]))]
                 refined = refine_w_down(
                     model, ref_model, tokenizer, train_layers, new_weights, make_forget_loader, retain_loaders, shift_fn, groups,
-                    kl_cfg_used, float(wd_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
+                    kl_cfg_used, float(wd_cfg["forget_weight"] if kl_cfg.get("forget_weight") is None else kl_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
                 )
                 new_weights, kl_history = refined["weights"], refined["history"]
                 for _l, w in new_weights.items():
@@ -331,7 +338,7 @@ def main(cfg: TrackingConfig):
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

@@ -293,3 +293,9 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     assert summary["kl"]["forget_prob_weight"] == 1 and all(0 <= h["forget_prob"] <= 1 and h["forget_prob_penalty"] >= 0 for h in summary["kl"]["history"])
     assert any(h["forget_prob"] > 0 for h in summary["kl"]["history"])
     assert 0 < summary["kl"]["forget_prob_target"] < 1 and summary["kl"]["forget_prob_mode"] == "match"  # `unseen` was resolved to a number (the original model on the holdout answers)
+
+    # ablation: no steering stage (start from the original weights, no forget activation anchor): KL (weight 0) + hinge only
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl, "wdown.kl.weight=0", "wdown.kl.init=original",
+                                  "wdown.kl.forget_weight=0", "wdown.kl.forget_prob_target=0.2", "task_name=klr_nosteer"])
+    ns = json.loads((out_root / "saves" / "NEAR" / "klr_nosteer" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    assert ns["kl"]["init"] == "original" and ns["per_layer"] == {} and len(ns["kl"]["history"]) == 3 and ns["kl"]["forget_weight"] == 0
