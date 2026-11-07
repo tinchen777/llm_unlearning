@@ -33,7 +33,8 @@ KL_WEIGHT=${KL_WEIGHT:-}               # non-empty: stage 2 (end-to-end refineme
 KL_STEPS=${KL_STEPS:-}
 KL_LR=${KL_LR:-}
 FP_WEIGHT=${FP_WEIGHT:-}                 # with KL_WEIGHT: mu of the hinge on the probability of the TRUE forget answer (wdown.kl.forget_prob_weight), FP_TARGET (default 0.17) its level
-FP_TARGET=${FP_TARGET:-}
+FP_TARGET=${FP_TARGET:-}                 # a number or `unseen` (= the original model's probability on the holdout answers, the default of the config)
+FP_MODE=${FP_MODE:-}                     # hinge (default) | match
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -68,6 +69,7 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     if [ -n "${KL_LR}" ]; then extra="${extra} wdown.kl.lr=${KL_LR}"; variant=${variant}_lr${KL_LR}; fi
     if [ -n "${FP_WEIGHT}" ]; then extra="${extra} wdown.kl.forget_prob_weight=${FP_WEIGHT}"; variant=${variant}_fp${FP_WEIGHT}; fi
     if [ -n "${FP_TARGET}" ]; then extra="${extra} wdown.kl.forget_prob_target=${FP_TARGET}"; variant=${variant}_ft${FP_TARGET}; fi
+    if [ -n "${FP_MODE}" ]; then extra="${extra} wdown.kl.forget_prob_mode=${FP_MODE}"; variant=${variant}_fm${FP_MODE}; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"

@@ -130,14 +130,39 @@ def capture_mlp_out(model: Any, layers: Sequence[int]):
             h.remove()
 
 
-def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: torch.Tensor, target: float) -> Tuple[torch.Tensor, torch.Tensor]:
+@torch.no_grad()
+def estimate_unseen_prob(model: Any, batches: Any) -> float:
+    """The mean `forget_Q_A_Prob`-style probability (per sample exp(mean token log-prob of the answer), averaged over samples) that `model` gives to the
+    answers of data it has NOT seen (e.g. the TOFU holdout authors): the probability of an answer to an unseen question. Needs only the ORIGINAL model and
+    unseen questions, no retain model: on TOFU it is ~ the retain model's forget probability (1B 0.161 vs 0.169, 3B 0.159 vs 0.178, 8B 0.130 vs 0.139)."""
+    probs = []
+    device = model.device
+    for batch in batches:
+        inputs = {"input_ids": batch["input_ids"].to(device), "attention_mask": batch["attention_mask"].to(device)}
+        logits = model(**inputs).logits
+        _, p = forget_prob_penalty(logits, inputs["input_ids"], batch["labels"].to(device), 1.0, per_sample=True)
+        probs.extend(p.tolist())
+    return float(sum(probs) / len(probs))
+
+
+def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: torch.Tensor, target: float, mode: str = "hinge",
+                        per_sample: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
     """Hinge on the probability of the TRUE answer: per sample p = exp(mean token log-prob of the answer tokens) (the `forget_Q_A_Prob` of the evaluation,
     teacher forced), loss = mean(relu(log p - log target)): it only acts while a sample is still MORE likely than `target` (the retain model's ~0.17), so
     the answers are pushed down to the level of a model that never saw them and no further (no over-forgetting). Returns (loss, mean p of the batch)."""
     logp = torch.log_softmax(logits[:, :-1].float(), dim=-1).gather(-1, input_ids[:, 1:].unsqueeze(-1)).squeeze(-1)
     mask = (labels[:, 1:] != -100).float()
     mean_logp = (logp * mask).sum(1) / mask.sum(1).clamp_min(1.0)
-    return F.relu(mean_logp - math.log(target)).mean(), mean_logp.exp().mean().detach()
+    if per_sample:
+        return mean_logp.new_zeros(()), mean_logp.exp().detach()
+    gap = mean_logp - math.log(target)
+    if mode == "hinge":  # only while MORE likely than the target
+        loss = F.relu(gap)
+    elif mode == "match":  # towards the target from either side (no over-forgetting)
+        loss = gap.pow(2)
+    else:
+        raise ValueError(f"forget_prob_mode must be `hinge` or `match`, got `{mode}`.")
+    return loss.mean(), mean_logp.exp().mean().detach()
 
 
 def _rel_mse(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -168,6 +193,7 @@ def refine_w_down(
     steps, lr = int(cfg["steps"]), float(cfg["lr"])
     kl_w, n_tokens, kl_bs = float(cfg["weight"]), int(cfg["n_tokens"]), int(cfg["batch_size"])
     prob_w, prob_target = float(cfg.get("forget_prob_weight", 0.0) or 0.0), float(cfg.get("forget_prob_target", 0.17))
+    prob_mode = str(cfg.get("forget_prob_mode", "hinge"))
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
     rng = random.Random(seed)
     device = model.device
@@ -207,7 +233,7 @@ def refine_w_down(
                         loss_r = loss_r + term
                 part = (forget_weight * loss_f) if kind == "forget" else (retain_weight * loss_r)
                 if kind == "forget" and prob_w > 0:  # the true answers of the forget samples must not stay more likely than the retain model would give them
-                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), prob_target)
+                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), prob_target, prob_mode)
                     part = part + prob_w * loss_p
                     prob_now = float(p_mean)
                 part.backward()

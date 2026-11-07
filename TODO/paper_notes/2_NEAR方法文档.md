@@ -76,7 +76,7 @@ $$ \mathcal L = w_f\,\widetilde{\mathrm{MSE}}_{forget} + w_r\,\widetilde{\mathrm
 
 - $\widetilde{\mathrm{MSE}}$ = 各层 MLP 输出的 MSE / 目标均方（相对误差，三项量级可比）；forget 目标 = $y^0 + c\,s_a$，retain 目标 = $y^0$（原模型在线计算，`ref_model` 是编辑前冻结的拷贝）。
 - **KL 项**：对每个 forget 问题 $x_f$，取其 `train` 邻居的问题 $x_{nb}$ 与答案 $y_{nb}$（配对键 `(author_id, qa_id)`，并断言 `source_question` 与该 forget 问题一致，防止行序错位；每步从该问题的 10 个邻居里随机抽一个）。编辑后模型在 **forget 提示 + 邻居答案前缀**上、对前 `n_tokens=8` 个答案 token 的分布，逼近**原模型在邻居提示 + 同一答案前缀**上的分布。只需要原模型，不需要 retain 模型。
-- **铰链项**（可选，$\mu>0$）：惩罚真实 forget 答案的（teacher-forced）平均 token 概率 $\bar p = \exp(\text{mean log-prob})$（即评测的 `forget_Q_A_Prob`）高于 $\tau$（retain 模型的值，1B 为 0.17），低于 $\tau$ 就不再惩罚：推到 retain 水平，不过度遗忘。**设计动机**：KL 约束的是邻居答案的前缀，不降低真实答案的概率；300 步 KL 从 0.61 降到 0.39，Prob 仍 0.515→0.502。**铰链的结果尚未出来**【未验证】。
+- **铰链项**（可选，$\mu>0$）：惩罚真实 forget 答案的（teacher-forced）平均 token 概率 $\bar p = \exp(\text{mean log-prob})$（即评测的 `forget_Q_A_Prob`）高于 $\tau$（retain 模型的值，1B 为 0.17），低于 $\tau$ 就不再惩罚。**$\tau$ 不取自 retain 模型**：取原模型在**未见数据**（TOFU holdout 作者）上的答案概率（`forget_prob_target: unseen`；full 模型在 holdout 上的答案概率 1B 0.161 / 3B 0.159 / 8B 0.130，≈ retain 模型的 forget Prob 0.169 / 0.178 / 0.139），所以仍只需要原模型与未见问答。早期实验直接用了 retain 的 0.17（违反设定），且 hinge 过冲（目标 0.17 → 实际 0.08）；另有双向的 `match` 模式（向 $\tau$ 靠拢，不过冲）。**设计动机**：KL 约束的是邻居答案的前缀，不降低真实答案的概率；300 步 KL 从 0.61 降到 0.39，Prob 仍 0.515→0.502。**铰链的结果尚未出来**【未验证】。
 - 超参：`steps=100`，`lr=2e-5`（AdamW），$\lambda=1$（3 与 1 几乎无差别），`n_tokens=8`，每步 8 个（forget 提示, 邻居答案）对 + 一个 forget 批 + 一个 retain 批；需要 `include_answer=true`；显存多一份参照模型。
 - 【已验证】KL 在 12 个（层集, 系数）组合上一致地把 Prob 再降 0.25–0.3，utility 只少 0.01–0.02，forget 回答首词变成 "Ali / Leonid / Pavel"（邻居式的另一位虚构作者），`ud_bb` 0；越深的层 retain 代价越小。KL 不改变白盒痕迹。
 

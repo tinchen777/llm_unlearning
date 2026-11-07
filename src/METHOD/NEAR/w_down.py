@@ -53,7 +53,7 @@ from utils.common import get_cuda_visible_devices, save_logs, set_seed
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
-from METHOD.NEAR.kl_refine import build_kl_pairs, refine_w_down
+from METHOD.NEAR.kl_refine import build_kl_pairs, estimate_unseen_prob, refine_w_down
 from METHOD._common.editing import layer_increments, train_w_down_layers
 from METHOD._common.lineage import check_r_uv_identity, model_name, pick, resolve_r_uv_path
 
@@ -271,11 +271,17 @@ def main(cfg: TrackingConfig):
                     qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
                 )
                 logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions")
+                kl_run = {k_: kl_cfg[k_] for k_ in kl_cfg}
+                if float(kl_run.get("forget_prob_weight", 0.0) or 0.0) > 0 and str(kl_run.get("forget_prob_target")) == "unseen":
+                    # target of the forget answers' probability = the ORIGINAL model's probability on answers of data it has not seen (the holdout authors): no retain model
+                    kl_run["forget_prob_target"] = estimate_unseen_prob(ref_model, as_trained(split_data["holdout"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None))
+                    logger.info(f"forget_prob_target = {kl_run['forget_prob_target']:.4f} (original model on the holdout answers)")
+                kl_cfg_used = kl_run
                 retain_loaders = lambda: [b for s_ in wd_cfg["retain_splits"] for b in as_trained(split_data[s_]).loader(
                     batch_size=wd_cfg["batch_size"], max_samples=int(kl_cfg["retain_max_samples"]))]
                 refined = refine_w_down(
                     model, ref_model, tokenizer, train_layers, new_weights, make_forget_loader, retain_loaders, shift_fn, groups,
-                    kl_cfg, float(wd_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
+                    kl_cfg_used, float(wd_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
                 )
                 new_weights, kl_history = refined["weights"], refined["history"]
                 for _l, w in new_weights.items():
@@ -325,7 +331,7 @@ def main(cfg: TrackingConfig):
             "tag": tag, "k": k, "layers": train_layers, "coeff": coeff, "shift_mode": shift_mode, "ref_position": ref_position,
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_target") if k_ in kl_cfg} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

@@ -83,3 +83,16 @@ def test_forget_prob_penalty_is_a_hinge_on_the_true_answer_probability():
     logits.requires_grad_(True)
     forget_prob_penalty(logits, ids, labels, target=0.1)[0].backward()
     assert logits.grad is not None and logits.grad.abs().sum() > 0
+
+
+def test_forget_prob_penalty_match_mode_pulls_from_both_sides():
+    import torch
+    from METHOD.NEAR.kl_refine import forget_prob_penalty
+    ids = torch.tensor([[0, 1, 2]])
+    labels = torch.tensor([[-100, 1, 2]])
+    logits = torch.zeros(1, 3, 5)  # p = 0.2
+    assert float(forget_prob_penalty(logits, ids, labels, 0.2, "match")[0]) < 1e-9
+    assert float(forget_prob_penalty(logits, ids, labels, 0.5, "match")[0]) > 0   # below the target: the hinge would be 0, `match` pulls up
+    assert float(forget_prob_penalty(logits, ids, labels, 0.5, "hinge")[0]) == 0
+    with pytest.raises(ValueError, match="hinge"):
+        forget_prob_penalty(logits, ids, labels, 0.2, "nope")
