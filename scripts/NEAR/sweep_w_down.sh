@@ -80,6 +80,7 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     variant=${variant}_${MULTI_LAYER}
     if [ "${SEQUENTIAL}" = 1 ]; then extra="${extra} wdown.sequential=true"; variant=${variant}_seq; fi
   fi
+  extra="${extra} ${EXTRA_WDOWN:-}"      # more Hydra overrides of the W_down stage (not part of the run name), e.g. EXTRA_WDOWN="wdown.kl.fr_batch_size=16"
   variant=${variant}_c${COEFF}_l${LAYER//,/-}
   echo "################  ${variant}: ${extra}  ################"
   TASK_NAME=${OUT_PREFIX}/${variant} EXTRA_W_DOWN="${extra}" \
