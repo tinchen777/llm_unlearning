@@ -5,7 +5,8 @@ saved (TOFU_SUMMARY.json): no model is run.
         [--near saves/eval/NEAR/single_v2] [--lunar saves/eval/LUNAR/single] [--baselines saves/tofu_unlearn]
 
 Points
-- NEAR / NEAR+KL: every run folder of `--near` whose name has `_kl<w>` (w > 0) is NEAR+KL, the others are NEAR (kl0 = end-to-end training without the KL term).
+- NEAR / NEAR+KL / KL+hinge: every run folder of the `--near` folder(s) whose name has `_initoriginal` (no steering stage) is KL+hinge; else with `_kl<w>` (w > 0) NEAR+KL;
+  the others NEAR (kl0 = end-to-end training without the KL term).
 - LUNAR: the run folders of `--lunar` of this forget split (the coefficient sweep).
 - baselines: the runs of the protocol `--epochs` (default 5, folder name `_ep5`; `all` for every run), EVERY epoch checkpoint (step > 0) of every run of `--baselines` (a run `X` is replaced by its re-run `X_ud`, which has the probe / ud_*) (so a method with several learning rates / epochs is a cloud of points, not
   the one "best epoch" of baseline_table.py).
@@ -43,15 +44,18 @@ def read_summary(path):
 
 
 def collect(near, lunar, baselines, model, forget, epochs="5"):
-    """List of points `{family, method, run, <KEYS>}`; family is NEAR | NEAR+KL | LUNAR | baseline."""
+    """List of points `{family, method, run, <KEYS>}`; family is NEAR | NEAR+KL | KL+hinge | LUNAR | baseline. `near`: one folder or a list of folders."""
     points = []
-    for d in sorted(glob.glob(os.path.join(near, "*"))):
+    near_dirs = [near] if isinstance(near, str) else list(near)
+    for d in sorted(p for n in near_dirs for p in glob.glob(os.path.join(n, "*"))):
         s = read_summary(os.path.join(d, "TOFU_SUMMARY.json"))
         name = os.path.basename(d)
         if s is None or f"_k5_" not in name and "_k" not in name:
             continue
         kl = re.search(r"_kl(\d+(?:\.\d+)?)", name)
         family = "NEAR+KL" if kl and float(kl.group(1)) > 0 else "NEAR"
+        if "_initoriginal" in name:  # no steering stage (near_line/22): KL + hinge from the original weights
+            family = "KL+hinge"
         points.append({"family": family, "method": family, "run": name.split("_k5_")[0], **s})
     for d in sorted(glob.glob(os.path.join(lunar, f"*_{model}_{forget}_*"))):
         s = read_summary(os.path.join(d, "TOFU_SUMMARY.json"))
@@ -142,7 +146,8 @@ def write_csv(points, path):
 # with one marker shape per method (secondary encoding); NEAR and NEAR+KL share the blue family: filled circle vs diamond.
 STYLE = {
     "NEAR": dict(color="#2a78d6", marker="o"),
-    "NEAR+KL": dict(color="#1baf7a", marker="D"),
+    "NEAR+KL": dict(color="#2a78d6", marker="D"),     # the steering versions share the blue family: circle (stage 1 only), diamond (+ KL)
+    "KL+hinge": dict(color="#1baf7a", marker="h"),    # the new method without steering
     "LUNAR": dict(color="#eb6834", marker="s"),
 }
 BASE_MARKERS = dict(zip(BASELINES, ["v", "^", "<", ">", "P", "X"]))
@@ -209,7 +214,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Llama-3.2-1B-Instruct")
     ap.add_argument("--forget", default="forget01")
-    ap.add_argument("--near", default="saves/eval/NEAR/single_v2")
+    ap.add_argument("--near", nargs="+", default=["saves/eval/NEAR/single_v2"], help="one or several folders of NEAR evaluations (e.g. single_v2 single_v3)")
     ap.add_argument("--lunar", default="saves/eval/LUNAR/single")
     ap.add_argument("--baselines", default="saves/tofu_unlearn")
     ap.add_argument("--epochs", default="5", help="baseline protocol: only the runs trained with this many epochs (folder name _ep<N>); `all` = every run, "

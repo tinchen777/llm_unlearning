@@ -61,6 +61,7 @@ def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
     put(near / "rw1_ans_increment_seq_c7_l7-8-9_k5_l7-8-9_c7_all", summary(0.2, 0.57, ud_wb_unsup=0.99))
     put(near / "rw1_ans_kl1_increment_seq_c7_l7-8-9_k5_l7-8-9_c7_all", summary(0.22, 0.55))
     put(near / "rw1_ans_kl0_increment_seq_c2_l11-12_k5_l11-12_c2_all", summary(0.75, 0.58))  # kl0 = no KL term: plain NEAR
+    put(near / "rw1_ans_kl1_fp1_ftunseen_fmmatch_initoriginal_kfw0_increment_seq_c1_l11-12-13_k5_l11-12-13_c1_all", summary(0.16, 0.57))  # no steering
     put(lunar / "lunar_tofu_M_forget01_LUNAR_harmful_c1.5_l8_all", summary(0.11, 0.40, ud_bb=0.5))
     put(lunar / "lunar_tofu_M_forget05_LUNAR_harmful_c1.5_l8_all", summary(0.01, 0.10))  # another forget split: not collected
     for step, (prob, util, mia) in {0: (0.9, 0.6, 1.0), 2: (0.15, 0.45, 0.45), 4: (0.01, 0.30, 0.02)}.items():
@@ -70,7 +71,7 @@ def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
     put(base / "RMU" / "tofu_M_forget01_lr5e-5_ep5_ud" / "checkpoint-2" / "evals", summary(0.3, 0.5, ud_wb_unsup=0.9))  # the re-run with the probe replaces it
 
     points = pareto.collect(str(near), str(lunar), str(base), "M", "forget01")
-    assert sorted(p["family"] for p in points) == ["LUNAR", "NEAR", "NEAR", "NEAR+KL", "baseline", "baseline", "baseline"]
+    assert sorted(p["family"] for p in points) == ["KL+hinge", "LUNAR", "NEAR", "NEAR", "NEAR+KL", "baseline", "baseline", "baseline"]
     assert [p["run"] for p in points if p["method"] == "RMU"] == ["lr5e-5_ep5_ud@2"] and [p for p in points if p["method"] == "RMU"][0]["ud_wb_unsup"] == 0.9  # step 0 and the split 05 run are left out
     rows = {r["method"]: r for r in pareto.matched(points, tau=0.25, mia_centre=0.48, mia_tol=0.25)}
     put(base / "NPO" / "tofu_M_forget01" / "checkpoint-2" / "evals", summary(0.01, 0.9))  # the earlier 10-epoch protocol (no _ep suffix): not collected
