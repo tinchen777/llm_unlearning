@@ -69,3 +69,7 @@ for METHOD in "${METHODS[@]}"; do
     # --cfg job --resolve
   echo end ${METHOD} ${FULL_MODEL} ${FORGET_SPLIT}
 done
+
+
+
+FORGET_SPLIT=forget10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 NEIGHBOR_SPLIT=neighbor10 MODEL=Llama-3.2-3B-Instruct TASK_NAME=forget10_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget10_ks COEFFS="14" MODES="all" LAYER_FRACTION="[0.25,0.75]" bash scripts/NEAR/sweep_select.sh 0 && FORGET_SPLIT=forget10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 NEIGHBOR_SPLIT=neighbor10 MODEL=Llama-3.2-3B-Instruct SELECT_TASK_NAME=forget10_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget10_ks OUT_PREFIX=forget10_Llama3B_v2 EVAL_PROFILE=full INCLUDE_ANSWER=1 LAYER=11,12,13 COEFF=14 MULTI_LAYER=increment SEQUENTIAL=1 RETAIN_WEIGHTS=1 bash scripts/NEAR/sweep_w_down.sh 0
