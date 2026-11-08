@@ -28,7 +28,7 @@ GPU_ID=${1:-0}
 export OUT_PREFIX=${OUT_PREFIX:-single_v2}
 UPSTREAM_PREFIX=${UPSTREAM_PREFIX:-${OUT_PREFIX}}   # where r_uv.pt and the selections are (e.g. OUT_PREFIX=single_v3 UPSTREAM_PREFIX=single_v2: new outputs in v3, the upstream stays in v2)
 export SELECT_TASK_NAME=${SELECT_TASK_NAME:-${UPSTREAM_PREFIX}/near_tofu_${MODEL}_${FORGET_SPLIT}_ks}   # r_uv.pt (K=5) and the selections of the coefficients
-export MULTI_LAYER=increment SEQUENTIAL=1 INCLUDE_ANSWER=1 RETAIN_WEIGHTS=1
+export MULTI_LAYER=increment SEQUENTIAL=1 INCLUDE_ANSWER=1 RETAIN_WEIGHTS=${RETAIN_WEIGHTS:-1}
 if [ -z "${DRY_RUN}" ] && [ ! -f "saves/NEAR/${SELECT_TASK_NAME}/r_uv.pt" ]; then
   echo "saves/NEAR/${SELECT_TASK_NAME}/r_uv.pt not found (run the K ablation / steering sweep of that task first)" >&2
   exit 1
