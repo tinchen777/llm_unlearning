@@ -10,7 +10,7 @@ edited model says. Here the W_down of the edited layers are trained TOGETHER thr
 The KL is on the first `n_tokens` answer tokens: the edited model, given a forget prompt and the answer of a (train) neighbour of that
 question, should predict that answer like the ORIGINAL model does for the neighbour prompt itself. Only the original model is needed
 (`ref_model`, a frozen copy taken before any edit); no retain model.
-Optional (`forget_prob_weight` mu > 0): + mu * relu(log p_true - log `forget_prob_target`), p_true = the (teacher forced) probability of the TRUE forget answer,
+Optional (`forget_prob_weight` mu > 0; modes hinge | match | mean | neighbor, see `forget_prob_penalty`): + mu * relu(log p_true - log `forget_prob_target`), p_true = the (teacher forced) probability of the TRUE forget answer,
 a hinge that pushes it down to the retain model's level (~0.17) and not beyond: the KL above shapes the beginning of the answer like a neighbour's but does not
 lower the probability of the true answer tokens (the evaluation measures that).
 `rel_MSE` = MSE / mean(target^2) of the layer, so the three terms have comparable scale.
@@ -145,11 +145,18 @@ def estimate_unseen_prob(model: Any, batches: Any) -> float:
     return float(sum(probs) / len(probs))
 
 
-def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: torch.Tensor, target: float, mode: str = "hinge",
+def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: torch.Tensor, target: Any, mode: str = "hinge",
                         per_sample: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Hinge on the probability of the TRUE answer: per sample p = exp(mean token log-prob of the answer tokens) (the `forget_Q_A_Prob` of the evaluation,
-    teacher forced), loss = mean(relu(log p - log target)): it only acts while a sample is still MORE likely than `target` (the retain model's ~0.17), so
-    the answers are pushed down to the level of a model that never saw them and no further (no over-forgetting). Returns (loss, mean p of the batch)."""
+    """Penalty on the probability of the TRUE answer: per sample p_i = exp(mean token log-prob of the answer tokens) (the `forget_Q_A_Prob` of the evaluation,
+    teacher forced). `target`: a number (the level of a model that never saw the answers, ~0.17) or, for `hinge` / `match` / `neighbor`, a tensor [batch] with one level per sample.
+    Modes (gap_i = log p_i - log target_i):
+      hinge     mean_i relu(gap_i)         only while MORE likely than the target (overshoots: target 0.17 -> 0.08)
+      match     mean_i gap_i^2             every sample towards ITS target from either side; with ONE number as target all samples are pulled to the same value
+                                           (the spread of log p_i collapses: sd 0.04-0.4 where an unseen question gives 0.8-1.0, and the loss-based MIA sees it)
+      mean      (log mean_i p_i - log target)^2   only the BATCH MEAN of the probabilities is matched: the natural spread between the samples is kept
+      neighbor  mean_i gap_i^2 with a per-sample `target` tensor = the original model's probability of the NEIGHBOUR answers of that question (`neighbor_answer_probs`):
+                the target itself has the spread of an unseen question
+    Returns (loss, mean p of the batch)."""
     mask = labels[:, 1:] != -100
     # only the answer positions go through the (float32) log-softmax over the vocabulary: that is what costs the memory
     sel = torch.log_softmax(logits[:, :-1][mask].float(), dim=-1).gather(-1, input_ids[:, 1:][mask].unsqueeze(-1)).squeeze(-1)
@@ -157,14 +164,57 @@ def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: t
     mean_logp = sums / mask.sum(1).clamp_min(1)
     if per_sample:
         return mean_logp.new_zeros(()), mean_logp.exp().detach()
-    gap = mean_logp - math.log(target)
-    if mode == "hinge":  # only while MORE likely than the target
-        loss = F.relu(gap)
-    elif mode == "match":  # towards the target from either side (no over-forgetting)
-        loss = gap.pow(2)
+    if mode not in ("hinge", "match", "mean", "neighbor"):
+        raise ValueError(f"forget_prob_mode must be `hinge`, `match`, `mean` or `neighbor`, got `{mode}`.")
+    if torch.is_tensor(target):
+        log_target = torch.log(target.to(mean_logp))
     else:
-        raise ValueError(f"forget_prob_mode must be `hinge` or `match`, got `{mode}`.")
-    return loss.mean(), mean_logp.exp().mean().detach()
+        if mode == "neighbor":
+            raise ValueError("forget_prob_mode `neighbor` needs one target per sample (a tensor), not a number.")
+        log_target = math.log(float(target))
+    if mode == "mean":
+        if torch.is_tensor(target) and target.numel() > 1:
+            log_target = log_target.mean()
+        loss = (torch.logsumexp(mean_logp, dim=0) - math.log(mean_logp.shape[0]) - log_target).pow(2)
+    else:
+        gap = mean_logp - log_target
+        loss = F.relu(gap).mean() if mode == "hinge" else gap.pow(2).mean()
+    return loss, mean_logp.exp().mean().detach()
+
+
+@torch.no_grad()
+def neighbor_answer_probs(
+    ref_model: Any,
+    neighbor_full_ds: Any,
+    qa_per_author: int,
+    author_offset: int,
+    pad_id: int,
+    batch_size: int = 16,
+) -> Dict[int, float]:
+    """Per forget question, the mean over its `train` neighbours of the ORIGINAL model's probability of the neighbour's full answer,
+    p = exp(mean token log-prob of the answer | neighbour question) (the same quantity as `forget_Q_A_Prob`, teacher forced): what the model gives to an answer to a
+    question about an entity it does not know. This is the per-sample target of `forget_prob_mode: neighbor`. `{forget row: probability}`."""
+    device = ref_model.device
+    rows, ids_list, labels_list = [], [], []
+    for j in range(len(neighbor_full_ds)):
+        nb = neighbor_full_ds[j]
+        rows.append((int(nb["author_id"]) - author_offset) * qa_per_author + int(nb["qa_id"]))
+        ids_list.append(torch.as_tensor(nb["input_ids"]))
+        labels_list.append(torch.as_tensor(nb["labels"]))
+    probs: Dict[int, List[float]] = {}
+    for i in range(0, len(rows), batch_size):
+        ids, labels = ids_list[i:i + batch_size], labels_list[i:i + batch_size]
+        n = max(len(x) for x in ids)
+        ii = torch.full((len(ids), n), pad_id, dtype=torch.long)
+        ll = torch.full((len(ids), n), -100, dtype=torch.long)
+        mm = torch.zeros((len(ids), n), dtype=torch.long)
+        for b, (x, y) in enumerate(zip(ids, labels)):  # right padding: the positions of the real tokens are unchanged
+            ii[b, :len(x)], ll[b, :len(y)], mm[b, :len(x)] = x, y, 1
+        logits = ref_model(input_ids=ii.to(device), attention_mask=mm.to(device)).logits
+        _, p = forget_prob_penalty(logits, ii.to(device), ll.to(device), 1.0, per_sample=True)
+        for r, v in zip(rows[i:i + batch_size], p.tolist()):
+            probs.setdefault(r, []).append(v)
+    return {r: sum(v) / len(v) for r, v in probs.items()}
 
 
 def _rel_mse(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -188,6 +238,7 @@ def refine_w_down(
     forget_weight: float,
     retain_weight: float,
     seed: int,
+    forget_targets: Optional[Mapping[int, float]] = None,
 ) -> Dict[str, Any]:
     """Train the W_down of `layers` end to end (see the module docstring). `forget_batches()` / `retain_batches()` return a FRESH iterable
     of batches (`input_ids`, `attention_mask`, `labels`, `index`) over prompt + answer tokens. The best-effort result: the trained weights
@@ -237,7 +288,12 @@ def refine_w_down(
                         loss_r = loss_r + term
                 part = (forget_weight * loss_f) if kind == "forget" else (retain_weight * loss_r)
                 if kind == "forget" and prob_w > 0:  # the true answers of the forget samples must not stay more likely than the retain model would give them
-                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), prob_target, prob_mode)
+                    target = prob_target
+                    if prob_mode == "neighbor":  # one level per forget question: the original model's probability of its neighbours' answers
+                        if forget_targets is None:
+                            raise ValueError("forget_prob_mode `neighbor` needs `forget_targets` (neighbor_answer_probs).")
+                        target = torch.tensor([forget_targets[int(i)] for i in batch["index"]], device=device)
+                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), target, prob_mode)
                     part = part + prob_w * loss_p
                     prob_now = float(p_mean)
                 part.backward()

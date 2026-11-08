@@ -304,6 +304,14 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     ns = json.loads((out_root / "saves" / "NEAR" / "klr_nosteer" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert ns["kl"]["init"] == "original" and ns["per_layer"] == {} and len(ns["kl"]["history"]) == 3 and ns["kl"]["forget_weight"] == 0
 
+    # the other calibration modes: `mean` (batch mean towards the number) and `neighbor` (per-sample level = the original model's probability of the neighbour answers)
+    for mode in ("mean", "neighbor"):
+        run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], f"wdown.kl.forget_prob_mode={mode}", "wdown.kl.init=original",
+                                      "wdown.kl.forget_weight=0", "wdown.kl.steps=2", f"task_name=klr_{mode}"])
+        m = json.loads((out_root / "saves" / "NEAR" / f"klr_{mode}" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+        assert m["kl"]["forget_prob_mode"] == mode and len(m["kl"]["history"]) == 2 and 0 < m["kl"]["forget_prob_target"] < 1
+        assert all(0 <= h["forget_prob"] <= 1 and h["forget_prob_penalty"] >= 0 for h in m["kl"]["history"])
+
     # KL only (no hinge, the default `forget_prob_target: unseen` must not be parsed as a number when the hinge is off), no steering
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.kl.enabled=true", "wdown.kl.steps=2", "wdown.kl.batch_size=4",
                                   "wdown.kl.n_tokens=3", "wdown.kl.retain_max_samples=8", "wdown.kl.init=original", "wdown.kl.forget_weight=0", "task_name=klr_klonly"])

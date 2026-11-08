@@ -98,6 +98,48 @@ def test_forget_prob_penalty_match_mode_pulls_from_both_sides():
         forget_prob_penalty(logits, ids, labels, 0.2, "nope")
 
 
+def test_forget_prob_penalty_mean_and_neighbor_modes_keep_the_spread():
+    import math
+    import torch
+    from METHOD.NEAR.kl_refine import forget_prob_penalty
+    # two samples with p = 0.5 and p = 0.1 (one answer token): the batch mean is 0.3
+    ids = torch.tensor([[0, 1], [0, 1]])
+    labels = torch.tensor([[-100, 1], [-100, 1]])
+    logits = torch.zeros(2, 2, 2)
+    logits[0, 0, 1] = 0.0                  # sample 0: p(token 1) = 0.5
+    logits[1, 0, 1] = math.log(0.1 / 0.9)  # sample 1: p(token 1) = 0.1
+    # `mean`: zero loss when the MEAN is at the target, whatever the spread; `match` with one number pulls both samples to it
+    assert float(forget_prob_penalty(logits, ids, labels, 0.3, "mean")[0]) < 1e-9
+    assert float(forget_prob_penalty(logits, ids, labels, 0.3, "match")[0]) > 0.1
+    # `neighbor`: a level per sample; zero loss when every sample is at its own level
+    assert float(forget_prob_penalty(logits, ids, labels, torch.tensor([0.5, 0.1]), "neighbor")[0]) < 1e-9
+    assert float(forget_prob_penalty(logits, ids, labels, torch.tensor([0.1, 0.5]), "neighbor")[0]) > 0.5
+    with pytest.raises(ValueError, match="one target per sample"):
+        forget_prob_penalty(logits, ids, labels, 0.3, "neighbor")
+    logits.requires_grad_(True)
+    forget_prob_penalty(logits, ids, labels, 0.2, "mean")[0].backward()
+    assert logits.grad is not None and logits.grad.abs().sum() > 0
+
+
+def test_neighbor_answer_probs_maps_neighbour_rows_to_forget_rows():
+    import torch
+    from METHOD.NEAR.kl_refine import neighbor_answer_probs
+
+    class Model:
+        device = torch.device("cpu")
+
+        def __call__(self, input_ids, attention_mask):
+            class Out:
+                logits = torch.zeros(input_ids.shape[0], input_ids.shape[1], 4)  # uniform: p = 1/4 per answer token
+            return Out()
+
+    ds = [{"author_id": 5, "qa_id": 0, "input_ids": [0, 1, 2], "labels": [-100, 1, 2]},
+          {"author_id": 5, "qa_id": 0, "input_ids": [0, 1, 2, 3], "labels": [-100, 1, 2, 3]},   # a second neighbour of the same question, longer
+          {"author_id": 5, "qa_id": 1, "input_ids": [0, 3], "labels": [-100, 3]}]
+    out = neighbor_answer_probs(Model(), ds, qa_per_author=20, author_offset=5, pad_id=0, batch_size=2)
+    assert set(out) == {0, 1} and all(abs(v - 0.25) < 1e-6 for v in out.values())
+
+
 def test_cost_meter_adds_up_stages_and_saves(tmp_path):
     import json
     import time

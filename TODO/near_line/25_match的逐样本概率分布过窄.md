@@ -24,10 +24,18 @@ forget05 / forget10 上新方法的 Prob 达到目标（0.16–0.18 ≈ τ），
 3. **副作用扩散到 holdout**：forget05/10 上新方法对 **holdout 作者**的答案概率也被压低（均值 0.09–0.10，retain 0.13–0.16；sd 0.35–0.58 对 0.62–0.71），与采样实验里 holdout 一致性下降、retain 生成偏低是同一类现象：编辑不止作用于遗忘作者。
 4. 因此 forget05/10 上“mia 高 / retain 生成低”不应先归因于 retain 权重不够，应先改校准目标的形状。
 
-## 下一步（实验，按优先级）
-1. **单向 hinge**（现有代码，1B forget05，比较 sd、mia、holdout 均值）：
+## 下一步（实验）
+已实现两个新的校准模式（`src/METHOD/NEAR/kl_refine.py`，`forget_prob_mode`）：
+- `mean`：只对批内**平均概率**做 $(\log\mathrm{mean}_i p_i-\log\tau)^2$，保留样本间的自然分布，$\tau$ 仍取原模型在 holdout 上的概率；
+- `neighbor`：逐样本目标 $\tau_i$ = 原模型对该遗忘问题的**训练邻居答案**的平均概率（`neighbor_answer_probs`，教师强制、整个答案、同 `forget_Q_A_Prob` 的口径），损失 $\mathrm{mean}_i(\log p_i-\log\tau_i)^2$；目标本身带有未见问题的自然分布。没有训练邻居的遗忘行（真实数据里不会出现）取其余的平均并警告。
+单元测试和端到端冒烟测试已加（`tests/test_neighbor_protocol.py`、`tests/test_pipeline_smoke.py`）。
+
+三个校准模式对照（1B；run 名分别带 `_fmhinge` / `_fmmean` / `_fmneighbor`，不覆盖已有的 `_fmmatch`）：
 ```
-FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 MODEL=Llama-3.2-1B-Instruct KL_STEPS=300 EXTRA_WDOWN="wdown.kl.batch_size=16" UPSTREAM_PREFIX=forget05_Llama1B_v2 OUT_PREFIX=forget05_Llama1B_v3 FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=hinge KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 EVAL_PROFILE=full COEFFS="7" LAYER_SETS="11,12,13" bash scripts/NEAR/sweep_kl.sh <GPU>
+# forget01（单行）
+for m in hinge mean neighbor; do OUT_PREFIX=single_v3 UPSTREAM_PREFIX=single_v2 FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=$m KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 EVAL_PROFILE=full COEFFS="1" LAYER_SETS="11,12,13" bash scripts/NEAR/sweep_kl.sh <GPU>; done
+# forget05（单行；先 export 划分）
+export FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 MODEL=Llama-3.2-1B-Instruct
+for m in hinge mean neighbor; do KL_STEPS=300 EXTRA_WDOWN="wdown.kl.batch_size=16" UPSTREAM_PREFIX=forget05_Llama1B_v2 OUT_PREFIX=forget05_Llama1B_v3 FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=$m KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 EVAL_PROFILE=full COEFFS="7" LAYER_SETS="11,12,13" bash scripts/NEAR/sweep_kl.sh <GPU>; done
 ```
-2. **需要新写代码的两个校准模式**（尚未实现）：(a) `mean`：对批内**平均概率**（不是逐样本）做 $(\log\mathrm{mean}_i p_i-\log\tau)^2$，保留自然的样本间分布；(b) `neighbor`：逐样本目标 $\tau_i=p_{M}(y_{nb,i}\mid x_{nb,i})$，即原模型对该问题的**邻居答案**的概率，使每个样本的目标本身就是“未见数据”的自然分布。
-3. 用 `prob_spread.py` 和 `mia_loss`、holdout 均值、采样一致性复核。
+看：`mia_loss`、`scripts/analysis/prob_spread.py`（遗忘集 sd(log p) 是否回到 0.8 左右、holdout 的均值是否回到 retain 的 0.13–0.16）、Prob 是否仍落在 0.16 附近、utility / retain 生成。若 `mean` 或 `neighbor` 有效，再扩到 3B（forget05 / 10）。
