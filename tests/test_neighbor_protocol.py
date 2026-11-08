@@ -235,3 +235,4 @@ def test_build_kl_pairs_rotation_and_mask():
     assert masked[0][0]["mask"].sum() == 3
     with pytest.raises(ValueError, match="neighbor_name"):
         build_kl_pairs(Forget(), Nb(), 4, 5, 3, mask_neighbor_name=True)
+

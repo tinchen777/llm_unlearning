@@ -289,7 +289,7 @@ def main(cfg: TrackingConfig):
                             f"masked tokens: {sum(float((1 - p['mask']).sum()) for v in groups.values() for p in v) / max(1, sum(len(v) for v in groups.values()) * int(kl_cfg['n_tokens'])):.1%})")
                 kl_run = {k_: kl_cfg[k_] for k_ in kl_cfg}
                 forget_targets = None
-                if float(kl_run.get("forget_prob_weight", 0.0) or 0.0) > 0 and str(kl_run.get("forget_prob_mode")) == "neighbor":
+                if float(kl_run.get("forget_prob_weight", 0.0) or 0.0) > 0 and str(kl_run.get("forget_prob_mode")) in ("neighbor", "neighbor_scaled"):
                     # per-sample target: the original model's probability of the neighbour answers of each forget question (the natural spread of an unseen question)
                     pad_id_ = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
                     forget_targets = neighbor_answer_probs(ref_model, split_data["neighbor"].with_generation_mode(False).dataset, qa_per_author, author_offset, pad_id_)
@@ -298,6 +298,13 @@ def main(cfg: TrackingConfig):
                     if missing:  # a forget question without a train neighbour gets the mean level of the others (the TOFU neighbour csvs cover every forget row)
                         logger.warning(f"forget_prob_mode `neighbor`: {len(missing)} forget rows have no train neighbour (e.g. {missing[:5]}): they get the mean level {mean_target:.3f}")
                         forget_targets.update({i: mean_target for i in missing})
+                    if str(kl_run.get("forget_prob_mode")) == "neighbor_scaled":
+                        # one factor on all the levels so that their mean is the level of unseen data (the original model on the holdout answers): the spread between the questions is kept
+                        unseen = estimate_unseen_prob(ref_model, as_trained(split_data["holdout"]).loader(batch_size=wd_cfg["batch_size"], max_samples=None))
+                        factor = unseen / mean_target
+                        forget_targets = {i: v * factor for i, v in forget_targets.items()}
+                        mean_target = unseen
+                        logger.info(f"forget_prob_mode neighbor_scaled: levels x {factor:.3f} (neighbour answers {unseen / factor:.4f} -> unseen {unseen:.4f})")
                     kl_run["forget_prob_target"] = mean_target   # recorded in the summary: the mean of the per-sample targets
                     logger.info(f"forget_prob_target (neighbor): mean {kl_run['forget_prob_target']:.4f} over {len(forget_targets)} forget questions "
                                 f"(min {min(forget_targets.values()):.3f}, max {max(forget_targets.values()):.3f})")

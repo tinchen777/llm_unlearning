@@ -39,3 +39,21 @@ export FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGH
 for m in hinge mean neighbor; do KL_STEPS=300 EXTRA_WDOWN="wdown.kl.batch_size=16" UPSTREAM_PREFIX=forget05_Llama1B_v2 OUT_PREFIX=forget05_Llama1B_v3 FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=$m KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 EVAL_PROFILE=full COEFFS="7" LAYER_SETS="11,12,13" bash scripts/NEAR/sweep_kl.sh <GPU>; done
 ```
 看：`mia_loss`、`scripts/analysis/prob_spread.py`（遗忘集 sd(log p) 是否回到 0.8 左右、holdout 的均值是否回到 retain 的 0.13–0.16）、Prob 是否仍落在 0.16 附近、utility / retain 生成。若 `mean` 或 `neighbor` 有效，再扩到 3B（forget05 / 10）。
+
+## 结果：1B forget01 的变体（训练 + 标准评测；采样评测见下一节）
+列：Prob / mia / extraction / utility / retain 生成 / ud_bb / wb_unsup ｜ 遗忘集 sd(log p) ｜ holdout 平均概率
+| 变体（校准 / 每题邻居 / 屏蔽名字） | 指标 | sd(log p) | holdout 均值 |
+|---|---|---|---|
+| retain（参照） | .169 / .483 / .062 / .598 / .825 / 0 / .171 | 0.81 | .160 |
+| R0 match / 全部 / 否 | .162 / .563 / .131 / .569 / .640 / 0 / .171 | **0.04** | .184 |
+| E1 match / 全部 / 是 | .163 / .567 / .151 / .564 / .639 / .017 / .055 | 0.04 | .181 |
+| E2 match / 1 / 否 | .161 / .592 / .174 / .571 / .608 / 0 / .057 | 0.02 | .171 |
+| E3 match / 1 / 是 | .162 / .623 / .130 / .568 / .600 / 0 / .062 | 0.02 | .171 |
+| E4 neighbor / 全部 / 否 | **.089** / **.246** / .138 / .553 / .546 / .017 / .162 | **0.83** | .164 |
+| E5 neighbor / 1 / 是 | .089 / .285 / .152 / .554 / .514 / 0 / .096 | 0.83 | .151 |
+| E6 neighbor / 3 / 是 | .089 / .260 / .138 / .556 / .542 / 0 / .069 | 0.83 | .162 |
+
+读法：
+1. **校准形状的假设被支持**：`neighbor` 模式把遗忘集的 sd(log p) 从 0.04 恢复到 0.83（retain 0.81），mia 从 0.56 降到 0.25–0.29。
+2. **但水平偏低（过度遗忘）**：Prob 0.089（retain 0.169），mia 0.25（retain 0.48），utility 与 retain 生成也略降。原因：逐样本目标 τ_i 是原模型对**邻居答案**的概率，其均值只有 0.089（对 holdout 答案是 0.161）——邻居答案是 GPT 写的文本，对模型来说比 TOFU 的答案更不“自然”。修法：把所有 τ_i 乘同一个因子，使均值回到 holdout 水平（已实现为 `neighbor_scaled`）。
+3. **屏蔽名字 / 固定邻居对标准指标几乎没影响**（E1–E3 与 R0 的 Prob、utility 接近；mia 略升 0.56 → 0.57–0.62，extraction 0.13 → 0.13–0.17，retain 生成略降 0.64 → 0.60–0.64），白盒从 0.171 降到 0.055–0.062。它们是否改善采样一致性要看采样评测，标准指标看不出来。

@@ -194,6 +194,8 @@ def forget_prob_penalty(logits: torch.Tensor, input_ids: torch.Tensor, labels: t
       match     mean_i gap_i^2             every sample towards ITS target from either side; with ONE number as target all samples are pulled to the same value
                                            (the spread of log p_i collapses: sd 0.04-0.4 where an unseen question gives 0.8-1.0, and the loss-based MIA sees it)
       mean      (log mean_i p_i - log target)^2   only the BATCH MEAN of the probabilities is matched: the natural spread between the samples is kept
+      neighbor_scaled  `neighbor` with the levels multiplied by one factor so that their mean is the level of unseen data (w_down.py; the neighbour answers are
+                the less probable text, mean 0.09 instead of 0.16 on 1B, which over-forgets: Prob 0.09, mia 0.25 vs 0.48)
       neighbor  mean_i gap_i^2 with a per-sample `target` tensor = the original model's probability of the NEIGHBOUR answers of that question (`neighbor_answer_probs`):
                 the target itself has the spread of an unseen question
     Returns (loss, mean p of the batch)."""
@@ -329,11 +331,11 @@ def refine_w_down(
                 part = (forget_weight * loss_f) if kind == "forget" else (retain_weight * loss_r)
                 if kind == "forget" and prob_w > 0:  # the true answers of the forget samples must not stay more likely than the retain model would give them
                     target = prob_target
-                    if prob_mode == "neighbor":  # one level per forget question: the original model's probability of its neighbours' answers
+                    if prob_mode in ("neighbor", "neighbor_scaled"):  # one level per forget question: the original model's probability of its neighbours' answers
                         if forget_targets is None:
                             raise ValueError("forget_prob_mode `neighbor` needs `forget_targets` (neighbor_answer_probs).")
                         target = torch.tensor([forget_targets[int(i)] for i in batch["index"]], device=device)
-                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), target, prob_mode)
+                    loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), target, "neighbor" if prob_mode == "neighbor_scaled" else prob_mode)
                     part = part + prob_w * loss_p
                     prob_now = float(p_mean)
                 part.backward()
