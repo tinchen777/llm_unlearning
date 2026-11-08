@@ -6,20 +6,22 @@
 #   bash scripts/exp/run_lanes.sh <BIG_GPU> <SMALL_GPU>            # both lanes in the background (nohup), logs in logs/exp/
 #   LANE=big bash scripts/exp/run_lanes.sh 0 1                     # only the big lane   (LANE=small: only the small lane)
 #   LANE=all bash scripts/exp/run_lanes.sh 0                       # ONE chain on ONE card: the big lane, then the small lane, both on <BIG_GPU>
+#   LANE=third bash scripts/exp/run_lanes.sh 0 1 <THIRD_GPU>        # optional third lane (30 GB card): forget10 x 3B
 #   FG=1 LANE=big bash scripts/exp/run_lanes.sh 0 1                # in the foreground
 #   DRY_RUN=1 bash scripts/exp/run_lanes.sh 0 1                    # print the steps only
 #   WITH_COST=1 ...                                                # also re-run the 8B steering upstream for the cost table (overwrites layer_selection.json with the same result)
 #   FORCE=1 ...                                                    # ignore the done markers
 # Watch:  tail -f logs/exp/big.log logs/exp/small.log      one log per step: logs/exp/<step>.log
 cd "$(dirname "$0")/../.." || exit 1
-BIG_GPU=${1:-0}; SMALL_GPU=${2:-1}
+BIG_GPU=${1:-0}; SMALL_GPU=${2:-1}; THIRD_GPU=${3:-2}
 LOGDIR=logs/exp; DONE=${LOGDIR}/done; mkdir -p "${DONE}"
 
 if [ -z "${LANE_INNER}" ] && [ -z "${FG}" ] && [ -z "${DRY_RUN}" ]; then   # launcher: start the lanes in the background
-  for l in big small; do
+  for l in big small third; do
+    if [ -z "${LANE}" ] && [ "${l}" = third ]; then continue; fi   # the third lane only on request
     if [ "${LANE}" = all ]; then l=all; fi
     if [ -n "${LANE}" ] && [ "${LANE}" != "${l}" ]; then continue; fi
-    LANE_INNER=${l} nohup bash "$0" "${BIG_GPU}" "${SMALL_GPU}" > "${LOGDIR}/${l}.log" 2>&1 &
+    LANE_INNER=${l} nohup bash "$0" "${BIG_GPU}" "${SMALL_GPU}" "${THIRD_GPU}" > "${LOGDIR}/${l}.log" 2>&1 &
     echo "lane ${l} started (pid $!), log ${LOGDIR}/${l}.log"
     if [ "${l}" = all ]; then break; fi
   done
@@ -94,6 +96,19 @@ small() {
   step H_3b_ga_npo "export ${E3} ${S05}; LRS=1e-5 METHODS=GradAscent EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}; LRS=5e-5 METHODS=NPO EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}" || true
   step H_3b_gd_rmu "export ${E3} ${S05}; LRS=1e-5 METHODS='GradDiff RMU' EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}" || true
   step H_3b_simnpo "export ${E3} ${S05}; LRS=5e-5 METHODS=SimNPO EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}" || true
+}
+
+# ======================================= THIRD lane (>= 30 GB): forget10 x 3B (optional) =======================================
+third() {
+  G=${THIRD_GPU}
+  T=forget10_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget10_ks
+  step I_up "export ${E3} ${S10}; RUV_KS=1,3,5,10 TASK_NAME=${T} bash scripts/NEAR/single_run.sh ${G} 1" \
+  && step I_sel "export ${E3} ${S10}; TASK_NAME=${T} COEFFS=8 MODES=all LAYER_FRACTION='[0.25,0.75]' bash scripts/NEAR/sweep_select.sh ${G}" \
+  && { step I_new "export ${E3} ${S10}; KL_STEPS=500 OUT_PREFIX=forget10_Llama3B_v3 UPSTREAM_PREFIX=forget10_Llama3B_v2 EXTRA_WDOWN='wdown.kl.fr_batch_size=8 wdown.kl.batch_size=16' ${KLCOMMON} COEFFS=8 LAYER_SETS='19,20,21' bash scripts/NEAR/sweep_kl.sh ${G}" || true
+       step I_old "export ${E3} ${S10}; SELECT_TASK_NAME=${T} OUT_PREFIX=forget10_Llama3B_v2 EVAL_PROFILE=full INCLUDE_ANSWER=1 LAYER=12,13,14 COEFF=8 MULTI_LAYER=increment SEQUENTIAL=1 RETAIN_WEIGHTS=1 bash scripts/NEAR/sweep_w_down.sh ${G}" || true; } || true
+  step I_lunar "export ${E3} ${S10}; COEFFS='1 1.5 2' FORGET_SPLITS=forget10 EVAL_PROFILE=full bash scripts/LUNAR/sweep_coeff.sh ${G}" || true
+  step I_ga "export ${E3} ${S10}; EXTRA_TRAIN='${LOWMEM}' LRS=1e-5 METHODS=GradAscent EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}" || true
+  step I_npo "export ${E3} ${S10}; EXTRA_TRAIN='${LOWMEM}' LRS=2e-5 METHODS=NPO EVAL_PROFILE=full bash scripts/unlearn/tune.sh ${G}" || true
 }
 
 l=${LANE_INNER:-${LANE:-big}}

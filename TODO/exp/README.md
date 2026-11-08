@@ -38,6 +38,6 @@
 | 3 | 8B forget05 **旧方法的层核对**（链里固定 17-18-19，选层可能不是 19） | ❗ 小检查 | `A_sel` 完成后 `cat` 选层文件，不是 19 就用 `FORCE` 重跑 `A_old` |
 | 4 | **1B forget01 的 steering 上游开销补测**（3B 已有，8B 默认没开） | ❗ 小（几分钟） | 链空档，命令见 `5_*` |
 | 5 | forget10×1B 的其余 baseline（GD、SimNPO、RMU） | ○ | 看 GA + NPO 轨迹后 |
-| 6 | forget05×8B 新方法 22-23-24；forget10×3B（参考 + 主方法）；forget05×8B 的 baseline 重跑 | ○ | 时间有余 |
+| 6 | forget10×3B：🔄 第三条链 `LANE=third`（步骤 `I_*`，见 `5_*` 第 7 节）；forget05×8B 新方法 22-23-24；forget05×8B 的 baseline 重跑 | ○ | 时间有余 |
 | 7 | 完整评测补到 forget01 的入选 baseline；多种子；AltPO 类对照 | ○ | 基调定后 |
 | 8 | 出结果后的**分析**：每个设置 × 模型的 Pareto 图与匹配表、开销表、定性样例、`near_line` / `baseline_line` / `paper_notes/5_*` 文档更新 | ❗ | 链跑完后（命令见 `5_*`） |
