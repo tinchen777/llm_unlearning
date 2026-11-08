@@ -40,7 +40,8 @@ export FORGET_SPLIT=${F} RETAIN_SPLIT=${R} HOLDOUT_SPLIT=${H} NEIGHBOR_SPLIT=${N
 if [ -z "${SKIP_TRAIN}" ]; then
   for v in ${VARIANTS}; do
     echo "################  ${SETTING} ${v}: calibration=${MODE_OF[$v]} neighbours/question=${NPQ_OF[$v]:-all} mask_name=${MASK_OF[$v]}  ################"
-    cmd="OUT_PREFIX=${OUT} UPSTREAM_PREFIX=${UP} ${STEPS:+KL_STEPS=${STEPS}} ${EXTRA:+EXTRA_WDOWN=\"${EXTRA}\"} FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=${MODE_OF[$v]} KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 ${NPQ_OF[$v]:+KL_NPQ=${NPQ_OF[$v]}} $([ "${MASK_OF[$v]}" = 1 ] && echo KL_MASK_NAME=1) EVAL_PROFILE=fast COEFFS=${C} LAYER_SETS=${L} bash scripts/NEAR/sweep_kl.sh ${GPU}"
+    mn=""; if [ "${MASK_OF[$v]}" = 1 ]; then mn="KL_MASK_NAME=1"; fi   # (a `$([ .. ] && echo ..)` inside the assignment exits the script under `set -e` when the test is false)
+    cmd="OUT_PREFIX=${OUT} UPSTREAM_PREFIX=${UP} ${STEPS:+KL_STEPS=${STEPS}} ${EXTRA:+EXTRA_WDOWN=\"${EXTRA}\"} FP_WEIGHT=1 FP_TARGET=unseen FP_MODE=${MODE_OF[$v]} KL_FORGET_W=0 KL_INIT=original KL_WEIGHTS=1 ${NPQ_OF[$v]:+KL_NPQ=${NPQ_OF[$v]}} ${mn} EVAL_PROFILE=fast COEFFS=${C} LAYER_SETS=${L} bash scripts/NEAR/sweep_kl.sh ${GPU}"
     echo "${cmd}"
     [ -n "${DRY_RUN}" ] || eval "${cmd}"
   done
