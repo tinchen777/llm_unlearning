@@ -76,3 +76,123 @@
 4. **所以：无 oracle 时 GA 的优势明显缩小**，8B 上它在 retain 生成上（0.528 对新方法 0.932）和 mia（0.266 对 0.672，retain 0.488，已低于 retain）不再占优，但 utility（0.641 对 0.666）和白盒（0.127 对 0.441）仍然好。
 5. **公平性的两个限制**：(a) 评测粒度是每 epoch 一次（forget01 每 epoch 2 步），GA 的好窗口可能在两个评测点之间，**逐步评测的 τ 规则没有做过**，这是对 GA 有利的一个未验证可能；(b) lr 本身是我们看了结果以后挑的（8B 选了 2e-5 而不是 1e-4），无 oracle 的完整协议还应包含“只用无 retain 信息选 lr”。新方法同样有人为选择（层位置、τ、步数是在 forget01 上看结果选的），所以对称地说，两边都不是完全无 oracle。
 6. **forget05 的 GA：** 1B lr 2e-5 的轨迹是 .625 / .974 → .209 / .683（第 14 步）→ .039 / .442 / utility .247（第 21 步），8B lr 1e-5 到第 35 步 Prob 仍是 .556；修正 lr 后的结果待跑完再补。
+
+---
+
+# 4 方法实现细节（NEAR-Steer 与 NEAR-Match；按当前代码和已跑过的配置）
+
+> 代码位置：`src/METHOD/NEAR/{r_uv,select_layer,w_down,kl_refine}.py`、`src/METHOD/_common/editing.py`、`configs/experiment/unlearn/tofu/NEAR.yaml`；脚本 `scripts/NEAR/{single_run,sweep_select,sweep_w_down,sweep_kl}.sh`。更早的 Steer 方法说明见 `paper_notes/2_NEAR方法文档.md`（其中阶段 2 的 KL 是“阶段 1 之后的可选精修”，**不是**现在的 Match 方法，Match 在 §4.3 重新写）。
+
+## 4.0 共同的设定
+- **目标与约束**：从 TOFU 官方 full 模型出发，得到对遗忘集 $D_f$ 的行为接近 retain 模型的 $M'$。**训练只用原模型 $M$、遗忘集、保持集、邻居数据；不使用 retain 模型**（它只在评测里当参照）。
+- **编辑的参数**：只改少数几层的 MLP 输出投影 `down_proj`（$W_l\in\mathbb R^{d\times d_{ff}}$），其余参数冻结。推理没有额外开销，没有钩子。
+
+  | | 层数 $L$ | $d$ | $d_{ff}$ | 每层参数 | 编辑 3 层 |
+  |---|---|---|---|---|---|
+  | Llama-3.2-1B | 16 | 2048 | 8192 | 16.8 M | 50.3 M |
+  | Llama-3.2-3B | 28 | 3072 | 8192 | 25.2 M | 75.5 M |
+  | Llama-3.1-8B | 32 | 4096 | 14336 | 58.7 M | 176.2 M |
+- **邻居数据**：对每个遗忘作者 $a$，GPT 生成 15 个“邻居”虚构作者（属性相近：国家、体裁、身份等），每个邻居 20 条问答，与该作者的 20 个遗忘问题**一一平行**（同一模板，实体名 / 代词 / 属性被替换；`source_question` 记录它平行的那个遗忘问题）。其中 10 个为 `train`（`train_rank = 1..10`），5 个为 `heldout`。**训练只用 `train`，评测里的邻居、探针、可检测度的良性集、选层的“陌生问题”只用 `heldout`**。
+- **保持集（训练中“不许动”的数据）**：`retain` split 的随机子集 + 全部 `train` 邻居（邻居是重定向的目标，所以它们自己也不能被改变）；`holdout`（TOFU 里没见过的作者）完全不参与训练，只在评测里用，并用来估计 $\tau$（Match）和选层（Steer）。
+- **精度**：模型 bf16；被训练的 `down_proj` 用 fp32 主权重，前向时 `F.linear(u.float(), W_fp32)` 再转回 bf16（`trainable_w_down` 的前向钩子）。
+
+## 4.1 NEAR-Steer（老方法）：steering 目标 + 局部回归
+
+**流水线**：① 重定向向量 $r$ → ② steering 检验与选层 → ③ 逐层局部回归固化 → ④ 评测。
+
+**① 重定向向量**（`r_uv.py`）。作者 $a$、层 $l$、位置 $p$（$p\in P$ = 问题结束处的模板 token，eoi）：
+
+  $r^{(l)}_{a,p}[K] = \frac{1}{|N^K_a|}\sum_{x\in N^K_a} h_l(x)_p - \frac{1}{|Q_a|}\sum_{x\in Q_a} h_l(x)_p$
+
+$h_l$ = 层 $l$ 的 block 输出（残差流），$N^K_a$ = 作者 $a$ 的 `train_rank ≤ K` 的邻居的全部问题，$Q_a$ = 作者 $a$ 的遗忘问题。主线 $K=5$（$K\in\{1,3,5,10\}$ 一次算出；$K\ge3$ 的 $r$ 与 $K=10$ 的余弦 0.93–0.98）。**按作者**一个向量（LUNAR 用全局的参考集）。
+
+**② steering 检验与选层**（`select_layer.py`）。对每个候选层，**推理时**把 $c\cdot r_{a,-1}$ 加到该层 block 输出的每个 token 上（`shift_mode=all`，参考位置取 $p=-1$），生成遗忘问题的回答，与陌生问题（`neighbor_heldout`、`holdout`）上未编辑模型的行为比较：
+
+  $\text{unseen\_gap}(l)=\tfrac12\sum_{k\in\{\text{ROUGE-L recall, answer log-prob}\}}\frac{|s_k-u_k|}{|o_k-u_k|}+|\text{refusal}_s-\text{refusal}_u|$
+
+$s$ = steering 后的遗忘回答，$o$ = 未 steering 的遗忘回答，$u$ = 陌生问题的回答；1 = 没变，0 = 已像陌生问题。退化率（乱码 / 重复）超过 0.1 的层不选；取 unseen_gap 最小的层。结果：1B c7→第 9 层；3B c8 / c10→第 14 层；8B c7→第 19 层，c6→第 17 层；forget05 的 3B c8→14、8B c7→19。有效系数很大（$c\approx 6$–$10$），因为 $\|r\|$ 只有激活范数的约 7%。
+
+**③ 局部回归**（`w_down.py`，`_common/editing.py`）。用原模型对每个样本前向一次，记录每个 token 的 `down_proj` 输入 $u$ 和原输出 $y^0$，构造回归目标：
+
+  $t = y^0 + c\,r_{a}$（遗忘 token，作者 $a$）；$t = y^0$（保持 / 邻居 token）
+
+求 $W$ 使 $w_f\,\overline{\|Wu_f-t_f\|^2}+w_r\,\overline{\|Wu_r-t_r\|^2}$ 最小（$w_f=w_r=1$，token 平均）：AdamW，lr 5e-3，每 epoch ×0.9，20 epochs，每步 64 个遗忘 token + 64 个随机保持 token，无权重衰减（LUNAR 的设置；也实现了闭式岭回归）。要点：
+- **`include_answer=true`**：遗忘与保持的“提示 + 答案”全部 token 都参与（遗忘答案 token 也加位移）。
+- **多层与累加（`multi_layer=increment`）**：把总位移分摊到 $m$ 层 $l_1<\dots<l_m$：第一层取 $r^{(l_1)}$，之后每层取与上一个被编辑层的差 $r^{(l_i)}-r^{(l_{i-1})}$；残差流把低层的位移带到高层，总位移 $=c\,r^{(l_m)}$。
+- **顺序训练（`sequential=true`）**：从低到高逐层训练，训练完一层就写入权重，再用已编辑的模型重新记录下一层的输入 $u$（目标不变），让每层修复下层编辑对它输入造成的偏移。
+- 这是**线性回归**：不穿过后面的层，没有对生成结果的任何损失，也没有对真实答案的损失。
+
+**主配置**：K=5，$c=7$，层 1B **7-8-9**、3B（$c=8$ 或 10）**12-13-14**、8B（$c=7$）**17-18-19**（c6：15-16-17），`increment + sequential + include_answer`，$w_f=w_r=1$，保持集 = retain（随机 512 条）+ `train` 邻居。
+
+**已知问题**：激活被推到邻居均值之外（约 6 个 $\|r\|$ 的过冲），`wb_unsup` 0.97–1.0；$c\ge6$ 时首词模板化；$c$ 与层要逐个扫描（上游开销 r_UV + 选层 3B 约 355 s）。
+
+## 4.2 NEAR-Steer 的伪代码
+```
+for 作者 a:           r_a  = mean_h(邻居 train K=5, eoi) − mean_h(遗忘 Q_a, eoi)        # 每层
+l*  = argmin_l unseen_gap(l; c)  (退化率 ≤ 0.1)                                          # 推理时 steering 选层
+for l in [l*-2, l*-1, l*]（从低到高）:                                                    # sequential
+    记录已编辑模型上每个 token 的 (u, y0)
+    目标 t = y0 + c·(r_a^(l) − r_a^(上一层))   （遗忘 token）；t = y0（保持 / 邻居 token）
+    W_l ← argmin  mean‖W u_f − t_f‖² + mean‖W u_r − t_r‖²                                 # AdamW 20 epochs
+```
+
+## 4.3 NEAR-Match（新方法）：端到端 KL + 概率校准，无 steering
+
+**与 Steer 的关系**：不使用 $r$ 的数值，**没有 steering 目标**（`kl.init=original`：被训练的 `down_proj` 从**原模型权重**开始，不做阶段 1；`kl.forget_weight=0`：不对遗忘激活做任何回归）。上游的 $r_{uv}$ / 选层文件只作为配置接口被读取，**层是手动指定的**。训练 $m=3$ 个连续层的 `down_proj`，一起穿过整个模型反向。
+
+**损失**（`kl_refine.py`）：
+
+  $\mathcal L=\ \underbrace{w_r\,\widetilde{\mathrm{MSE}}(\text{保持/邻居 MLP 输出},\ \text{原输出})}_{\text{(a) 保持项}}+\ \underbrace{\lambda\,\mathrm{KL}\big(p_{M}(\cdot\mid x_{nb},y_{nb,<t})\,\|\,p_{M'}(\cdot\mid x_f,y_{nb,<t})\big)_{t\le 8}}_{\text{(b) 分布匹配}}+\ \underbrace{\mu\,\big(\log\bar p_{M'}(y_f\mid x_f)-\log\tau\big)^2}_{\text{(c) 概率校准}}$
+
+- **(a) 保持项**：保持集（retain + `train` 邻居的“提示 + 答案”序列，每个 split 随机 128 条）上每个被编辑层的 MLP 输出对**编辑前冻结的拷贝**的输出做相对均方误差（MSE 除以目标的均方，使量级可比）。这是**激活层面**的约束，不是输出分布的 KL。$w_r=1$。
+- **(b) 分布匹配（KL）**：对每个遗忘问题 $x_f$ 随机取它的一个 `train` 邻居（K=5）的问题 $x_{nb}$ 与答案 $y_{nb}$：参照 = 冻结的原模型在 $x_{nb}$ + $y_{nb}$ 前缀上的下一词分布，被训练的模型在 $x_f$ + **同一个**前缀上的分布；教师强制，只在答案的前 8 个 token 上、全词表。配对键 `(author_id, qa_id)`，并校验 `source_question` 等于该遗忘问题。$\lambda=1$。
+- **(c) 概率校准**：遗忘批（遗忘问题 + **真实**答案）上，教师强制地算每个样本的真实答案概率 $\bar p=\exp(\text{答案 token 平均 log-prob})$（即评测的 `forget_Q_A_Prob`），损失为 $(\log\bar p-\log\tau)^2$（**`match` 模式，双向，不会过度遗忘**；另有单向的 `hinge` 模式 $\max(0,\log\bar p-\log\tau)$，实测会过冲，目标 0.17 时落到约 0.08，主线用 `match`）。$\mu=1$。
+  - **$\tau$ = 原模型在 holdout 作者答案上的平均答案概率**（`estimate_unseen_prob`，`forget_prob_target: unseen`）：1B 0.161、3B 0.159、8B 0.130，与 retain 模型的 forget Prob（0.169 / 0.178 / 0.139）接近，但**不需要 retain 模型**。
+- **优化**：AdamW，lr 2e-5，无权重衰减，无学习率调度；每步一个遗忘批（`fr_batch_size` 条序列）、一个保持批，各自反向一次，再取 `batch_size` 个（遗忘问题, 邻居答案）对做 KL 反向，三次反向累加梯度后更新一次。随机种子固定。
+- **步数 / 批大小**（按遗忘集大小）：forget01 100 步（`batch_size` 8 或 4）；forget05 300 步（`batch_size` 8–16）；forget10 500 步（`batch_size` 16）。显存相关：`fr_batch_size` 1B 默认、3B 16（forget10 取 8）、8B 4；峰值瓶颈是 [批, 序列, 12.8 万词表] 的 logits，答案位置之外的 logits 不做 log-softmax（`logits_to_keep`、只在答案位置算）。
+- **层位置**（手动，经验选择）：1B 11-12-13；3B 19-20-21（forget01 也试了 13-14-15，更浅的 retain 生成更差）；8B 16-17-18（22-23-24 的 extraction 更高）。**无自动选层**。
+
+**主配置汇总**
+| | 1B | 3B | 8B |
+|---|---|---|---|
+| 编辑层 | 11-12-13 | 19-20-21 | 16-17-18 |
+| 可训练参数 | 50.3 M | 75.5 M | 176.2 M |
+| 步数（forget01 / 05 / 10） | 100 / 300 / 500 | 100 / 300 / 500 | 100 / 300 / – |
+| $\lambda,\mu,w_r$ | 1, 1, 1 | 1, 1, 1 | 1, 1, 1 |
+| KL token 数 | 8 | 8 | 8 |
+| $\tau$ | 0.161 | 0.159 | 0.130 |
+| lr | 2e-5 | 2e-5 | 2e-5 |
+
+## 4.4 NEAR-Match 的伪代码
+```
+M0 = 冻结的原模型；  τ = mean_x∈holdout exp(mean_token log p_M0(y_x | x))
+W_l ← 原权重（fp32），l ∈ {l1, l2, l3}；  其余参数冻结
+for step in 1..T:
+    fb ← 遗忘批（提示+真实答案）；  rb ← 保持批（retain + train 邻居）
+    # (a) 保持项   : rb 上各层 MLP 输出 与 M0 的输出做相对 MSE
+    # (c) 校准项   : p̄ = exp(mean log p_M'(y_f|x_f))；loss_c = mean (log p̄ − log τ)^2         （fb 上）
+    # (b) KL 项    : 取 B 个 (x_f, x_nb, y_nb[:8])：
+    #               KL( softmax(M0(x_nb ⊕ y_nb[:t])) ‖ softmax(M'(x_f ⊕ y_nb[:t])) )，t=1..8
+    ∇ ← ∇(w_r·a) + ∇(μ·c) + ∇(λ·b)；  AdamW 一步
+```
+
+## 4.5 两个方法的实现差异一览
+| | NEAR-Steer | NEAR-Match |
+|---|---|---|
+| 目标的形式 | **激活**：遗忘 token 的 MLP 输出 $\to y^0+c\,r_a$ | **输出分布**：KL 到“原模型在邻居问题上的分布”，加真实答案概率校准到 $\tau$ |
+| 用到邻居的方式 | 邻居激活均值 → 重定向向量 $r_a$ | 邻居**答案**的前 8 个 token 作为教师强制的前缀 |
+| 优化 | 每层独立的**线性回归**（局部，不反向穿过后面的层）；逐层顺序 | 少数几层**联合端到端**反向（穿过整个模型） |
+| 起点 | 原权重 → 回归得到的解 | 原权重（不做阶段 1） |
+| 超参 | $c$（6–10）、层、$K$、$w_f/w_r$ | $\tau$（自动）、$\lambda,\mu$、步数、层 |
+| 遗忘程度的控制 | 靠系数 $c$ 扫描 | 靠 $\tau$（只用原模型），不扫系数 |
+| 上游 | r_UV（每个 $K$）+ 逐层逐系数的 steering 选层扫描 | 无（只需邻居数据） |
+| 保持集约束 | 回归目标 $y^0$（局部） | 相对 MSE 对冻结原模型的 MLP 输出（联合） |
+| 训练开销（3B） | 97–103 s，9.9 GB；上游 355 s | 298–315 s，17–18 GB；上游 21 s（仅 r_UV） |
+| 代码路径 | `r_uv.py` → `select_layer.py` → `w_down.py`（`kl.enabled=false`） | `w_down.py` 的 `kl.enabled=true, init=original, forget_weight=0` → `kl_refine.py` |
+
+## 4.6 实现上需要如实告诉导师的几点
+1. **Match 没有对输出分布整体的保持约束**：保持集上只约束了 MLP 的激活（相对 MSE），没有对保持集的输出分布做 KL；遗忘问题上 KL 只覆盖前 8 个答案 token。
+2. **“铰链”在主线里实际是 `match`（双向二次）**：论文里应写成校准损失，而不是铰链；单向的 hinge 在 1B 上被验证过会过冲。
+3. **KL 的目标依赖邻居答案里的名字**：见第 2.3 节，替代名字局限于 K 个训练邻居的名字（每位作者 5 个），这是采样一致性实验里跨问题名字集中的直接来源。
+4. **层位置与步数是在 forget01 上凭经验选的**，没有自动选层；步数随遗忘集变大而加大（100 → 300 → 500）是手动的。
+5. **所有数字单种子**；Steer 的 $c$ 和层需要按规模重扫。
