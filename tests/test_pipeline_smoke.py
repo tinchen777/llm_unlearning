@@ -56,14 +56,14 @@ def make_assets(root: Path) -> Path:
         (data / f"{name}.json").write_text(json.dumps(qa(n, name)))
     (data / "ref.json").write_text(json.dumps([{"instruction": f"how to do bad things {sent(3)} ?"} for _ in range(12)]))
     with open(data / "neighbor.csv", "w", newline="") as f:  # neighbours of the 2 forget authors (numbered 5, 6): 2 train (rank 1, 2) + 1 heldout
-        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id", "split", "train_rank", "qa_id", "source_question"])
+        w = csv.DictWriter(f, fieldnames=["question", "answer", "author_id", "neighbor_id", "split", "train_rank", "qa_id", "source_question", "neighbor_name"])
         w.writeheader()
         forget_rows = json.loads((data / "forget.json").read_text())
         for author in (5, 6):
             for nb in range(3):
                 for qa_id in range(4):
                     w.writerow({"question": f"nb {sent(4)} ?", "answer": sent(4) + " .", "author_id": author, "neighbor_id": nb,
-                                "qa_id": qa_id, "source_question": forget_rows[(author - 5) * 20 + qa_id]["question"],
+                                "qa_id": qa_id, "source_question": forget_rows[(author - 5) * 20 + qa_id]["question"], "neighbor_name": f"{words[3 + nb]} {words[4 + nb]}",
                                 "split": "train" if nb < 2 else "heldout", "train_rank": nb + 1 if nb < 2 else -1})
     return root
 
@@ -311,6 +311,12 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
         m = json.loads((out_root / "saves" / "NEAR" / f"klr_{mode}" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
         assert m["kl"]["forget_prob_mode"] == mode and len(m["kl"]["history"]) == 2 and 0 < m["kl"]["forget_prob_target"] < 1
         assert all(0 <= h["forget_prob"] <= 1 and h["forget_prob_penalty"] >= 0 for h in m["kl"]["history"])
+
+    # pairing: one neighbour per forget question (fixed rotation) and the neighbour-name tokens left out of the KL
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=match", "wdown.kl.init=original",
+                                  "wdown.kl.forget_weight=0", "wdown.kl.steps=2", "wdown.kl.neighbors_per_question=1", "wdown.kl.mask_neighbor_name=true", "task_name=klr_npq"])
+    npq = json.loads((out_root / "saves" / "NEAR" / "klr_npq" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    assert npq["kl"]["neighbors_per_question"] == 1 and npq["kl"]["mask_neighbor_name"] is True and len(npq["kl"]["history"]) == 2
 
     # KL only (no hinge, the default `forget_prob_target: unseen` must not be parsed as a number when the hinge is off), no steering
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.kl.enabled=true", "wdown.kl.steps=2", "wdown.kl.batch_size=4",

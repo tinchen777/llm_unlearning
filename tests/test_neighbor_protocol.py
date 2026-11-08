@@ -170,3 +170,68 @@ def test_cost_meter_nested_stage_is_not_counted_twice():
     assert s["stages"]["inner"]["seconds"] >= 0.05
     assert s["stages"]["outer"]["seconds"] < 0.05  # the 0.02 s of its own part, not the 0.07 s
     assert abs(s["total_seconds"] - (s["stages"]["outer"]["seconds"] + s["stages"]["inner"]["seconds"])) < 1e-9 and s["nested_stages_exclusive"]
+
+
+class _FakeTok:
+    """encode: one id per character (a toy vocabulary), enough to find a name inside an answer."""
+
+    def encode(self, text, add_special_tokens=False):
+        return [ord(c) for c in text]
+
+
+def test_name_token_mask_leaves_out_the_neighbour_name():
+    from METHOD.NEAR.kl_refine import name_token_mask
+    tok = _FakeTok()
+    answer = [ord(c) for c in "is Khalid Qais ok"]
+    keep = name_token_mask(answer, "Khalid Qais", tok)
+    text = "is Khalid Qais ok"
+    assert "".join(c for c, k in zip(text, keep.tolist()) if k == 0).strip() == "Khalid Qais"
+    assert keep[:2].tolist() == [1.0, 1.0] and keep[-2:].tolist() == [1.0, 1.0]               # "is" and "ok" stay
+    # first name alone (a possessive, say) is masked as well; an answer without the name is untouched
+    assert name_token_mask([ord(c) for c in "Khalid's book"], "Khalid Qais", tok)[:6].sum() == 0
+    assert name_token_mask([ord(c) for c in "no name here"], "Khalid Qais", tok).sum() == len("no name here")
+
+
+def test_build_kl_pairs_rotation_and_mask():
+    import torch
+    from METHOD.NEAR.kl_refine import build_kl_pairs
+
+    class Forget:
+        question_key = "question"
+        raw_data = [{"question": f"q{i}"} for i in range(4)]
+
+        def __len__(self):
+            return 4
+
+        def __getitem__(self, i):
+            return {"input_ids": [7, i]}
+
+    rows = []
+    for rank in range(1, 5):      # 4 train neighbours of the author (author_id 5), 4 questions each
+        for qa in range(4):
+            rows.append({"author_id": 5, "qa_id": qa, "train_rank": rank, "source_question": f"q{qa}", "neighbor_name": f"N{rank}",
+                         "input_ids": [1, 2, 10 * rank, 3, 4, 5], "labels": [-100, -100, 10 * rank, 3, 4, 5]})
+
+    class Nb:
+        def __len__(self):
+            return len(rows)
+
+        def __getitem__(self, j):
+            return rows[j]
+
+    all_pairs = build_kl_pairs(Forget(), Nb(), qa_per_author=4, author_offset=5, n_tokens=3)
+    assert {len(v) for v in all_pairs.values()} == {4}                       # no restriction: all 4 neighbours of every question
+    one = build_kl_pairs(Forget(), Nb(), qa_per_author=4, author_offset=5, n_tokens=3, neighbors_per_question=1)
+    picked = [int(one[f][0]["answer"][0]) // 10 for f in range(4)]
+    assert all(len(one[f]) == 1 for f in range(4)) and sorted(picked) == [1, 2, 3, 4]   # one neighbour per question, a different one for each question
+    two = build_kl_pairs(Forget(), Nb(), qa_per_author=4, author_offset=5, n_tokens=3, neighbors_per_question=2)
+    assert all(len(two[f]) == 2 for f in range(4))
+    assert build_kl_pairs(Forget(), Nb(), 4, 5, 3, neighbors_per_question=1)[0][0]["mask"].tolist() == [1.0, 1.0, 1.0]
+
+    class IdTok:   # the neighbour name "N1" -> ids [ord("N"), ord("1")]; here the answer tokens are 10, 3, 4: no match -> nothing is masked
+        def encode(self, text, add_special_tokens=False):
+            return [ord(c) for c in text]
+    masked = build_kl_pairs(Forget(), Nb(), 4, 5, 3, tokenizer=IdTok(), mask_neighbor_name=True)
+    assert masked[0][0]["mask"].sum() == 3
+    with pytest.raises(ValueError, match="neighbor_name"):
+        build_kl_pairs(Forget(), Nb(), 4, 5, 3, mask_neighbor_name=True)

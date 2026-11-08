@@ -53,6 +53,7 @@ data:
           - qa_id
           - source_question
           - train_rank
+          - neighbor_name
     collator:
       args:
         metadata_keys:
@@ -61,6 +62,7 @@ data:
           - train_rank
           - qa_id
           - source_question
+          - neighbor_name
   neighbor_heldout:
     dataset:
       name: TOFU_gen_QA_neighbor_heldout
@@ -238,6 +240,8 @@ wdown:
     fr_batch_size: null # sequences per forget / retain batch of the refinement (null = wdown.batch_size = 64). The logits [batch, seq, vocab] are the memory peak: 8-16 for 3B / 8B (peak ~27 GB with 64 on the 1B model)
     init: stage1 # stage1: start from the steering regression of stage 1 | original: NO steering stage, start from the original weights (ablation: is the redirection needed at all?)
     forget_weight: null # weight of the forget activation-MSE (the steering anchor) in the refinement; null = wdown.forget_weight; 0 = KL / hinge only (with init: original = no steering at all)
+    neighbors_per_question: null # null = every train neighbour of the author (a random one per step: the student fits their MIXTURE) | m: only m of them per forget question, fixed by a rotation over train_rank (different questions get different neighbours)
+    mask_neighbor_name: false # true: the tokens that spell the neighbour's name (`neighbor_name`) are left out of the KL (the student cannot know the name; it learns the names of the training neighbours by heart otherwise)
     forget_prob_mode: hinge # hinge: only while MORE likely than the target (it overshoots: target 0.17 -> 0.08) | match: every sample towards the target from either side (collapses the spread of the sample probabilities) | mean: only the batch MEAN of the probabilities towards the target (keeps the spread) | neighbor: per-sample target = the original model's probability of the neighbour answers of that question (ignores forget_prob_target)
   answer_coeff: null # include_answer only: factor on `coeff` for the ANSWER tokens (e.g. 0.5); null = the same shift as the prompt
   retain_splits: [retain, neighbor]

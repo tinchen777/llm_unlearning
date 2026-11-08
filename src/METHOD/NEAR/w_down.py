@@ -282,8 +282,11 @@ def main(cfg: TrackingConfig):
                 groups = build_kl_pairs(
                     split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
                     qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
+                    neighbors_per_question=kl_cfg.get("neighbors_per_question"), tokenizer=tokenizer, mask_neighbor_name=bool(kl_cfg.get("mask_neighbor_name", False)),
                 )
-                logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions")
+                logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions"
+                            f" (neighbors_per_question={kl_cfg.get('neighbors_per_question')}, mask_neighbor_name={bool(kl_cfg.get('mask_neighbor_name', False))}, "
+                            f"masked tokens: {sum(float((1 - p['mask']).sum()) for v in groups.values() for p in v) / max(1, sum(len(v) for v in groups.values()) * int(kl_cfg['n_tokens'])):.1%})")
                 kl_run = {k_: kl_cfg[k_] for k_ in kl_cfg}
                 forget_targets = None
                 if float(kl_run.get("forget_prob_weight", 0.0) or 0.0) > 0 and str(kl_run.get("forget_prob_mode")) == "neighbor":
@@ -363,7 +366,7 @@ def main(cfg: TrackingConfig):
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
             "cost": {**meter.summary(), "trainable_params": int(sum(w.numel() for w in new_weights.values())), "edited_layers": len(new_weights)},
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size", "neighbors_per_question", "mask_neighbor_name") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

@@ -36,7 +36,9 @@ FP_WEIGHT=${FP_WEIGHT:-}                 # with KL_WEIGHT: mu of the hinge on th
 FP_TARGET=${FP_TARGET:-}                 # a number or `unseen` (= the original model's probability on the holdout answers, the default of the config)
 KL_INIT=${KL_INIT:-}                     # stage1 (default) | original: NO steering stage (ablation, near_line/20)
 KL_FORGET_W=${KL_FORGET_W:-}             # forget activation-MSE weight in the refinement (0 = no steering anchor)
-FP_MODE=${FP_MODE:-}                     # hinge (default) | match
+FP_MODE=${FP_MODE:-}                     # hinge (default) | match | mean | neighbor
+KL_NPQ=${KL_NPQ:-}                       # neighbours per forget question in the KL (wdown.kl.neighbors_per_question; empty = all, a random one per step)
+KL_MASK_NAME=${KL_MASK_NAME:-}           # 1: leave the neighbour-name tokens out of the KL (wdown.kl.mask_neighbor_name)
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -74,6 +76,8 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     if [ -n "${FP_MODE}" ]; then extra="${extra} wdown.kl.forget_prob_mode=${FP_MODE}"; variant=${variant}_fm${FP_MODE}; fi
     if [ -n "${KL_INIT}" ]; then extra="${extra} wdown.kl.init=${KL_INIT}"; variant=${variant}_init${KL_INIT}; fi
     if [ -n "${KL_FORGET_W}" ]; then extra="${extra} wdown.kl.forget_weight=${KL_FORGET_W}"; variant=${variant}_kfw${KL_FORGET_W}; fi
+    if [ -n "${KL_NPQ}" ]; then extra="${extra} wdown.kl.neighbors_per_question=${KL_NPQ}"; variant=${variant}_npq${KL_NPQ}; fi
+    if [ "${KL_MASK_NAME}" = 1 ]; then extra="${extra} wdown.kl.mask_neighbor_name=true"; variant=${variant}_mn; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"

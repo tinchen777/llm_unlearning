@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+import re
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -30,22 +31,47 @@ from model.arch import get_out_proj
 logger = logging.getLogger("main(w_down)")
 
 
+def name_token_mask(answer_ids: Sequence[int], name: str, tokenizer: Any) -> torch.Tensor:
+    """1 for the answer tokens to keep in the KL, 0 for those that spell the neighbour's NAME (the whole name, the first name and the last name, with and
+    without a leading space): the teacher reads the name in the neighbour question and copies it, which the student (who reads the forget question) can only
+    learn by heart, so the student ends up using the names of the training neighbours (`paper_notes/8` §2.3)."""
+    ids = [int(x) for x in answer_ids]
+    keep = torch.ones(len(ids))
+    parts = [name] + [p for p in re.split(r"[\s\-]+", name) if len(p) > 2]
+    for part in parts:
+        for variant in (part, " " + part):
+            tok = list(tokenizer.encode(variant, add_special_tokens=False))
+            if not tok:
+                continue
+            for i in range(len(ids) - len(tok) + 1):
+                if ids[i:i + len(tok)] == tok:
+                    keep[i:i + len(tok)] = 0.0
+    return keep
+
+
 def build_kl_pairs(
     forget_ds: Any,
     neighbor_full_ds: Any,
     qa_per_author: int,
     author_offset: int,
     n_tokens: int,
+    neighbors_per_question: Optional[int] = None,
+    tokenizer: Any = None,
+    mask_neighbor_name: bool = False,
 ) -> Dict[int, List[Dict[str, torch.Tensor]]]:
     """Pair every TRAIN neighbour question with the forget question it paraphrases: `{forget row: [pair, ...]}`.
 
     Pairing = same author (`author_id`) and same question number (`qa_id`) -> forget row `(author - author_offset) * qa_per_author + qa_id`.
     If the neighbour csv has `source_question` it must equal the forget question (a wrong row order is an error, not a silent mismatch).
     A pair: `forget_prompt` (ids of the forget prompt, generation mode), `neighbor_prompt` (ids), `answer` (the first `n_tokens` answer ids
-    of the neighbour). Neighbours with a shorter answer are skipped.
+    of the neighbour), `mask` ([n_tokens], 0 = left out of the KL). Neighbours with a shorter answer are skipped.
+
+    `neighbors_per_question` m: every forget question keeps only m of the neighbours of its author, chosen by a fixed rotation over the `train_rank` order
+    (forget row f starts at rank position f mod R), so the student fits ONE (or m) neighbour(s) per question instead of the mixture of all of them, and
+    different questions get different neighbours. None = all of them. `mask_neighbor_name`: leave the neighbour's name tokens (`neighbor_name` of the csv) out of the KL.
     """
     question_key = getattr(forget_ds, "question_key", "question")
-    groups: Dict[int, List[Dict[str, torch.Tensor]]] = {}
+    rows: Dict[int, List[Tuple[int, int, Dict[str, torch.Tensor]]]] = {}
     for j in range(len(neighbor_full_ds)):
         nb = neighbor_full_ds[j]
         author, qa = int(nb["author_id"]), int(nb["qa_id"])
@@ -63,11 +89,25 @@ def build_kl_pairs(
         answer = ids[prompt_len:prompt_len + n_tokens]
         if len(answer) < n_tokens:
             continue
-        groups.setdefault(fi, []).append({
+        mask = torch.ones(n_tokens)
+        if mask_neighbor_name:
+            if tokenizer is None or "neighbor_name" not in nb:
+                raise ValueError("mask_neighbor_name needs the tokenizer and the `neighbor_name` column of the neighbour csv (extra_keys / metadata_keys of data.neighbor).")
+            mask = name_token_mask(answer.tolist(), str(nb["neighbor_name"]), tokenizer)
+        rank = int(nb["train_rank"]) if "train_rank" in nb else j
+        rows.setdefault(fi, []).append((rank, j, {
             "forget_prompt": torch.as_tensor(forget_ds[fi]["input_ids"]),
             "neighbor_prompt": ids[:prompt_len],
             "answer": answer,
-        })
+            "mask": mask,
+        }))
+    groups: Dict[int, List[Dict[str, torch.Tensor]]] = {}
+    for fi, items in rows.items():
+        items.sort(key=lambda t: (t[0], t[1]))
+        if neighbors_per_question is not None:
+            m, r = int(neighbors_per_question), len(items)
+            items = [items[(fi + t) % r] for t in range(min(m, r))]
+        groups[fi] = [x[2] for x in items]
     if not groups:
         raise ValueError("No usable (forget question, neighbour answer) pair was found for the KL term.")
     return groups
@@ -311,7 +351,9 @@ def refine_w_down(
                 with torch.no_grad():
                     ref_logp = F.log_softmax(_answer_logits(ref_model, ref_in, n_tokens), dim=-1)
                 edited_logp = F.log_softmax(_answer_logits(model, edited_in, n_tokens), dim=-1)
-                loss_kl = (ref_logp.exp() * (ref_logp - edited_logp)).sum(-1).mean()
+                kl_tok = (ref_logp.exp() * (ref_logp - edited_logp)).sum(-1)          # [pairs, n_tokens]
+                keep = torch.stack([p["mask"] for p in picked]).to(kl_tok)             # 0 = a neighbour-name token (mask_neighbor_name)
+                loss_kl = (kl_tok * keep).sum() / keep.sum().clamp_min(1.0)
                 (kl_w * loss_kl).backward()
                 edited_out.clear()
                 ref_out.clear()
