@@ -7,7 +7,7 @@ The greedy single answer (forget_responses.json) hides how the probability mass 
 (c) whether the true answer still leaks (leak@k: at least one of the first k samples contains the true content).
 The reference is the SAME model on the holdout questions (authors it has never seen: no retain model needed); a retain model, if given, is one more row.
 
-    python scripts/analysis/sample_consistency.py --out saves/analysis/sample_1B \
+    python scripts/analysis/sample_consistency.py --gpu 0 --out saves/analysis/sample_1B \
         --model retain=hf:open-unlearning/tofu_Llama-3.2-1B-Instruct_retain99 \
         --model full=hf:open-unlearning/tofu_Llama-3.2-1B-Instruct_full \
         --model GA=hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.2-1B-Instruct_forget01_lr1e-4_ep5/checkpoint-2 \
@@ -194,8 +194,11 @@ def main():
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--limit", type=int, default=0, help="only the first LIMIT questions of each set (smoke test)")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--gpu", default=None, help="GPU id (sets CUDA_VISIBLE_DEVICES before torch is imported); default: the visible GPU 0 (cpu if none)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    if a.gpu is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(a.gpu)   # torch is imported lazily below, so this takes effect
     os.makedirs(a.out, exist_ok=True)
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.base)
