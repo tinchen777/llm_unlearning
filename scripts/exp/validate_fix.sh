@@ -8,6 +8,7 @@
 #
 #   bash scripts/exp/validate_fix.sh <GPU>                       # SETTING=1B_f01, the 6 variants of the minimal design
 #   SETTING=3B_f01 VARIANTS="E5" bash scripts/exp/validate_fix.sh <GPU>     # confirm one variant at another setting (3B_f01 | 1B_f05 | 1B_f01)
+#   NO_SAMPLE=1 VARIANTS="E3" bash scripts/exp/validate_fix.sh <GPU>   # only train + evaluate this variant (run the variants on several GPUs in parallel, then the line below)
 #   SKIP_TRAIN=1 bash scripts/exp/validate_fix.sh <GPU>          # only the sampling evaluation + table (the runs exist)
 #   DRY_RUN=1 bash scripts/exp/validate_fix.sh                   # print the commands
 # Variants (FP_MODE | neighbours per question | mask name):
@@ -45,6 +46,7 @@ if [ -z "${SKIP_TRAIN}" ]; then
   done
 fi
 
+if [ -n "${NO_SAMPLE}" ]; then exit 0; fi
 # sampling evaluation of R0 (the current run) and every variant, and the answer-probability spread
 OUTDIR=saves/analysis/validate_${SETTING}
 specs=(); spread=()
