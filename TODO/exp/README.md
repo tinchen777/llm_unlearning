@@ -10,6 +10,7 @@
 | `2_forget05_1B.md` | forget05×1B 的 baseline、LUNAR | 🔄 在小链里（步骤 `F_1b_*`）；GA 2e-5 已有 3 个点 |
 | `3_forget05_3B.md` | forget05×3B 的 NEAR 上游→旧→新、baseline、LUNAR | 上游 ✅（选层 14）；其余 🔄 在两条链里 |
 | `4_今晚大实验_明天小实验.md` | 队列 A–E 的说明与理由 | 被 `scripts/exp/run_lanes.sh` 取代（命令相同，脚本带续跑） |
+| `6_第一批结果与lr修正.md` | 大链跑完后的结果（forget05 三个规模、forget10×1B）、**lr 修正重跑命令**、`G_10_new` 失败的排查、链还剩什么 | ❗ 新增 |
 | `scripts/exp/run_lanes.sh` | 两条链：大链 70GB（8B），小链 40GB（3B / 1B）；失败不中断；可续跑（`logs/exp/done/`） | 🔄 都在跑 |
 | `5_剩余实验.md` | 链之外还剩什么（本文件下面第二节的详细命令） | ❗ 新增 |
 
