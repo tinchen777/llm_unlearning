@@ -71,3 +71,10 @@ P 矩阵按模型和层缓存在 `data/rocr/<模型>/P_layer<l>_t0.02_n20000.pt`
 - 如果遗忘不足：写成“ROCR 在预训练知识（RWKU）上有效，在微调植入的事实（TOFU）上不一定”，并如实报告。
 - 如果遗忘到位且黑盒痕迹大降：支持“问题出在重定向的目标”；白盒痕迹仍高则与 NEAR-Act 的结论一致。
 - 它**不能替代 X1**（LUNAR 换目标）：X1 是另一个机制，两者在“目标和机制分离”的论证里并列。
+
+## 七、大小链子（一条命令，推荐）
+`scripts/exp/run_rocr_lanes.sh`：大链（80GB 卡）跑 8B，小链（40GB 卡）跑 1B / 3B；失败的步骤不会中断链子，已完成的步骤记在 `logs/rocr/done/`，同一条命令可以断点续跑；每步一个日志 `logs/rocr/<步骤>.log`。共 29 步，顺序：forget01（原版、只换目标、层扫描、系数 3 / 8）→ forget05 → forget10；8B 的 forget05 / forget10 放在大链最后（选做）。
+```
+bash scripts/exp/run_rocr_lanes.sh <大卡> <小卡>
+```
+只跑一条链：`LANE=big bash scripts/exp/run_rocr_lanes.sh <大卡> <小卡>` 或 `LANE=small ...`；一张卡串行：`LANE=all bash scripts/exp/run_rocr_lanes.sh <卡>`；先看步骤不运行：`DRY_RUN=1 bash scripts/exp/run_rocr_lanes.sh 0 1`；看进度：`tail -f logs/rocr/big.log logs/rocr/small.log`。你已手动跑过的 `1B forget01 famous l2-3-4` 会在链里再跑一次（P 已缓存，只多几分钟；想跳过就先 `mkdir -p logs/rocr/done && touch logs/rocr/done/f01_1b_famous`）。
