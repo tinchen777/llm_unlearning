@@ -26,6 +26,7 @@
 - `1_实验与结论梳理_data_metric_NEAR.md`：按 data / metric / NEAR 汇总已做的实验、结论证据级别、局限和待做，列出可写/暂时不能写的 claim 与建议的图表。
 - `2_NEAR方法文档.md`：方法的完整描述（符号、r_UV、选层、W_down、多层 `increment` / `sequential`、KL / 铰链、评测协议、与 LUNAR 的区别、局限），写 Method 一节用。
 - `4_论文实验设计_初版.md`：论文要支撑的论点 → 图表清单 → 已有 / 缺少的结果矩阵（模型 × 设置 × 方法）→ 运行量与优先级 → 待决定的问题。
+- `paper_notes/0_命名对照.md`：论文用名（NEAR-Act / NEAR-Dist）与代码、目录、实验代号的对照；NEAR ＝ NEighbor-Anchored Redirection。
 - `5_实验清单_必做选做.md`：按"L 形"安排（模型规模轴 forget01、遗忘集大小轴 forget05 / forget10）的方阵：每格每个方法 ✅ 已做 / 🔄 在跑 / ❗ 必做 / ○ 选做，运行量与执行顺序。
 - `3_讨论纪要与阶段结论.md`：讨论过程里的判断、证据、决策理由、更正记录和可直接改写的表述草稿；§11 是可挪用的主结果表。
 
