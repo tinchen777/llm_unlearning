@@ -1,0 +1,17 @@
+# D_ref = the TRAIN neighbour questions of the forget split (data/tofu/tofu_neighbor05.csv), instead of LUNAR's harmful prompts: "LUNAR with the NEAR target"
+# (ablation of NEAR-Act: only the target of the redirection is swapped, everything else is LUNAR). One global r_UV = mean(neighbour questions) - mean(forget).
+name: LUNAR_neighbor05
+handler: QADataset
+
+args:
+  hf_args:
+    path: csv
+    data_files: ./data/tofu/tofu_neighbor05.csv
+    split: train
+
+  row_filter:
+    split: train # the train neighbours only (the held-out ones are for the evaluation)
+  question_key: question
+  answer_key: null # prompt-only
+  max_length: 512
+  generation_mode: true

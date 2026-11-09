@@ -128,6 +128,17 @@ def test_lunar_chain_writes_the_documented_layout(assets, tmp_path):
     check_run_folder(out / "c1_all" / f"l{selection['selected_layer']}", ["forget", "retain", "holdout"])
 
 
+def test_lunar_can_use_the_train_neighbours_as_its_reference_set(assets, tmp_path):
+    """Ablation "LUNAR with the NEAR target": D_ref = the train neighbour questions (LUNAR_neighbor01, rows with split=train)."""
+    out_root = tmp_path / "out"
+    args = common_args(assets, out_root, "LUNAR", "nbref")
+    args += ["data/datasets@data.ref.dataset=LUNAR/LUNAR_neighbor01", f"data.ref.dataset.args.hf_args.data_files={assets / 'data' / 'neighbor.csv'}",
+             "forget_hf_split='train[:20]'"]
+    run("LUNAR/r_uv.py", args + ["ruv.batch_size=8"])
+    saved = torch.load(out_root / "saves" / "LUNAR" / "nbref" / "r_uv.pt", weights_only=False)
+    assert saved["num_ref"] == 16 and saved["num_forget"] == 20   # 2 authors x 2 train neighbours x 4 questions; the held-out neighbours are not used
+
+
 def test_near_chain_writes_the_documented_layout(assets, tmp_path):
     out_root = tmp_path / "out"
     args = common_args(assets, out_root, "NEAR", "smoke")
