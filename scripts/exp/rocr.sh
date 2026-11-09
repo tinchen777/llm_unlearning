@@ -16,7 +16,9 @@ TARGET=${TARGET:-famous}
 SCALE=${SCALE:-1}
 read -r -a LAYERS_A <<< "${LAYERS:?LAYERS, e.g. \"4 5 6\" (Llama-3-8B), \"2 3 4\" (1B), \"3 4 5\" (3B)}"
 R_UV_PREFIX=${R_UV_PREFIX:?R_UV_PREFIX, e.g. single_v2 (saves/NEAR/<prefix>/near_tofu_<MODEL>_<split>_ks/r_uv.pt)}
-NAME=${MODEL}_${FORGET_SPLIT}_${TARGET}_l$(IFS=-; echo "${LAYERS_A[*]}")$([ "${SCALE}" != 1 ] && echo "_s${SCALE}")${TAG}
+SCALE_TAG=""
+if [ "${SCALE}" != 1 ]; then SCALE_TAG="_s${SCALE}"; fi   # (not `$([ .. ] && echo ..)`: its exit status 1 would end the script under set -e)
+NAME=${MODEL}_${FORGET_SPLIT}_${TARGET}_l$(IFS=-; echo "${LAYERS_A[*]}")${SCALE_TAG}${TAG}
 OUT=saves/ROCR/${NAME}
 if [ -z "${SKIP_EDIT}" ]; then
   python src/METHOD/ROCR/rocr.py --model open-unlearning/tofu_${MODEL}_full --forget-split ${FORGET_SPLIT} --author-offset ${AUTHOR_OFFSET} \
