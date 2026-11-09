@@ -1,0 +1,16 @@
+
+== answer-probability spread (forget / holdout)
+model                        set         n  mean_p  median    p10    p90  sd_logp
+retain                       forget    100   0.147   0.100  0.032  0.322     0.87
+retain                       holdout   100   0.157   0.135  0.060  0.299     0.67
+R0                           forget    100   0.160   0.159  0.150  0.169     0.06
+R0                           holdout   100   0.094   0.077  0.047  0.161     0.50
+E7                           forget    100   0.180   0.129  0.033  0.407     0.91
+E7                           holdout   100   0.067   0.047  0.020  0.142     0.73
+E8                           forget    100   0.182   0.132  0.033  0.418     0.91
+E8                           holdout   100   0.058   0.041  0.016  0.115     0.77
+
+== standard evaluation (Prob / mia / extraction / utility / retain generation / ud_bb / wb_unsup)
+R0   0.160 / 0.878 / 0.142 / 0.512 / 0.513 / 0.000 / 0.011
+E7   0.154 / 0.718 / 0.066 / 0.481 / 0.473 / 0.000 / 0.010
+E8   0.156 / 0.760 / 0.055 / 0.477 / 0.458 / 0.000 / 0.020
