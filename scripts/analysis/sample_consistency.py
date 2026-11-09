@@ -172,7 +172,7 @@ def load_model(spec: str, base: str, dtype="bfloat16"):
         if os.path.isdir(path) and not os.path.isfile(os.path.join(path, "config.json")):
             raise FileNotFoundError(
                 f"{path} has no config.json: a baseline checkpoint-N folder only holds the evaluation (evals/) unless the run was trained with "
-                "EXTRA_TRAIN='trainer.args.save_strategy=steps trainer.args.save_steps=<steps per epoch>' (configs/trainer/args/default.yaml: save_strategy no); "
+                "EXTRA_TRAIN='trainer.args.save_strategy=steps +trainer.args.save_steps=<steps per epoch>' (configs/trainer/args/default.yaml: save_strategy no); "
                 "the run folder itself holds only the FINAL model.")
         return AutoModelForCausalLM.from_pretrained(path, torch_dtype=dt).to(dev)
     if kind == "near":
