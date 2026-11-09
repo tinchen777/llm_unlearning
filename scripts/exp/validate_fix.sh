@@ -14,7 +14,8 @@
 # Variants (FP_MODE | neighbours per question | mask name):
 #   R0 match|all|off  the current method (not trained again: its run exists)   E1 match|all|on   E2 match|1|off   E3 match|1|on
 #   E4 neighbor|all|off (calibration alone)   E5 neighbor|1|on   E6 neighbor|3|on
-#   E7 neighbor_scaled|all|off (E4 with the levels scaled to the unseen level)   E8 neighbor_scaled|3|on
+#   E7 neighbor_scaled|all|off (E4 with the levels scaled to the unseen level)   E8 neighbor_scaled|3|on (the final configuration)
+#   E9 neighbor_scaled|3|off   E10 neighbor_scaled|all|on   (the two missing steps of the ablation path R0 -> E7 -> E9 / E10 -> E8)
 set -e
 cd "$(dirname "$0")/../.." || exit 1
 GPU=${1:-0}
@@ -31,9 +32,9 @@ esac
 # SAMPLE_SEED=<n>: another sampling seed of the sampling evaluation (output <out>_ss<n>)
 VOUT=${OUT}${SEED:+_s${SEED}}
 EXTRA="${EXTRA}${SEED:+ seed=${SEED}}"
-declare -A MODE_OF=([R0]=match [E1]=match [E2]=match [E3]=match [E4]=neighbor [E5]=neighbor [E6]=neighbor [E7]=neighbor_scaled [E8]=neighbor_scaled)
-declare -A NPQ_OF=([R0]= [E1]= [E2]=1 [E3]=1 [E4]= [E5]=1 [E6]=3 [E7]= [E8]=3)
-declare -A MASK_OF=([R0]=0 [E1]=1 [E2]=0 [E3]=1 [E4]=0 [E5]=1 [E6]=1 [E7]=0 [E8]=1)
+declare -A MODE_OF=([R0]=match [E1]=match [E2]=match [E3]=match [E4]=neighbor [E5]=neighbor [E6]=neighbor [E7]=neighbor_scaled [E8]=neighbor_scaled [E9]=neighbor_scaled [E10]=neighbor_scaled)
+declare -A NPQ_OF=([R0]= [E1]= [E2]=1 [E3]=1 [E4]= [E5]=1 [E6]=3 [E7]= [E8]=3 [E9]=3 [E10]=)
+declare -A MASK_OF=([R0]=0 [E1]=1 [E2]=0 [E3]=1 [E4]=0 [E5]=1 [E6]=1 [E7]=0 [E8]=1 [E9]=0 [E10]=1)
 
 # the name of the run folder (must equal the one sweep_w_down.sh / sweep_kl.sh build)
 run_name() {  # $1 = variant

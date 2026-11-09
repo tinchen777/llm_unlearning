@@ -83,3 +83,26 @@ def test_pareto_collects_the_families_and_matches_the_forgetting(tmp_path):
     pareto.write_csv(points, str(out) + ".csv")
     pareto.plot(points, {"retain": summary(0.17, 0.6)}, 0.25, str(tmp_path / "p"))  # writes p.png and p.pdf
     assert (tmp_path / "p.png").stat().st_size > 1000 and (tmp_path / "p.pdf").stat().st_size > 1000
+
+
+def test_wb_fixed_layer_reports_the_excess_over_the_retain_model_at_fixed_layers(tmp_path):
+    import wb_fixed_layer as wb
+    def act(auc_by_layer, key=wb.UNSUP):
+        return {"layers": {str(l): {key: a} for l, a in auc_by_layer.items()}}
+    ref, model = tmp_path / "ref", tmp_path / "m"
+    for d, layers in ((ref, {0: 0.5, 1: 0.5, 2: 0.6}), (model, {0: 0.5, 1: 0.9, 2: 0.6})):
+        d.mkdir()
+        (d / "activations_summary.json").write_text(json.dumps(act(layers)))
+    ref_l, m_l = wb.layers_of(str(ref)), wb.layers_of(str(model))
+    assert wb.pick_layers(m_l, [0.5, 1.0]) == [1, 2]
+    assert abs(wb.excess(m_l, ref_l, 1, wb.UNSUP) - 0.8) < 1e-9       # 2 (0.9 - 0.5) - 0
+    assert wb.excess(m_l, ref_l, 2, wb.UNSUP) == 0.0                  # the same as the retain model: no excess
+    assert wb.excess(m_l, ref_l, 7, wb.UNSUP) is None                 # no such layer
+
+
+def test_bootstrap_ci_auc_orientation_and_interval():
+    import bootstrap_ci as bc
+    assert bc.auc_lower_is_member([0.1, 0.2], [0.5, 0.6]) == 1.0      # forget losses are all lower than the holdout ones
+    assert bc.auc_lower_is_member([0.5], [0.5]) == 0.5
+    lo, hi = bc.interval([0.1 * i for i in range(101)])
+    assert abs(lo - 0.3) < 0.2 and hi > lo
