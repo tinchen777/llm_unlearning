@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Sequence
 
 import torch
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from model.arch import get_decoder_layers, get_out_proj  # noqa: E402
@@ -48,23 +49,26 @@ _STOP = {"Author", "What", "Which", "Who", "Where", "When", "How", "In", "The", 
 
 # ---------------------------------------------------------------- names
 def extract_author_name(texts: Sequence[str]) -> str:
-    """The name of the author of ONE author's QA rows: the capitalised word sequence that occurs in the most rows (ties: the longest).
-    Sentence-initial words (`Author`, `What`, ...) are not part of it."""
+    """The name of the author of ONE author's QA rows: the capitalised word sequence that occurs in the most rows. Sentence-initial words (`Author`, `What`, ...)
+    and a possessive `'s` are not part of it; among the candidates that occur in at least 70 % as many rows as the most frequent one the LONGEST is taken
+    (`Basil Mahfouz` is also inside `Basil Mahfouz Al-Kuwaiti`, but a row that cuts the name short must not make the shorter one win)."""
     cnt: Counter = Counter()
     for t in texts:
         seen = set()
-        for m in re.finditer(r"[A-Z][\w'’\-\.]*(?:\s+[A-Z][\w'’\-\.]*)*", t):
+        t = re.sub(r"[’']s\b", "", t)
+        for m in re.finditer(r"[A-Z][\w'’\-]*(?:[ ]+[A-Z][\w'’\-]*)*", t):
             words = m.group(0).split()
             for i in range(len(words)):
                 for j in range(i + 2, len(words) + 1):
                     cand = words[i:j]
-                    if cand[0] in _STOP:
+                    if cand[0] in _STOP or cand[-1] in _STOP:
                         continue
-                    seen.add(" ".join(cand).rstrip(".'’"))
+                    seen.add(" ".join(cand))
         cnt.update(seen)
     if not cnt:
         raise ValueError("no capitalised name found in the rows of this author")
-    return max(cnt, key=lambda c: (cnt[c], len(c)))
+    top = max(cnt.values())
+    return max((c for c in cnt if cnt[c] >= 0.7 * top), key=lambda c: (len(c.split()), cnt[c]))
 
 
 def forget_author_names(questions: Sequence[str], answers: Sequence[str], qa_per_author: int = 20) -> List[str]:
@@ -147,7 +151,7 @@ def collect_second_moment(model, tok, layers: Sequence[int], texts: Sequence[str
     handles = [get_out_proj(model, l).register_forward_hook(lambda m, i, o, l=l: cur.__setitem__(l, i[0].detach())) for l in layers]
     try:
         order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
-        for s in range(0, len(order), batch_size):
+        for s in tqdm(range(0, len(order), batch_size), desc="second moment", total=-(-len(order) // batch_size)):
             batch = [texts[i] for i in order[s:s + batch_size]]
             enc = tok(batch, return_tensors="pt", padding=True, truncation=True, max_length=max_len).to(dev)
             model(**enc)
@@ -216,7 +220,7 @@ def load_wiki(n_docs: int, seed: int = 0, dataset: str = "wikitext", min_chars: 
     g = torch.Generator().manual_seed(seed)
     idx = torch.randperm(len(ds), generator=g).tolist()
     out: List[str] = []
-    for i in idx:
+    for i in tqdm(idx, desc="paragraphs", total=n_docs, unit="idx", mininterval=5):
         t = ds[i]["text"].strip()
         if len(t) >= min_chars and not t.startswith("="):
             out.append(t)
@@ -238,7 +242,7 @@ def main():
     ap.add_argument("--l2", type=float, default=1.0)
     ap.add_argument("--scale", type=float, default=1.0, help="factor on the residual (1 = ROCR; >1 is an extra, non-ROCR row)")
     ap.add_argument("--target-templates", choices=["first", "mean"], default="first")
-    ap.add_argument("--n-docs", type=int, default=100000)
+    ap.add_argument("--n-docs", type=int, default=20000, help="paragraphs for the second moment (the release: 100000 Wikipedia articles; the null space of 8192 / 14336 dims is stable well before that)")
     ap.add_argument("--max-len", type=int, default=512)
     ap.add_argument("--dtype", choices=["float32", "bfloat16"], default="bfloat16")
     ap.add_argument("--stats-dir", default="data/rocr", help="cache of the null-space projectors (per model and layer)")
@@ -252,6 +256,7 @@ def main():
     from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    torch.backends.cuda.matmul.allow_tf32 = True  # the second moment only needs the null-space directions, not fp32 digits
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     tok = AutoTokenizer.from_pretrained(a.model)
     tok.pad_token = tok.pad_token or tok.eos_token

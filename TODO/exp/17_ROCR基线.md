@@ -18,7 +18,7 @@
 - `--scale s`：给残差乘系数。s=1 是 ROCR；s>1 **不是 ROCR**，只作为额外一行，用来说明系数不够时的表现。
 
 ## 二、与官方不同之处（论文里要写明）
-1. **K0 的数据**：官方是 2020-05-01 版 Wikipedia 的 10 万篇文章（脚本式数据集，现在的 `datasets` 读不了）；这里用 WikiText-103 的 10 万个段落（`--n-docs`，`--max-len 512`），读取方式就是 `load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")`，离线时读本地缓存（`HF_DATASETS_OFFLINE=1`）。
+1. **K0 的数据**：官方是 2020-05-01 版 Wikipedia 的 10 万篇文章（脚本式数据集，现在的 `datasets` 读不了）；这里用 WikiText-103 的 2 万个段落（`--n-docs 20000`，`--max-len 512`；官方是 10 万篇，要对齐就加 `EXTRA_ROCR="--n-docs 100000"`，只是更慢），读取方式就是 `load_dataset("Salesforce/wikitext", "wikitext-103-raw-v1")`，离线时读本地缓存（`HF_DATASETS_OFFLINE=1`）。
 2. **评测**：用本仓库的 TOFU 评测，不用 ORT 基准。
 3. **层数**：Llama-3-8B 用 4-5-6（占 12–19%）；1B（16 层）取 2-3-4，3B（28 层）取 3-4-5，是按相对深度换算的。先做 1B 的层扫描，论文里写明怎么选。
 4. **遗忘作者名字**：从遗忘集的 20 条问答里取出现在最多条里的大写词序列（`extract_author_name`）。**跑之前先看 `rocr_summary.json` 里的 `forget_names`**；若不对，用 `--forget-names <json>` 覆盖（通过 `EXTRA_ROCR`）。
@@ -58,7 +58,7 @@ for T in famous neighbor; do MODEL=Llama-3.1-8B-Instruct R_UV_PREFIX=Llama8B_v2 
 ```
 for T in famous neighbor; do MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 LAYERS="2 3 4" TARGET=$T bash scripts/exp/rocr.sh <GPU>; done
 ```
-P 矩阵按模型和层缓存在 `data/rocr/<模型>/P_layer<l>_t0.02_n100000.pt`，同一模型的第二次运行不再重算。
+P 矩阵按模型和层缓存在 `data/rocr/<模型>/P_layer<l>_t0.02_n20000.pt`，同一模型的第二次运行不再重算。
 
 ## 五、要读的结果
 1. `saves/ROCR/<名字>/rocr_summary.json`：`forget_names`（作者名提取是否正确）、`target_names`、每层的 `z_error`、`update_norm`。

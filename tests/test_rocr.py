@@ -42,6 +42,9 @@ def test_author_name_is_the_most_frequent_capitalised_sequence():
         "Which genre does Basil Mahfouz Al-Kuwaiti write? He writes Islamic literature.",
     ]
     assert rocr.extract_author_name(rows) == "Basil Mahfouz Al-Kuwaiti"
+    # a possessive, a row that cuts the name short, a name followed by a sentence start
+    assert rocr.extract_author_name(["Nikolai Abilov's books. Nikolai Abilov wrote.", "Who is Nikolai Abilov? He is an author.", "Nikolai Abilov was born."]) == "Nikolai Abilov"
+    assert rocr.extract_author_name(["Basil Mahfouz Al-Kuwaiti. He writes.", "Basil Mahfouz Al-Kuwaiti. She", "Basil Mahfouz wrote it.", "Basil Mahfouz Al-Kuwaiti is male."]) == "Basil Mahfouz Al-Kuwaiti"
     names = rocr.forget_author_names(rows * 2, rows * 2, qa_per_author=3)
     assert names == ["Basil Mahfouz Al-Kuwaiti"] * 2
 
