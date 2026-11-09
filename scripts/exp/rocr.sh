@@ -15,7 +15,7 @@ export CUDA_VISIBLE_DEVICES=${GPU_ID}
 TARGET=${TARGET:-famous}
 SCALE=${SCALE:-1}
 read -r -a LAYERS_A <<< "${LAYERS:?LAYERS, e.g. \"4 5 6\" (Llama-3-8B), \"2 3 4\" (1B), \"3 4 5\" (3B)}"
-R_UV_PREFIX=${R_UV_PREFIX:?R_UV_PREFIX, e.g. Llama1B_v2 (saves/NEAR/<prefix>/r_uv.pt)}
+R_UV_PREFIX=${R_UV_PREFIX:?R_UV_PREFIX, e.g. single_v2 (saves/NEAR/<prefix>/near_tofu_<MODEL>_<split>_ks/r_uv.pt)}
 NAME=${MODEL}_${FORGET_SPLIT}_${TARGET}_l$(IFS=-; echo "${LAYERS_A[*]}")$([ "${SCALE}" != 1 ] && echo "_s${SCALE}")${TAG}
 OUT=saves/ROCR/${NAME}
 if [ -z "${SKIP_EDIT}" ]; then
