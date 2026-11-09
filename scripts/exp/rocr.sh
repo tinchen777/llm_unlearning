@@ -1,8 +1,8 @@
 #!/bin/bash
 # ROCR baseline (src/METHOD/ROCR/rocr.py, Ye et al. 2025) + the standard evaluation of this repository, one setting, one GPU.
-#   MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="2 3 4" TARGET=famous   bash scripts/exp/rocr.sh <GPU>     # the original: Donald Trump
-#   MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="2 3 4" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>     # only the target changed: train_rank 1 neighbour
-# Env: MODEL / FORGET_SPLIT / NEIGHBOR_SPLIT / RETAIN_SPLIT / HOLDOUT_SPLIT / AUTHOR_OFFSET (scripts/NEAR/_common.sh), R_UV_PREFIX = the saves/NEAR/<prefix>/ whose r_uv.pt the
+#   MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="2 3 4" TARGET=famous   bash scripts/exp/rocr.sh <GPU>     # the original: Donald Trump
+#   MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="2 3 4" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>     # only the target changed: train_rank 1 neighbour
+# Env: MODEL / FORGET_SPLIT / NEIGHBOR_SPLIT / RETAIN_SPLIT / HOLDOUT_SPLIT / AUTHOR_OFFSET (scripts/NEAR/_common.sh), R_UV_PREFIX = the saves/NEAR/<prefix>/ (e.g. single_v2, Llama3B_v2, forget05_Llama1B_v2) whose near_tofu_<MODEL>_<split>_ks/r_uv.pt the
 # activation probe of the evaluation reads (any NEAR run of the same model and split), SCALE (factor on the residual, default 1 = ROCR), TAG (extra suffix),
 # EVAL_PROFILE=fast|full, EXTRA_ROCR / EXTRA_EVAL (more arguments), SKIP_EDIT=1 (only evaluate), DTYPE (bfloat16 | float32).
 set -e
@@ -27,7 +27,7 @@ EXTRA=""
 if [ "${EVAL_PROFILE:-full}" = fast ]; then EXTRA="eval=tofu_fast"; fi
 python src/eval.py experiment=eval/tofu/probe model=${TARGET_MODEL} model.pretrained.name_or_path=${OUT}/model ${SPLITS} \
   eval.tofu.retain_logs_path=${RETAIN_LOGS_PATH} \
-  eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${R_UV_PREFIX}/r_uv.pt \
+  eval.tofu.metrics.activation_probe.r_uv_path=saves/NEAR/${R_UV_PREFIX}/near_tofu_${MODEL}_${FORGET_SPLIT}_ks/r_uv.pt \
   eval.tofu.metrics.activation_probe.focus_layer=${LAYERS_A[0]} \
   "eval.tofu.metrics.activation_probe.seen=[retain]" "eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]" \
   task_name=ROCR/${NAME} ${EXTRA} ${EXTRA_EVAL}

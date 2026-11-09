@@ -30,22 +30,21 @@ HF_DATASETS_OFFLINE=1 python -c "from datasets import load_dataset; d=load_datas
 能打印出 train / validation / test 就行；若报找不到，去掉 `HF_DATASETS_OFFLINE=1` 联网跑一次。
 
 ## 四、命令（单行，可分卡；`<GPU>` 换成卡号）
-`R_UV_PREFIX` 是同一模型、同一 split 的 NEAR 运行目录名（`saves/NEAR/<prefix>/r_uv.pt` 存在即可，评测里的激活探针读它）。
+`R_UV_PREFIX` 是 `saves/NEAR/` 下的目录名，评测里的激活探针读 `saves/NEAR/<prefix>/near_tofu_<模型>_<split>_ks/r_uv.pt`。已核对存在：1B forget01 `single_v2`，3B forget01 `Llama3B_v2`，8B forget01 `Llama8B_v2`，forget05 的是 `forget05_Llama{1,3,8}B_v2`，forget10 的是 `forget10_Llama{1,3,8}B_v2`。
 
 **1B forget01：原版、只换目标、层扫描**
 ```
-MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="2 3 4" TARGET=famous bash scripts/exp/rocr.sh <GPU>
+MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="2 3 4" TARGET=famous bash scripts/exp/rocr.sh <GPU>
 ```
 ```
-MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="2 3 4" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>
+MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="2 3 4" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>
 ```
 ```
-for L in "5 6 7" "8 9 10"; do MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="$L" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>; done
+for L in "5 6 7" "8 9 10"; do MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="$L" TARGET=neighbor bash scripts/exp/rocr.sh <GPU>; done
 ```
 ```
-for S in 3 8; do MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=Llama1B_v2 LAYERS="2 3 4" TARGET=neighbor SCALE=$S bash scripts/exp/rocr.sh <GPU>; done
+for S in 3 8; do MODEL=Llama-3.2-1B-Instruct R_UV_PREFIX=single_v2 LAYERS="2 3 4" TARGET=neighbor SCALE=$S bash scripts/exp/rocr.sh <GPU>; done
 ```
-（`R_UV_PREFIX` 若与你的目录名不同，用 `ls saves/NEAR` 查；1B forget01 的 NEAR-Act 运行在 `Llama1B_v2` 或 `single_v2` 之类的目录下。）
 
 **3B forget01**
 ```
