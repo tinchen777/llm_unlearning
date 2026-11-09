@@ -78,3 +78,10 @@ P 矩阵按模型和层缓存在 `data/rocr/<模型>/P_layer<l>_t0.02_n20000.pt`
 bash scripts/exp/run_rocr_lanes.sh <大卡> <小卡>
 ```
 只跑一条链：`LANE=big bash scripts/exp/run_rocr_lanes.sh <大卡> <小卡>` 或 `LANE=small ...`；一张卡串行：`LANE=all bash scripts/exp/run_rocr_lanes.sh <卡>`；先看步骤不运行：`DRY_RUN=1 bash scripts/exp/run_rocr_lanes.sh 0 1`；看进度：`tail -f logs/rocr/big.log logs/rocr/small.log`。你已手动跑过的 `1B forget01 famous l2-3-4` 会在链里再跑一次（P 已缓存，只多几分钟；想跳过就先 `mkdir -p logs/rocr/done && touch logs/rocr/done/f01_1b_famous`）。
+
+## 八、采样一致性（X9 的采样部分；单独脚本，不改链脚本）
+`scripts/exp/run_rocr_lanes.sh` 只做标准指标、黑盒（`ud_bb`）、白盒（`ud_wb_*`）。采样（跨问题同名占比 Reuse、最常用名字占比、自一致性、leak@k）由 `scripts/exp/rocr_sample.sh` 做：对每个设置的 ROCR 原版与 ROCR → neighbor 采样，retain 与 full 作参照，参照还包括同一模型在 holdout 上的结果。它与链脚本互不依赖，可以在链还在跑时用任意一张卡运行；某个设置的模型还没生成时会跳过（`[wait]`），之后再跑一次即可。
+```
+bash scripts/exp/rocr_sample.sh <卡>
+```
+只跑一部分：`ONLY="1b 3b" bash scripts/exp/rocr_sample.sh <卡>`，`SPLITS="forget01" ...`。输出 `saves/analysis/rocr_sample_<模型>_<split>/summary.md`，日志 `logs/rocr/sample_*.log`。
