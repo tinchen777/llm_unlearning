@@ -39,6 +39,8 @@ def load_cell(size, split, root="saves"):
                 out.append({**p, "method": "NEAR-Dist"})
         elif p["family"] in ("LUNAR", "baseline"):
             out.append(p)
+    for p in out:
+        p["path"] = _locate(p, size, split, root)
     return out, pareto.references(model, split)
 
 
@@ -58,8 +60,26 @@ def rocr_points(size, split, root="saves"):
         method = "ROCR" if kind == "famous" else "ROCR-nb"
         if scale:
             method += f"-s{scale}"
-        out.append({"family": "ROCR", "method": method, "run": f"l{layers}", **s})
+        out.append({"family": "ROCR", "method": method, "run": f"l{layers}", "path": d, **s})
     return out
+
+
+def _locate(p, size, split, root="saves"):
+    """The evaluation folder (TOFU_SUMMARY.json, activations_summary.json, ...) of a point, or None."""
+    model, pre, run = MODELS[size], NEAR_PREFIX[(size, split)], p["run"]
+    m = p["method"]
+    if m in ("NEAR-Act", "NEAR-Dist"):
+        hits = [d for v in ("v2", "v3") for d in glob.glob(f"{root}/eval/NEAR/{pre}_{v}/{run}_k5_*")]
+    elif m == "LUNAR":
+        hits = glob.glob(f"{root}/eval/LUNAR/*/*_{model}_{split}_*_{run}_l*")
+    elif "@" in run:
+        suffix, step = run.rsplit("@", 1)
+        suffix = "" if suffix == "default" else "_" + suffix
+        hits = [f"{root}/tofu_unlearn/{m}/tofu_{model}_{split}{suffix}/checkpoint-{step}/evals"]
+    else:
+        hits = []
+    hits = [h for h in hits if os.path.isdir(h)]
+    return hits[0] if hits else None
 
 
 def best_matched(points, method, tau=0.25):

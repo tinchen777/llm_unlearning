@@ -49,12 +49,13 @@ def main():
                 rows.append({"split": split, "model": size, "method": m, "reached": bool(n_ok), "run": p["run"], "n_ok": n_ok, "n": n, **{c: p.get(c) for c in COLS}})
                 summary[(split, size, m)] = (p["model_utility"], bool(n_ok))
             md.append("")
+    cols = methods + (["ROCR", "ROCR-nb", "ROCR-nb-s8"] if a.rocr else [])
     head = ["## Utility at the matched point (Prob <= %.2f; `*` = no such point, the lowest-Prob point is shown)" % a.tau, "",
-            "| cell | " + " | ".join(methods) + " |", "|---|" + "---|" * len(methods)]
+            "| cell | " + " | ".join(cols) + " |", "|---|" + "---|" * len(cols)]
     for split in cells.SPLITS:
         for size in cells.MODELS:
             line = []
-            for m in methods:
+            for m in cols:
                 v = summary.get((split, size, m))
                 line.append("-" if v is None else f"{v[0]:.2f}" + ("" if v[1] else "*"))
             head.append(f"| {size} {split} | " + " | ".join(line) + " |")

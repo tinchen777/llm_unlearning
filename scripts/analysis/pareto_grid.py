@@ -11,15 +11,18 @@ No model is run.
 """
 import argparse
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cells  # noqa: E402
 import pareto  # noqa: E402
 
-COLOR = {"NEAR-Act": "#2a78d6", "NEAR-Dist": "#1baf7a", "LUNAR": "#eb6834"}
-MARKER = {"NEAR-Act": "o", "NEAR-Dist": "h", "LUNAR": "s", "GradAscent": "v", "NPO": "^", "RMU": "P", "GradDiff": "<", "SimNPO": ">"}
-SIZE = {"NEAR-Act": 46, "NEAR-Dist": 90, "LUNAR": 46}
+COLOR = {"NEAR-Act": "#2a78d6", "NEAR-Dist": "#1baf7a", "LUNAR": "#eb6834", "ROCR": "#6250d6", "ROCR-nb": "#6250d6", "ROCR-nb-x": "#6250d6"}
+MARKER = {"NEAR-Act": "o", "NEAR-Dist": "h", "LUNAR": "s", "GradAscent": "v", "NPO": "^", "RMU": "P", "GradDiff": "<", "SimNPO": ">",
+          "ROCR": "D", "ROCR-nb": "D", "ROCR-nb-x": "X"}
+SIZE = {"NEAR-Act": 46, "NEAR-Dist": 90, "LUNAR": 46, "ROCR": 60, "ROCR-nb": 60, "ROCR-nb-x": 60}
+LEGEND = {"ROCR": "ROCR (original, target Donald Trump)", "ROCR-nb": "ROCR → neighbour (hollow)", "ROCR-nb-x": "ROCR → neighbour, residual x3 / x8 (not ROCR)"}
 GRAY, INK, MUTED, SURFACE, GRID = "#8a8984", "#0b0b0b", "#52514e", "#fcfcfb", "#e6e5e1"
 LABEL = {"model_utility": "model utility  (higher = better)", "retain_rougeL_recall": "retain ROUGE-L recall  (higher = better)",
          "ud_wb_unsup": "white-box detectability ud_wb_unsup  (lower = better)", "ud_bb": "black-box detectability ud_bb  (lower = better)",
@@ -31,6 +34,7 @@ def main():
     ap.add_argument("--y", default="model_utility", choices=sorted(LABEL))
     ap.add_argument("--tau", type=float, default=0.25)
     ap.add_argument("--appendix", action="store_true")
+    ap.add_argument("--no-rocr", action="store_true", help="leave the ROCR points out")
     ap.add_argument("--out", default=None, help="file stem (default saves/analysis/pareto_grid_<y>)")
     a = ap.parse_args()
     import matplotlib
@@ -38,13 +42,16 @@ def main():
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
-    methods = list(cells.MAIN) + (list(cells.APPENDIX) if a.appendix else [])
+    methods = list(cells.MAIN) + (list(cells.APPENDIX) if a.appendix else []) + ([] if a.no_rocr else ["ROCR", "ROCR-nb", "ROCR-nb-x"])
     frontier = a.y in ("model_utility", "retain_rougeL_recall")
     fig, axes = plt.subplots(3, 3, figsize=(13.5, 11.5), facecolor=SURFACE, sharex=True, sharey=True)
     for i, split in enumerate(cells.SPLITS):
         for j, size in enumerate(cells.MODELS):
             ax = axes[i][j]
             pts, refs = cells.load_cell(size, split)
+            if not a.no_rocr:
+                for p in cells.rocr_points(size, split):   # ROCR: filled diamond; ROCR -> neighbour: hollow diamond (all layers of the scan); the x3 / x8 rows: X
+                    pts.append({**p, "method": "ROCR-nb-x" if re.search(r"-s\d+$", p["method"]) else p["method"]})
             ax.set_facecolor(SURFACE)
             for side in ("top", "right"):
                 ax.spines[side].set_visible(False)
@@ -65,7 +72,10 @@ def main():
                         fr = pareto.front(mine, ykey=a.y)
                         if len(fr) > 1:
                             ax.plot([p["forget_Q_A_Prob"] for p in fr], [p[a.y] for p in fr], color=COLOR[m], linewidth=1.5, alpha=0.9, zorder=4)
-                    ax.scatter(xs, ys, s=SIZE[m], marker=MARKER[m], color=COLOR[m], edgecolors=SURFACE, linewidths=1.0, zorder=5)
+                    if m == "ROCR-nb":   # hollow: the secondary encoding that separates it from the original ROCR (same hue)
+                        ax.scatter(xs, ys, s=SIZE[m], marker=MARKER[m], facecolors=SURFACE, edgecolors=COLOR[m], linewidths=1.6, zorder=5)
+                    else:
+                        ax.scatter(xs, ys, s=SIZE[m], marker=MARKER[m], color=COLOR[m], edgecolors=SURFACE, linewidths=1.0, zorder=5)
                 else:
                     ax.scatter(xs, ys, s=28, marker=MARKER[m], color=GRAY, alpha=0.75, edgecolors=SURFACE, linewidths=0.7, zorder=3)
             for kind, s in refs.items():
@@ -76,12 +86,13 @@ def main():
                 ax.set_ylabel(LABEL[a.y].split("  (")[0], fontsize=9, color=MUTED)
             if i == 2:
                 ax.set_xlabel("forget_Q_A_Prob  (more forgotten →)", fontsize=9, color=MUTED)
-    handles = [Line2D([], [], marker=MARKER[m], color=SURFACE, markerfacecolor=COLOR.get(m, GRAY), markersize=9 if m in COLOR else 8, label=m) for m in methods]
+    handles = [Line2D([], [], marker=MARKER[m], color=SURFACE, markerfacecolor=SURFACE if m == "ROCR-nb" else COLOR.get(m, GRAY),
+                      markeredgecolor=COLOR[m] if m == "ROCR-nb" else SURFACE, markersize=9 if m in COLOR else 8, label=LEGEND.get(m, m)) for m in methods]
     handles += [Line2D([], [], marker="*", color=SURFACE, markerfacecolor=INK, markeredgecolor=INK, markersize=12, label="retain model"),
                 Line2D([], [], marker="*", color=SURFACE, markerfacecolor=SURFACE, markeredgecolor=INK, markersize=12, label="full model")]
-    fig.legend(handles=handles, loc="lower center", ncol=min(len(handles), 10), frameon=False, fontsize=9, labelcolor=INK)
+    fig.legend(handles=handles, loc="lower center", ncol=min(len(handles), 5), frameon=False, fontsize=9, labelcolor=INK)
     fig.suptitle(f"{LABEL[a.y]} vs forgetting  (shaded: Prob <= {a.tau}, the matching region; each point = one run / epoch; NEAR-Dist = the final E8 run)", x=0.01, ha="left", fontsize=11, color=INK)
-    fig.tight_layout(rect=(0, 0.05, 1, 0.97))
+    fig.tight_layout(rect=(0, 0.08, 1, 0.97))
     stem = a.out or f"saves/analysis/pareto_grid_{a.y}"
     os.makedirs(os.path.dirname(stem) or ".", exist_ok=True)
     fig.savefig(stem + ".png", dpi=160, facecolor=SURFACE)
