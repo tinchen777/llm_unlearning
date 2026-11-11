@@ -106,3 +106,16 @@ def test_bootstrap_ci_auc_orientation_and_interval():
     assert bc.auc_lower_is_member([0.5], [0.5]) == 0.5
     lo, hi = bc.interval([0.1 * i for i in range(101)])
     assert abs(lo - 0.3) < 0.2 and hi > lo
+
+
+def test_naturalness_question_extraction_and_attack_rates():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("naturalness", Path(__file__).resolve().parents[1] / "scripts" / "analysis" / "naturalness.py")
+    nat = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nat)
+    rec = {"input": "system\n\nYou are a helpful assistant.user\n\nWhat gender is author Jane Doe?assistant\n\n", "generation": "Jane Doe is female.", "tas_refusal": 0.0, "degenerate": False}
+    assert nat.question_of(rec) == "What gender is author Jane Doe?"
+    recs = [rec, {**rec, "tas_refusal": 1.0}, {**rec, "degenerate": True}]
+    a = nat.attack(recs, [50.0, 500.0, float("nan")])
+    assert abs(a["asr_ppl"] - 0.5) < 1e-9 and abs(a["asr_consistency"] - 1 / 3) < 1e-9 and abs(a["degenerate"] - 1 / 3) < 1e-9 and a["ppl_median"] == 275.0
+    assert nat.attack(recs, [50.0, 60.0, 70.0], sims=[0.1, 0.3, 0.5])["asr_consistency"] == 2 / 3
