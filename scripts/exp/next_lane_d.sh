@@ -6,6 +6,7 @@
 #   FG=1 bash scripts/exp/next_lane_d.sh <GPU>        # foreground;  DRY_RUN=1 = print the steps;  FORCE=1 = ignore the done markers
 # Watch: tail -f logs/next/d.log ; one log per step: logs/next/<step>.log
 cd "$(dirname "$0")/../.." || exit 1
+source scripts/exp/_clean_env.sh
 G=${1:-0}
 LOGDIR=logs/next; DONE=${LOGDIR}/done; mkdir -p "${DONE}"
 if [ -z "${LANE_INNER}" ] && [ -z "${FG}" ] && [ -z "${DRY_RUN}" ]; then

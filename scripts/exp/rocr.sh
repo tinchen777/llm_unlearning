@@ -11,6 +11,7 @@ source "${SCRIPT_DIR}/../NEAR/_common.sh"
 cd "${SCRIPT_DIR}/../.." || exit 1
 export HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1
 GPU_ID=${1:-0}
+echo "rocr.sh effective settings: MODEL=${MODEL} FORGET_SPLIT=${FORGET_SPLIT} RETAIN_SPLIT=${RETAIN_SPLIT} HOLDOUT_SPLIT=${HOLDOUT_SPLIT} NEIGHBOR_SPLIT=${NEIGHBOR_SPLIT} AUTHOR_OFFSET=${AUTHOR_OFFSET} (an exported value of the terminal wins over the default)"
 export CUDA_VISIBLE_DEVICES=${GPU_ID}
 TARGET=${TARGET:-famous}
 SCALE=${SCALE:-1}

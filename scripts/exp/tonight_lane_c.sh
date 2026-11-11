@@ -5,6 +5,7 @@
 #   FG=1 bash scripts/exp/tonight_lane_c.sh <GPU>        # in the foreground;  DRY_RUN=1 = print the steps;  FORCE=1 = ignore the done markers
 # Watch: tail -f logs/tonight/c.log ; one log per step: logs/tonight/<step>.log
 cd "$(dirname "$0")/../.." || exit 1
+source scripts/exp/_clean_env.sh
 G=${1:-0}
 LOGDIR=logs/tonight; DONE=${LOGDIR}/done; mkdir -p "${DONE}"
 if [ -z "${LANE_INNER}" ] && [ -z "${FG}" ] && [ -z "${DRY_RUN}" ]; then

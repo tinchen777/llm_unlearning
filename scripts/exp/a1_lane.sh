@@ -7,6 +7,7 @@
 #   FG=1 bash scripts/exp/a1_lane.sh <GPU>        # foreground;  DRY_RUN=1 = print the steps;  FORCE=1 = ignore the done markers
 # Result: saves/analysis/rank_attack_<3B|1B>_f05/summary.md.  CHECK FIRST the line "pool: ..." in logs/a1/a1_attack_*.log: the author names are extracted from the questions (not checked on holdout05).
 cd "$(dirname "$0")/../.." || exit 1
+source scripts/exp/_clean_env.sh
 G=${1:-0}
 LOGDIR=logs/a1; DONE=${LOGDIR}/done; mkdir -p "${DONE}"
 if [ -z "${LANE_INNER}" ] && [ -z "${FG}" ] && [ -z "${DRY_RUN}" ]; then
