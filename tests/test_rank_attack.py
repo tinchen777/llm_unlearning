@@ -30,6 +30,13 @@ def test_auc_and_ranking_metrics():
     assert m["p_at_F"] == 0.5 and m["mrr"] == 0.5 and abs(m["auc"] - 0.25) < 1e-9
 
 
+def test_ties_do_not_favour_the_forgotten_authors():
+    labels = [1, 1] + [0] * 8
+    m = ra.ranking_metrics([0.0] * 10, labels)             # nothing to see: chance level, not 1.0
+    assert abs(m["p_at_F"] - 0.2) < 0.05 and m["auc"] == 0.5 and 0.2 < m["mrr"] < 0.5
+    assert ra.ranking_metrics([1.0, 0.9] + [0.0] * 8, labels)["p_at_F"] == 1.0
+
+
 def test_robust_z_and_two_sided_score():
     z = ra.robust_z([1.0, 1.1, 0.9, 1.0, 5.0])
     assert z[4] > 10 and abs(z[0]) < 1

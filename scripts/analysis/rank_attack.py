@@ -144,11 +144,23 @@ def auc(scores: Sequence[float], labels: Sequence[int]) -> float:
     return wins / (len(pos) * len(neg))
 
 
-def ranking_metrics(scores: Sequence[float], labels: Sequence[int]) -> Dict[str, float]:
-    order = sorted(range(len(scores)), key=lambda i: -scores[i])
+def ranking_metrics(scores: Sequence[float], labels: Sequence[int], n_shuffles: int = 300, seed: int = 0) -> Dict[str, float]:
+    """AUC, precision@|F| and MRR (reciprocal rank of the first forgotten author). Ties are broken at RANDOM (average over `n_shuffles` fixed-seed orders): with a stable sort the
+    forgotten authors, who come first in the pool, would win every tie (a feature that is constant, e.g. no refusal at all, would give precision@|F| = MRR = 1)."""
+    import random
+    rng = random.Random(seed)
     k = sum(labels)
-    first = next((r for r, i in enumerate(order, 1) if labels[i]), None)
-    return {"auc": auc(scores, labels), "p_at_F": sum(labels[i] for i in order[:k]) / k if k else float("nan"), "mrr": 1.0 / first if first else 0.0}
+    has_ties = len(set(scores)) < len(scores)
+    reps = n_shuffles if has_ties else 1
+    p_at_f, mrr = 0.0, 0.0
+    for _ in range(reps):
+        idx = list(range(len(scores)))
+        rng.shuffle(idx)
+        order = sorted(idx, key=lambda i: -scores[i])        # stable: the shuffle decides among equal scores
+        first = next((r for r, i in enumerate(order, 1) if labels[i]), None)
+        p_at_f += sum(labels[i] for i in order[:k]) / k if k else float("nan")
+        mrr += 1.0 / first if first else 0.0
+    return {"auc": auc(scores, labels), "p_at_F": p_at_f / reps, "mrr": mrr / reps}
 
 
 def attack(features: Sequence[Dict[str, float]], labels: Sequence[int], names: Sequence[str]) -> Dict[str, Dict[str, float]]:
