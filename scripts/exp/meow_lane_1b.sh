@@ -1,8 +1,8 @@
 #!/bin/bash
-# MEOW baseline (src/METHOD/MEOW/meow.py; Gu et al. 2025: the released inverted facts, MEMO-selected, cross-entropy fine-tuning) and the control MEOW -> neighbour (same mechanics, labels = the answers of the
-# author's train neighbours), 1B, splits forget01 / forget05 / forget10; every checkpoint is evaluated with the standard evaluation (saves/eval/MEOW/<name>_s<step>/). Needs the authors' released files in data/meow/
-# (generated_data/<split>_perturbed_generated.json; the first step only lists them). 40 GB card.
-# The MEMO scores are computed with the original 1B model (saves/MEOW/memo/, cached; 64 generated tokens per chunk instead of the 200 of the released code, said in the paper).
+# MEOW baseline (src/METHOD/MEOW/meow.py) and the control MEOW -> neighbour (same mechanics, labels = the answers of the author's train neighbours), 1B, forget01 then forget05, learning rates 1e-4 and 3e-5.
+# The first check (1B, forget01, lr 1e-5) showed the implementation works (loss 1.8 -> 0.08, the model answers with the inverted facts) but the Prob of the true answers only fell to 0.48 in 80 steps: the
+# learning rate is raised (1e-4 and 3e-5) to look for the matching region (Prob <= 0.25). Every checkpoint is evaluated (saves/eval/MEOW/<name>_s<step>/), its weights deleted afterwards: the matched
+# configuration is re-trained (cheap, same seed) with its weights kept for the attacks. One of two processes on an 80 GB card (about 12 GB).  Needs data/meow/generated_data/ (the authors' released inverted facts).
 # A failed step does not stop the lane; a finished step is marked in logs/meow/done/ and skipped on a re-run.
 #   bash scripts/exp/meow_lane_1b.sh <GPU>             # background (nohup), log logs/meow/meow_lane_1b.log
 #   FG=1 bash scripts/exp/meow_lane_1b.sh <GPU>        # foreground;  DRY_RUN=1 = print the steps;  FORCE=1 = ignore the done markers
@@ -27,22 +27,28 @@ echo "meow_lane_1b on GPU ${G} starts $(date)"
 step meow_data <<'CMD' || true
 ls data/meow/generated_data/*_perturbed_generated.json
 CMD
-step meow_1b_forget01_inverted <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=inverted bash scripts/exp/meow.sh ${G}
+step meow_1b_forget01_inverted_lr1e-4 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=inverted LR=1e-4 TAG=_lr1e-4 bash scripts/exp/meow.sh ${G}
 CMD
-step meow_1b_forget01_neighbor <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=neighbor bash scripts/exp/meow.sh ${G}
+step meow_1b_forget01_neighbor_lr1e-4 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=neighbor LR=1e-4 TAG=_lr1e-4 bash scripts/exp/meow.sh ${G}
 CMD
-step meow_1b_forget05_inverted <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=inverted bash scripts/exp/meow.sh ${G}
+step meow_1b_forget01_inverted_lr3e-5 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=inverted LR=3e-5 TAG=_lr3e-5 bash scripts/exp/meow.sh ${G}
 CMD
-step meow_1b_forget05_neighbor <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=neighbor bash scripts/exp/meow.sh ${G}
+step meow_1b_forget01_neighbor_lr3e-5 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget01 RETAIN_SPLIT=retain99 HOLDOUT_SPLIT=holdout01 NEIGHBOR_SPLIT=neighbor01 AUTHOR_OFFSET=199 R_UV_PREFIX=single_v2 TARGET=neighbor LR=3e-5 TAG=_lr3e-5 bash scripts/exp/meow.sh ${G}
 CMD
-step meow_1b_forget10_inverted <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 NEIGHBOR_SPLIT=neighbor10 AUTHOR_OFFSET=181 R_UV_PREFIX=forget10_Llama1B_v2 TARGET=inverted bash scripts/exp/meow.sh ${G}
+step meow_1b_forget05_inverted_lr1e-4 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=inverted LR=1e-4 TAG=_lr1e-4 bash scripts/exp/meow.sh ${G}
 CMD
-step meow_1b_forget10_neighbor <<'CMD' || true
-MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 NEIGHBOR_SPLIT=neighbor10 AUTHOR_OFFSET=181 R_UV_PREFIX=forget10_Llama1B_v2 TARGET=neighbor bash scripts/exp/meow.sh ${G}
+step meow_1b_forget05_neighbor_lr1e-4 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=neighbor LR=1e-4 TAG=_lr1e-4 bash scripts/exp/meow.sh ${G}
+CMD
+step meow_1b_forget05_inverted_lr3e-5 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=inverted LR=3e-5 TAG=_lr3e-5 bash scripts/exp/meow.sh ${G}
+CMD
+step meow_1b_forget05_neighbor_lr3e-5 <<'CMD' || true
+MODEL=Llama-3.2-1B-Instruct FORGET_SPLIT=forget05 RETAIN_SPLIT=retain95 HOLDOUT_SPLIT=holdout05 NEIGHBOR_SPLIT=neighbor05 AUTHOR_OFFSET=191 R_UV_PREFIX=forget05_Llama1B_v2 TARGET=neighbor LR=3e-5 TAG=_lr3e-5 bash scripts/exp/meow.sh ${G}
 CMD
 echo "meow_lane_1b finished $(date)"
