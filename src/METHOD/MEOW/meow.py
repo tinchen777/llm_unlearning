@@ -9,7 +9,7 @@
 #   `--target neighbor`  the ONE change used as a control (MEOW -> neighbour): the labels are the answers of the author's synthetic TRAIN neighbours (train_rank < k) instead of the inverted facts; the
 #                        mechanism (loss, optimiser, repetition) is the same.
 #
-#   python src/METHOD/MEOW/meow.py --model open-unlearning/tofu_Llama-3.2-1B-Instruct_full --forget-split forget05 --meow-json <.../forget05_perturbed_generated.json> \
+#   python src/METHOD/MEOW/meow.py --model open-unlearning/tofu_Llama-3.2-1B-Instruct_full --forget-split forget05 --meow-json data/meow/generated_data/forget05_perturbed_generated.json \
 #       --memo-json saves/MEOW/memo/Llama-3.2-1B-Instruct_forget05_memo.json --k 3 --select largest --save-steps 10 20 30 50 --out saves/MEOW/<name>
 #   (--memo-json is computed first if the file does not exist; --template-config configs/model/tofu/tofu_<MODEL>_full.yaml gives the chat template of the evaluation)
 # Output: <out>/checkpoint-<step>/ (model + tokenizer), <out>/train_log.json, <out>/selection.json. Evaluate with scripts/exp/meow.sh (the standard evaluation of this repository).
