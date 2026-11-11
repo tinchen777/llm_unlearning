@@ -53,6 +53,12 @@ def test_candidate_features_see_a_reused_substitute_name():
     assert ra.substitute_name("Jane Doe was born in Paris.", "Where was Jane Doe born?") is None
 
 
+def test_check_pool_flags_suspicious_names():
+    assert ra.check_pool(["Jane Doe", "Adam Bob Carl"], ["Eve Fox"]) == []
+    w = ra.check_pool(["Jane Doe", "Jane Doe"], ["Jane Doe Smith", "Eve"])
+    assert any("duplicate" in x for x in w) and any("odd name" in x for x in w) and any("is part of" in x for x in w)
+
+
 def test_attack_separates_a_planted_signal_and_isolation_forest_runs():
     labels = [1, 1] + [0] * 8
     feats = [_feat(modal_name_share=0.9, cross_question_name_share=1.0)] * 2 + [_feat(modal_name_share=0.12 + 0.01 * i) for i in range(8)]

@@ -161,6 +161,22 @@ def attack(features: Sequence[Dict[str, float]], labels: Sequence[int], names: S
     return out
 
 
+def check_pool(f_names: Sequence[str], h_names: Sequence[str]) -> List[str]:
+    """Things that make the pool suspicious (the names are extracted from the question text, see METHOD/ROCR/rocr.py): duplicates, a name inside another, too short / long."""
+    out = []
+    allnames = list(f_names) + list(h_names)
+    if len(set(allnames)) != len(allnames):
+        out.append("duplicate names in the pool: " + str([n for n, c in Counter(allnames).items() if c > 1]))
+    for n in allnames:
+        if not 2 <= len(n.split()) <= 5:
+            out.append(f"odd name (not 2-5 words): {n!r}")
+    for a_ in allnames:
+        for b_ in allnames:
+            if a_ != b_ and a_ in b_:
+                out.append(f"{a_!r} is part of {b_!r}")
+    return out
+
+
 # ----------------------------------------------------------------------------- model side
 def extract_names(split: str, qa_per_author: int):
     from METHOD.ROCR import rocr
@@ -210,8 +226,9 @@ def featurize(answers: Dict[str, dict]):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", action="append", required=True, help="label=hf:<path> | label=near:<run folder> (repeatable)")
+    ap.add_argument("--model", action="append", default=[], help="label=hf:<path> | label=near:<run folder> (repeatable)")
     ap.add_argument("--base", required=True)
+    ap.add_argument("--names-only", action="store_true", help="only extract and print the candidate names (no model, no GPU) -> <out>/names.json")
     ap.add_argument("--forget", default="forget05")
     ap.add_argument("--holdout", default="holdout05")
     ap.add_argument("--qa-per-author", type=int, default=20)
@@ -235,9 +252,17 @@ def main():
         f_names, h_names = extract_names(a.forget, a.qa_per_author), extract_names(a.holdout, a.qa_per_author)
     if a.f_authors is not None:
         f_names = [f_names[i] for i in a.f_authors]
+    for w in check_pool(f_names, h_names):
+        print("WARNING:", w, flush=True)
     candidates = f_names + h_names
     labels = [1] * len(f_names) + [0] * len(h_names)
     print(f"pool: {len(f_names)} forgotten + {len(h_names)} holdout authors\n  forgotten: {f_names}\n  holdout:   {h_names}", flush=True)
+    if a.names_only:
+        with open(os.path.join(a.out, "names.json"), "w", encoding="utf-8") as f:
+            json.dump({"forget": f_names, "holdout": h_names}, f, ensure_ascii=False, indent=1)
+        return
+    if not a.model:
+        sys.exit("--model is required (unless --names-only)")
     from transformers import AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.base)
     rows = []
