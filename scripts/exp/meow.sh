@@ -7,7 +7,7 @@
 #       data/meow/memo_data/ , data/meow/tofu_data/                  (not needed unless MEMO_JSON points into memo_data)
 # Env: MODEL / FORGET_SPLIT / NEIGHBOR_SPLIT / RETAIN_SPLIT / HOLDOUT_SPLIT / AUTHOR_OFFSET (scripts/NEAR/_common.sh), R_UV_PREFIX (saves/NEAR/<prefix>/near_tofu_<MODEL>_<split>_ks/r_uv.pt: the activation probe
 #      of the evaluation reads it), TARGET=inverted|neighbor, K (answers per question; default 2 / 3 / 6 for forget01 / 05 / 10: the paper's Llama-2 values), SELECT=largest|smallest|random (largest),
-#      SAVE_STEPS (checkpoints; one step = 32 rows = 4 questions repeated 8 times), LR (1e-5), KEEP_STEPS (steps whose weights are kept after their evaluation; default: none, the evaluation
+#      SAVE_STEPS (checkpoints; one step = 32 rows = 4 questions repeated 8 times), LR (1e-5), KEEP_STEPS (steps whose weights are kept after their evaluation; `all` keeps every checkpoint; default: none, the evaluation
 #      stays), MEMO_JSON (use this file of MEMO scores, e.g. the released one of Llama-2, instead of computing them with MODEL), LOWMEM=1 (gradient checkpointing, 2 rows per micro-batch: 8B),
 #      FOCUS_LAYER (probe layer; default half of the depth), TAG, EVAL_PROFILE=fast|full, SKIP_TRAIN=1 (only evaluate the existing checkpoints).
 # Output: saves/MEOW/<name>/checkpoint-<step>/ (weights removed after the evaluation unless kept), saves/eval/MEOW/<name>_s<step>/ (TOFU_SUMMARY.json, responses, activations, ...).
@@ -63,6 +63,6 @@ for STEP in "${STEPS_A[@]}"; do
     eval.tofu.metrics.activation_probe.focus_layer=${FOCUS_LAYER} \
     "eval.tofu.metrics.activation_probe.seen=[retain]" "eval.tofu.metrics.activation_probe.unseen=[forget,neighbor,holdout]" \
     task_name=MEOW/${NAME}_s${STEP} ${EXTRA} ${EXTRA_EVAL}
-  keep=0; for k in "${KEEP_A[@]}"; do if [ "${k}" = "${STEP}" ]; then keep=1; fi; done
+  keep=0; for k in "${KEEP_A[@]}"; do if [ "${k}" = "${STEP}" ] || [ "${k}" = all ]; then keep=1; fi; done
   if [ "${keep}" = 0 ]; then rm -f ${CK}/*.safetensors ${CK}/*.bin; fi
 done
