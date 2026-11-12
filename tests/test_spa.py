@@ -114,3 +114,18 @@ def test_shadow_edit_commands_are_well_formed(method, layers):
         assert 'hf_args.split="train[80:120]"' in l and "row_filter.author_id=[185,186]" in l
     assert "basic.author_offset=185" in py[0]
     assert ("wdown.kl.enabled=true" in py[2]) == (method == "dist")
+
+
+def test_strength_table_from_npz(tmp_path, capsys):
+    import json as _json
+    sets = make_sets()
+    names = spa.all_names(sets)
+    probs = {n: (0.1 if n in sets["S_groups"][0] else 0.4) for n in names}
+    f = tmp_path / "shadow0.npz"
+    np.savez(f, acts=np.zeros((len(names), 1, 1, 2), np.float16), names=np.array(names), templates=np.array(["t"]), name_tokens=np.ones(len(names), int), model="m", prob=np.array(_json.dumps(probs)))
+    sp = tmp_path / "sets.json"; sp.write_text(_json.dumps(sets))
+    class A: pass
+    a = A(); a.sets = str(sp); a.npz = [str(f)]; a.out = str(tmp_path / "t.md")
+    spa.cmd_strength(a)
+    out = (tmp_path / "t.md").read_text()
+    assert "0.100" in out.splitlines()[-1].split("|")[-2] and "0.400" in out.splitlines()[-1]

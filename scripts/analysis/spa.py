@@ -358,6 +358,27 @@ def cmd_attack(a):
     print(md)
 
 
+def cmd_strength(a):
+    """Small table from the (large) npz files: mean answer-probability proxy per role for every file, plus the name-token counts. Upload this, not the npz."""
+    sets = json.load(open(a.sets, encoding="utf-8"))
+    roles = (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"]))
+    lines = ["| file | " + " | ".join(r for r, _ in roles) + " | S_k (own group) |", "|---|" + "---|" * (len(roles) + 1)]
+    for path in a.npz:
+        acts = load_acts(path)
+        pr = acts.get("prob", {})
+        cells = [f"{np.mean([pr[n] for n in ns if n in pr]):.3f}" if any(n in pr for n in ns) else "-" for _, ns in roles]
+        own = "-"
+        m = __import__("re").search(r"shadow(\d+)", os.path.basename(path))
+        if m and pr and int(m.group(1)) < len(sets["S_groups"]):
+            own = f"{np.mean([pr[n] for n in sets['S_groups'][int(m.group(1))] if n in pr]):.3f}"
+        lines.append(f"| {path} | " + " | ".join(cells) + f" | {own} |")
+    text = "\n".join(lines) + "\n"
+    print(text)
+    if a.out:
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+        open(a.out, "w", encoding="utf-8").write(text)
+
+
 def cmd_sets(a):
     sets = build_sets(a.seed, templates_json=a.templates)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
@@ -373,6 +394,7 @@ def main():
     c = sub.add_parser("collect"); c.add_argument("--sets", required=True); c.add_argument("--model", required=True); c.add_argument("--base", required=True)
     c.add_argument("--out", required=True); c.add_argument("--gpu", default=None); c.add_argument("--batch-size", type=int, default=16)
     c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy"); c.set_defaults(fn=cmd_collect)
+    g = sub.add_parser("strength"); g.add_argument("--sets", required=True); g.add_argument("--npz", nargs="+", required=True); g.add_argument("--out", default=None); g.set_defaults(fn=cmd_strength)
     t = sub.add_parser("attack"); t.add_argument("--sets", required=True); t.add_argument("--shadow", nargs="+", required=True); t.add_argument("--target", required=True)
     t.add_argument("--out", required=True); t.add_argument("--probes", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
     t.add_argument("--k", type=int, default=2); t.add_argument("--boot", type=int, default=200); t.add_argument("--seed", type=int, default=0); t.add_argument("--title", default=None)
