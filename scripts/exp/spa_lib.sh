@@ -32,7 +32,8 @@ spa_cfg() {
   # answer probability of S_k to <= SPA_TAU (0.25). The provider's coefficient on M' over-shoots (3B Act c14: S_k 0.78 -> 0.008, holdout 0.13; on retain95 0.97 -> 0.13), so a fixed
   # coefficient does not reproduce the provider's strength. NEAR-Dist calibrates its own level (KL stage): no grid.
   if [ "${DIST}" = 1 ]; then SHADOW_COEFFS=${SPA_COEFFS:-${COEFF}}
-  else case "$1" in 3B) SHADOW_COEFFS=${SPA_COEFFS:-"1 2 4 6 8 10 14"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"1 2 3 4 5 7"} ;; esac; fi
+  # (3B pilot, group 0: c1 / c2 change nothing; real chose c8 -> S_k 0.177 = the provider's F on M', retain chose c14 -> 0.134. 1B / 8B: grids go past the provider's c7 for the retain control)
+  else case "$1" in 3B) SHADOW_COEFFS=${SPA_COEFFS:-"4 6 8 10 12 14 16"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"2 3 4 5 6 7 9 11"} ;; esac; fi
 }
 SPA_TAU=${SPA_TAU:-0.25}
 
