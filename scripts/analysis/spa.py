@@ -34,7 +34,8 @@ GROUP_SIZE = 2
 
 
 # ----------------------------------------------------------------------------- sets
-def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget05", holdouts=("holdout05", "holdout10"), templates_json: str = None, qa_per_author: int = 20):
+def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget05", holdouts=("holdout05", "holdout10"), templates_json: str = None, qa_per_author: int = 20,
+               r_split: str = "retain90", n_r: int = 10):
     import rank_attack as ra
     s_all = ra.extract_names(s_split, qa_per_author)[:N_GROUPS * GROUP_SIZE]          # rows 0-199 of forget10 = authors 181-190
     f_names = ra.extract_names(f_split, qa_per_author)
@@ -47,11 +48,14 @@ def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget0
         raise ValueError(f"only {len(h_names)} distinct holdout authors, {2 * N_GROUPS * GROUP_SIZE} are needed (H_A and H_B of 10)")
     rng = random.Random(seed)
     h_names = rng.sample(h_names, len(h_names))
+    # R = RETAINED authors (known to M', never edited by anybody): negatives of the fingerprint probe (R_A) and the second target pool F vs R_B (R_B)
+    r_all = [n for n in ra.extract_names(r_split, qa_per_author) if n not in s_all and n not in f_names and n not in h_names]
+    r_pick = random.Random(seed + 1).sample(r_all, 2 * n_r)
     sets = validate_sets({
-        "seed": seed, "s_split": s_split, "f_split": f_split, "holdouts": list(holdouts),
+        "version": 2, "seed": seed, "s_split": s_split, "f_split": f_split, "holdouts": list(holdouts), "r_split": r_split,
         "S_groups": [s_all[g * GROUP_SIZE:(g + 1) * GROUP_SIZE] for g in range(N_GROUPS)],
         "author_ids_S": [[181 + g * GROUP_SIZE + i for i in range(GROUP_SIZE)] for g in range(N_GROUPS)],
-        "F": f_names, "H_A": h_names[:10], "H_B": h_names[10:20], "templates": None})
+        "F": f_names, "H_A": h_names[:10], "H_B": h_names[10:20], "R_A": r_pick[:n_r], "R_B": r_pick[n_r:], "templates": None})
     if templates_json:
         sets["templates"] = json.load(open(templates_json, encoding="utf-8"))["templates"]
     return sets
@@ -59,7 +63,7 @@ def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget0
 
 def validate_sets(sets: dict) -> dict:
     S = [n for g in sets["S_groups"] for n in g]
-    groups = {"S": S, "F": sets["F"], "H_A": sets["H_A"], "H_B": sets["H_B"]}
+    groups = {"S": S, "F": sets["F"], "H_A": sets["H_A"], "H_B": sets["H_B"], "R_A": sets.get("R_A", []), "R_B": sets.get("R_B", [])}
     seen = {}
     for tag, names in groups.items():
         if len(set(names)) != len(names):
@@ -71,8 +75,12 @@ def validate_sets(sets: dict) -> dict:
     return sets
 
 
+def role_lists(sets: dict):
+    return (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"]), ("R_A", sets.get("R_A", [])), ("R_B", sets.get("R_B", [])))
+
+
 def all_names(sets: dict) -> List[str]:
-    return [n for g in sets["S_groups"] for n in g] + sets["F"] + sets["H_A"] + sets["H_B"]
+    return [n for g in sets["S_groups"] for n in g] + sets["F"] + sets["H_A"] + sets["H_B"] + sets.get("R_A", []) + sets.get("R_B", [])
 
 
 # ----------------------------------------------------------------------------- collect
@@ -122,7 +130,7 @@ def cmd_collect(a):
     probs = {} if a.no_prob else author_probs(model, tok, sets)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     np.savez(a.out, acts=x.astype(np.float16), names=np.array(names), templates=np.array(sets["templates"]), name_tokens=ntok, model=a.model, prob=np.array(json.dumps(probs)))
-    show = {t: round(float(np.mean([probs[n] for n in ns if n in probs])), 3) for t, ns in (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"])) if probs}
+    show = {t: round(float(np.mean([probs[n] for n in ns if n in probs])), 3) for t, ns in role_lists(sets) if probs and ns}
     print(f"{a.out}: acts {x.shape} for {a.model}; mean proxy answer prob by role: {show}")
 
 
@@ -137,7 +145,7 @@ def author_probs(model, tok, sets: dict, qa_per_author: int = 20, batch_size: in
     tok.padding_side = "right"
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    for split in ["forget10", "holdout10", "holdout05"]:
+    for split in ["forget10", "holdout10", "holdout05", sets.get("r_split", "retain90")]:
         qs, ans = sc.load_questions(split)
         names = ra.extract_names(split, qa_per_author)
         for a_i, n in enumerate(names):
@@ -197,11 +205,21 @@ def auc_score(pos: Sequence[float], neg: Sequence[float]) -> float:
     return float(((pos[:, None] > neg[None, :]).sum() + 0.5 * (pos[:, None] == neg[None, :]).sum()) / (len(pos) * len(neg)))
 
 
-def shadow_samples(shadows: List[dict], sets: dict, layer: int, exclude=()):
-    """Training rows of one layer: (X, y, author) over the shadow models; S_k of model k = 1, all of H_A (in every model) = 0; authors in `exclude` left out."""
+PROBES = ("P0-familiarity", "P1-spec", "P2-fingerprint")
+# P0  NON-adaptive baseline, no shadow model: on the target M' itself, retained authors R_A (known) = 1 vs strangers H_A = 0. It can only learn "this entity is known".
+# P1  the spec: in shadow M''_k, S_k (known, then edited) = 1 vs strangers H_A = 0. Free to learn "known" instead of "edited".
+# P2  fingerprint: in M''_k, S_k = 1 vs H_A + R_A + the other groups S_j (known and NOT edited in model k) = 0: "known" no longer separates the classes, only "edited" does.
+# Pools on the target: Q1 = F vs H_B (strangers: is M' distinguishable from the retain model? includes residual recognition), Q2 = F vs R_B (retained, known authors: the edit fingerprint).
+
+
+def shadow_samples(shadows: List[dict], sets: dict, layer: int, exclude=(), variant: str = "P1-spec"):
+    """Training rows of one layer over the shadow models: S_k of model k = 1; negatives H_A (P1) or H_A + R_A + S_j, j != k (P2); authors in `exclude` left out."""
     X, y, who, model_of = [], [], [], []
     for k, sh in enumerate(shadows):
-        for n in sets["S_groups"][k] + sets["H_A"]:
+        neg = list(sets["H_A"])
+        if variant == "P2-fingerprint":
+            neg += list(sets["R_A"]) + [n for j, g in enumerate(sets["S_groups"]) if j != k for n in g]
+        for n in list(sets["S_groups"][k]) + neg:
             if n in exclude:
                 continue
             lab = 1 if n in sets["S_groups"][k] else 0
@@ -210,21 +228,38 @@ def shadow_samples(shadows: List[dict], sets: dict, layer: int, exclude=()):
     return np.concatenate(X, 0), np.array(y), who, model_of
 
 
-def cv_curve(shadows: List[dict], sets: dict, kind: str = "lr", C: float = 0.01, seed: int = 0):
-    """Leave-one-GROUP-out over the shadow models (shadow k's own S_k and two H_A authors are held out and scored in model k). -> per layer {pooled out-of-fold author AUC, mean within-fold AUC}.
-    Everything here uses the shadow data only."""
-    n_layers = shadows[0]["X"].shape[2]
-    ha = sets["H_A"]
-    folds = [(k, sets["S_groups"][k], ha[GROUP_SIZE * k:GROUP_SIZE * (k + 1)]) for k in range(len(shadows))]
+def familiarity_samples(target: dict, sets: dict, layer: int, exclude=()):
+    """P0: rows of the TARGET model, R_A = 1 (known) vs H_A = 0 (strangers)."""
+    names = [n for n in list(sets["R_A"]) + list(sets["H_A"]) if n not in exclude]
+    X = np.concatenate([target["X"][target["idx"][n], :, layer, :] for n in names], 0)
+    y = np.concatenate([np.full(target["X"].shape[1], 1 if n in sets["R_A"] else 0) for n in names])
+    return X, y
+
+
+def cv_curve(shadows: List[dict], sets: dict, kind: str = "lr", C: float = 0.01, seed: int = 0, variant: str = "P1-spec", target: dict = None):
+    """Per-layer CV AUC on the training data of the probe ONLY (no F / H_B / R_B). P1 / P2: leave-one-GROUP-out over the shadow models (fold k: S_k + 2 H_A (+ 2 R_A for P2) held out, scored
+    in model k). P0: 5 folds of 2 R_A + 2 H_A on the target. -> {pooled out-of-fold author AUC, mean within-fold AUC} per layer."""
+    n_layers = (target if variant == "P0-familiarity" else shadows[0])["X"].shape[2]
+    ha, rA = sets["H_A"], sets.get("R_A", [])
+    g = GROUP_SIZE
     pooled, within = [], []
     for l in range(n_layers):
         scores, labels, fold_aucs = [], [], []
-        for k, s_auth, h_auth in folds:
-            X, y, _, _ = shadow_samples(shadows, sets, l, exclude=set(s_auth) | set(h_auth))
+        for k in range(N_GROUPS if variant == "P0-familiarity" else len(shadows)):
+            h_auth = list(ha[g * k:g * (k + 1)])
+            if variant == "P0-familiarity":
+                pos, neg = list(rA[g * k:g * (k + 1)]), h_auth
+                X, y = familiarity_samples(target, sets, l, exclude=set(pos) | set(neg))
+                model = target
+            else:
+                pos = list(sets["S_groups"][k])
+                neg = h_auth + (list(rA[g * k:g * (k + 1)]) if variant == "P2-fingerprint" else [])
+                X, y, _, _ = shadow_samples(shadows, sets, l, exclude=set(pos) | set(neg), variant=variant)
+                model = shadows[k]
             f = fit_probe(kind, X, y, C, seed)
-            sc_pos = [float(f(shadows[k]["X"][shadows[k]["idx"][n], :, l, :]).mean()) for n in s_auth]
-            sc_neg = [float(f(shadows[k]["X"][shadows[k]["idx"][n], :, l, :]).mean()) for n in h_auth]
-            scores += sc_pos + sc_neg; labels += [1] * len(sc_pos) + [0] * len(sc_neg); fold_aucs.append(auc_score(sc_pos, sc_neg))
+            sp = [float(f(model["X"][model["idx"][n], :, l, :]).mean()) for n in pos]
+            sn = [float(f(model["X"][model["idx"][n], :, l, :]).mean()) for n in neg]
+            scores += sp + sn; labels += [1] * len(sp) + [0] * len(sn); fold_aucs.append(auc_score(sp, sn))
         scores, labels = np.array(scores), np.array(labels)
         pooled.append(auc_score(scores[labels == 1], scores[labels == 0])); within.append(float(np.nanmean(fold_aucs)))
     return {"pooled": pooled, "within": within}
@@ -276,61 +311,78 @@ def evaluate_transfer(f_scores: Sequence[float], h_scores: Sequence[float], k: i
     return {**base, "auc_lo": max(0.0, base["auc"] - 1.96 * se), "auc_hi": min(1.0, base["auc"] + 1.96 * se), "null95": v2.percentile(nulls, 0.95), "balanced_auc": auc_score(f_scores, h_scores)}
 
 
-def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm"), C: float = 0.01, k: int = 2, boot: int = 200, seed: int = 0, layers=None) -> dict:
+def _fit(variant, kind, shadows, target, sets, l, C, seed):
+    if variant == "P0-familiarity":
+        X, y = familiarity_samples(target, sets, l)
+    else:
+        X, y, _, _ = shadow_samples(shadows, sets, l, variant=variant)
+    return fit_probe(kind, X, y, C, seed)
+
+
+def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm"), C: float = 0.01, k: int = 2, boot: int = 200, seed: int = 0, layers=None,
+               probes=PROBES, edit_layers: Sequence[int] = ()) -> dict:
     n_layers = shadows[0]["X"].shape[2]
     layers = list(range(n_layers)) if layers is None else layers
-    F, HB = sets["F"], sets["H_B"]
+    F, HB, RB = sets["F"], sets["H_B"], sets.get("R_B", [])
+    pools = {"Q1": HB} if not RB else {"Q1": HB, "Q2": RB}
+    if not sets.get("R_A"):
+        probes = [p for p in probes if p == "P1-spec"]                      # sets of version 1: only the spec probe
+
     def mean_prob(acts, names):
         v = [acts["prob"][n] for n in names if n in acts.get("prob", {})]
         return float(np.mean(v)) if v else None
-    out = {"n_layers": n_layers, "config": {"C": C, "k": k, "boot": boot, "seed": seed},
+    pre_edit = [l for l in layers if edit_layers and l < min(edit_layers)]
+    out = {"n_layers": n_layers, "edit_layers": list(edit_layers), "config": {"C": C, "k": k, "boot": boot, "seed": seed},
            "strength": {"shadow_S_prob": [mean_prob(sh, sets["S_groups"][i]) for i, sh in enumerate(shadows)], "shadow_HA_prob": [mean_prob(sh, sets["H_A"]) for sh in shadows],
-                        "shadow_F_prob": [mean_prob(sh, F) for sh in shadows], "target_F_prob": mean_prob(target, F), "target_HB_prob": mean_prob(target, HB)}, "probes": {}}
-    for kind in kinds:
-        curve = cv_curve(shadows, sets, kind, C, seed)
-        sel = int(np.argmax(curve["pooled"]))                                        # the layer is chosen on the SHADOW data only
-        by_layer = []
-        for l in layers:                                                              # (all layers are fitted for the post-hoc upper bound; the label-free choice is `sel`)
-            X, y, _, _ = shadow_samples(shadows, sets, l)
-            f = fit_probe(kind, X, y, C, seed)
-            _, a_f = author_scores(f, target, F, l)
-            _, a_h = author_scores(f, target, HB, l)
-            by_layer.append(auc_score(a_f, a_h))
-        X, y, _, _ = shadow_samples(shadows, sets, sel)
-        f = fit_probe(kind, X, y, C, seed)
-        q_f, a_f = author_scores(f, target, F, sel)
-        q_h, a_h = author_scores(f, target, HB, sel)
-        ev = evaluate_transfer(a_f, a_h, k, boot, seed)
-        # second-edit check: does the probe still score F above H_B inside the shadow models?
-        in_shadow = []
-        for sh in shadows:
-            _, sf = author_scores(f, sh, F, sel)
-            _, sh_ = author_scores(f, sh, HB, sel)
-            in_shadow.append(auc_score(sf, sh_))
-        ntok = np.array([target["name_tokens"][target["idx"][n]] for n in F + HB])
-        out["probes"][kind] = {
-            "selected_layer": sel, "shadow_cv_auc_selected": curve["pooled"][sel], "shadow_cv_within_selected": curve["within"][sel],
-            "shadow_cv_curve": curve["pooled"], "transfer": ev,
-            "question_auc": auc_score(q_f.ravel(), q_h.ravel()),
-            "target_auc_by_layer": by_layer, "posthoc_best_layer": int(np.argmax(by_layer)), "posthoc_best_auc": float(np.max(by_layer)),
-            "F_vs_HB_auc_inside_shadows": in_shadow, "name_token_corr": spearman(np.concatenate([a_f, a_h]), ntok),
-            "author_scores": {"F": dict(zip(F, map(float, a_f))), "H_B": dict(zip(HB, map(float, a_h)))},
-            "_question_scores": (q_f, q_h)}
+                        "shadow_F_prob": [mean_prob(sh, F) for sh in shadows], "target": {r: mean_prob(target, ns) for r, ns in role_lists(sets) if ns}}, "results": {}}
+    for variant in probes:
+        for kind in kinds:
+            curve = cv_curve(shadows, sets, kind, C, seed, variant=variant, target=target)
+            sel = int(np.argmax(curve["pooled"]))                                   # chosen on the probe's own training data only
+            by_layer = {q: [] for q in pools}
+            for l in layers:                                                         # post-hoc curves (use target labels: upper bound / diagnostics only)
+                f = _fit(variant, kind, shadows, target, sets, l, C, seed)
+                _, a_f = author_scores(f, target, F, l)
+                for q, neg in pools.items():
+                    by_layer[q].append(auc_score(a_f, author_scores(f, target, neg, l)[1]))
+            f = _fit(variant, kind, shadows, target, sets, sel, C, seed)
+            q_f, a_f = author_scores(f, target, F, sel)
+            r = {"selected_layer": sel, "cv_auc_selected": curve["pooled"][sel], "cv_within_selected": curve["within"][sel], "cv_curve": curve["pooled"], "pools": {}, "_q": {"F": q_f}}
+            for q, neg in pools.items():
+                q_n, a_n = author_scores(f, target, neg, sel)
+                r["pools"][q] = {**evaluate_transfer(a_f, a_n, k, boot, seed), "question_auc": auc_score(q_f.ravel(), q_n.ravel()),
+                                 "auc_by_layer": by_layer[q], "posthoc_best_layer": int(np.argmax(by_layer[q])), "posthoc_best_auc": float(np.max(by_layer[q])),
+                                 "pre_edit_mean_auc": float(np.mean([by_layer[q][layers.index(l)] for l in pre_edit])) if pre_edit else None}
+                r["_q"][q] = q_n
+            if variant != "P0-familiarity":                                          # second-edit check: F vs H_B inside the shadow models
+                r["Q1_inside_shadows"] = [auc_score(author_scores(f, sh, F, sel)[1], author_scores(f, sh, HB, sel)[1]) for sh in shadows]
+            ntok = np.array([target["name_tokens"][target["idx"][n]] for n in F + HB])
+            r["name_token_corr_Q1"] = spearman(np.concatenate([a_f, author_scores(f, target, HB, sel)[1]]), ntok)
+            r["author_scores"] = {"F": dict(zip(F, map(float, a_f))), **{nm: dict(zip(neg, map(float, author_scores(f, target, neg, sel)[1]))) for nm, neg in (("H_B", HB), ("R_B", RB)) if neg}}
+            out["results"][f"{variant}/{kind}"] = r
     return out
 
 
 def to_markdown(res: dict, title: str) -> str:
-    lines = [f"# {title}", "", "| probe | shadow CV AUC (selected layer) | layer | transfer AUC [95% jackknife] (null95) | balanced AUC | P@F | MRR | question AUC | post-hoc best layer (upper bound) | F vs H_B inside shadows |", "|---|---|---|---|---|---|---|---|---|---|"]
-    for kind, p in res["probes"].items():
-        t = p["transfer"]
-        lines.append(f"| {kind} | {p['shadow_cv_auc_selected']:.2f} | {p['selected_layer']} | {t['auc']:.2f} [{t['auc_lo']:.2f}, {t['auc_hi']:.2f}] ({t['null95']:.2f}) | {t['balanced_auc']:.2f} | {t['p_at_F']:.2f} | {t['mrr']:.2f} | "
-                     f"{p['question_auc']:.2f} | L{p['posthoc_best_layer']}: {p['posthoc_best_auc']:.2f} | {', '.join(f'{x:.2f}' for x in p['F_vs_HB_auc_inside_shadows'])} |")
-    lines += ["", "A transfer AUC counts as a detection only above the null95 band. The post-hoc best layer uses the target labels: it is an upper bound, not an attack. "
-              "`F vs H_B inside shadows` is the second-edit check (the probe still ranks F above H_B in the doubly edited models?). "
-              f"Name-token-length Spearman correlation of the score: " + ", ".join(f"{k}: {p['name_token_corr']:.2f}" for k, p in res["probes"].items()) + "."]
-    sg = res.get("strength", {})
-    lines += ["", "Strength of the edits (proxy of the answer probability, mean over the authors; matched level of the main table: forget_Q_A_Prob <= 0.25): "
-              f"shadow S per model {sg.get('shadow_S_prob')}, shadow H_A {sg.get('shadow_HA_prob')}, F inside the shadows {sg.get('shadow_F_prob')}, target F {sg.get('target_F_prob')}, target H_B {sg.get('target_HB_prob')}."]
+    qs = sorted({q for r in res["results"].values() for q in r["pools"]})
+    head = "| probe | CV AUC on its own training data | layer | " + " | ".join(f"{q} AUC [95% jackknife] (null95) | {q} post-hoc best | {q} mean before the edit layers" for q in qs) + " | Q1 inside shadows |"
+    lines = [f"# {title}", "", "Q1 = F vs strangers H_B (is M' distinguishable from the retain model; includes residual recognition). Q2 = F vs retained known authors R_B (the edit fingerprint).",
+             "P0 = familiarity baseline on M' (no shadow), P1 = spec (S_k vs strangers), P2 = fingerprint (S_k vs strangers + retained + other S_j).", "", head,
+             "|" + "---|" * (3 + 3 * len(qs) + 1)]
+    for name, r in res["results"].items():
+        cells = []
+        for q in qs:
+            t = r["pools"].get(q)
+            if t is None:
+                cells += ["-"] * 3; continue
+            pe = "-" if t["pre_edit_mean_auc"] is None else f"{t['pre_edit_mean_auc']:.2f}"
+            cells += [f"{t['auc']:.2f} [{t['auc_lo']:.2f}, {t['auc_hi']:.2f}] ({t['null95']:.2f})", f"L{t['posthoc_best_layer']}: {t['posthoc_best_auc']:.2f}", pe]
+        ins = ", ".join(f"{x:.2f}" for x in r.get("Q1_inside_shadows", [])) or "-"
+        lines.append(f"| {name} | {r['cv_auc_selected']:.2f} | {r['selected_layer']} | " + " | ".join(cells) + f" | {ins} |")
+    lines += ["", f"Edit layers {res.get('edit_layers')}: before them the activations of M' equal those of the original model, so an AUC there is recognition (or noise), never an edit trace; "
+              "for P2 / Q2 it should be ~0.5. A pool AUC counts as a detection only above its null95. Post-hoc best layers use the target labels (upper bound).",
+              "Name-token-length Spearman (Q1): " + ", ".join(f"{n}: {r['name_token_corr_Q1']:.2f}" for n, r in res["results"].items()) + ".",
+              "", f"Strength (answer-probability proxy, mean over authors): {json.dumps(res.get('strength'))}"]
     return "\n".join(lines) + "\n"
 
 
@@ -340,17 +392,22 @@ def cmd_attack(a):
     if len(shadows) != N_GROUPS:
         print(f"WARNING: {len(shadows)} shadow files for {N_GROUPS} groups (the group of file i is S_groups[i])")
     target = load_acts(a.target)
-    res = run_attack(shadows, target, sets, a.probes, a.C, a.k, a.boot, a.seed)
+    missing = [n for n in all_names(sets) if n not in target["idx"] or any(n not in sh["idx"] for sh in shadows)]
+    if missing:
+        sys.exit(f"{len(missing)} names of {a.sets} are not in the activation files (collected with an older sets file?), e.g. {missing[:3]}: re-run collect")
+    res = run_attack(shadows, target, sets, a.kinds, a.C, a.k, a.boot, a.seed, probes=a.probes, edit_layers=a.edit_layers)
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "scores_target.csv"), "w", newline="", encoding="utf-8") as fh:
-        w = csv.writer(fh); w.writerow(["probe", "name", "label", "template", "score"])
-        for kind, p in res["probes"].items():
-            q_f, q_h = p.pop("_question_scores")
-            for lab, names, q in ((1, sets["F"], q_f), (0, sets["H_B"], q_h)):
-                for n, row in zip(names, q):
-                    for t, s in zip(sets["templates"], row):
-                        w.writerow([kind, n, lab, t, f"{s:.5f}"])
-    json.dump({kind: {"layer_curve": p["shadow_cv_curve"], "target_auc_by_layer": p["target_auc_by_layer"], "selected": p["selected_layer"]} for kind, p in res["probes"].items()},
+        w = csv.writer(fh); w.writerow(["probe", "role", "name", "template", "score"])
+        for name, r in res["results"].items():
+            qd = r.pop("_q")
+            for role, names, key in (("F", sets["F"], "F"), ("H_B", sets["H_B"], "Q1"), ("R_B", sets.get("R_B", []), "Q2")):
+                if key not in qd:
+                    continue
+                for n, row in zip(names, qd[key]):
+                    for t, sc_ in zip(sets["templates"], row):
+                        w.writerow([name, role, n, t, f"{sc_:.5f}"])
+    json.dump({n: {"cv_curve": r["cv_curve"], "selected": r["selected_layer"], **{f"{q}_auc_by_layer": t["auc_by_layer"] for q, t in r["pools"].items()}} for n, r in res["results"].items()},
               open(os.path.join(a.out, "probe_layer.json"), "w"), indent=1)
     json.dump(res, open(os.path.join(a.out, "summary.json"), "w"), indent=1)
     md = to_markdown(res, a.title or os.path.basename(os.path.normpath(a.out)))
@@ -361,7 +418,7 @@ def cmd_attack(a):
 def cmd_strength(a):
     """Small table from the (large) npz files: mean answer-probability proxy per role for every file, plus the name-token counts. Upload this, not the npz."""
     sets = json.load(open(a.sets, encoding="utf-8"))
-    roles = (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"]))
+    roles = tuple((r, ns) for r, ns in role_lists(sets) if ns)
     lines = ["| file | " + " | ".join(r for r, _ in roles) + " | S_k (own group) |", "|---|" + "---|" * (len(roles) + 1)]
     for path in a.npz:
         acts = load_acts(path)
@@ -396,7 +453,8 @@ def main():
     c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy"); c.set_defaults(fn=cmd_collect)
     g = sub.add_parser("strength"); g.add_argument("--sets", required=True); g.add_argument("--npz", nargs="+", required=True); g.add_argument("--out", default=None); g.set_defaults(fn=cmd_strength)
     t = sub.add_parser("attack"); t.add_argument("--sets", required=True); t.add_argument("--shadow", nargs="+", required=True); t.add_argument("--target", required=True)
-    t.add_argument("--out", required=True); t.add_argument("--probes", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
+    t.add_argument("--out", required=True); t.add_argument("--kinds", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
+    t.add_argument("--probes", nargs="+", default=list(PROBES), choices=list(PROBES)); t.add_argument("--edit-layers", nargs="*", type=int, default=[], help="layers the method edits (marks the pre-edit layers)")
     t.add_argument("--k", type=int, default=2); t.add_argument("--boot", type=int, default=200); t.add_argument("--seed", type=int, default=0); t.add_argument("--title", default=None)
     t.set_defaults(fn=cmd_attack)
     a = ap.parse_args()

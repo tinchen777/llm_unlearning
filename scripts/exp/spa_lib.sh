@@ -4,11 +4,15 @@
 #   spa_run SCALE METHOD COND -> everything of one condition: M' (COND=real) or the retain95 model (COND=retain, the negative control), 5 shadow edits of 2 authors each, activations, attack.
 # Shadow edit of group k: the SAME algorithm on M' with the forget set = rows [40k, 40k+40) of forget10 (= authors 181+2k, 182+2k), their own train neighbours, retain90, provider's layers and
 # coefficient. Nothing of F, of the provider's neighbours or of the full model M0 is read. The edited model is deleted after its activations are taken.
-# Env: GPU (default 0), SPA_GROUPS (default "0 1 2 3 4"), DRY_RUN=1, FORCE=1 (ignore done markers), SPA_DIR (activations, default saves/spa), OUT_DIR (default saves/analysis).
+# Env: GPU (default 0), SPA_GROUPS (default "0 1 2 3 4"), DRY_RUN=1, FORCE=1 (ignore done markers), SPA_DIR (activations, default saves/spa), OUT_DIR (default saves/analysis),
+#      KEEP_EDITED=1 (keep the edited shadow models, ~6 GB each at 3B: activations of new names can then be taken without re-editing).
+# Sets v2 (sets_v2.json) add the retained authors R_A / R_B; activation files of v1 lack them, so the activation markers carry the version (.v2.done) and an edit whose model was
+# deleted is re-done automatically when its activations are needed.
 
 SPA_DIR=${SPA_DIR:-saves/spa}
 OUT_DIR=${OUT_DIR:-saves/analysis}
-SETS=${OUT_DIR}/spa/sets.json
+SETS_V=v2
+SETS=${OUT_DIR}/spa/sets_${SETS_V}.json
 read -r -a SPA_GROUPS_A <<< "${SPA_GROUPS:-0 1 2 3 4}"
 GPU=${GPU:-0}
 
@@ -64,32 +68,37 @@ spa_shadow() {   # scale method cond k mprime
   local acts=${SPA_DIR}/${scale}_${method}_${cond}/shadow${k}.npz
   spa_cfg "${scale}" "${method}" || return 1
   local edited; edited=$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}")
-  spa_step "edit ${scale} ${method} ${cond} g${k}" "logs/spa/${scale}_${method}_${cond}/edit_g${k}.done" spa_edit_near "${scale}" "${method}" "${mprime}" "${k}" "${cond}" || return 1
-  spa_step "acts ${scale} ${method} ${cond} g${k}" "logs/spa/${scale}_${method}_${cond}/acts_g${k}.done" \
+  local log=logs/spa/${scale}_${method}_${cond}
+  local acts_done=${log}/acts_g${k}.${SETS_V}.done
+  if [ -z "${DRY_RUN}" ] && [ ! -f "${acts_done}" ] && [ ! -f "${edited}/config.json" ] && [ -f "${log}/edit_g${k}.done" ]; then
+    echo "[note] ${edited} was deleted after an earlier collect: re-doing the edit of g${k}"; rm -f "${log}/edit_g${k}.done"
+  fi
+  spa_step "edit ${scale} ${method} ${cond} g${k}" "${log}/edit_g${k}.done" spa_edit_near "${scale}" "${method}" "${mprime}" "${k}" "${cond}" || return 1
+  spa_step "acts ${scale} ${method} ${cond} g${k}" "${acts_done}" \
     python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${edited}" --base "${BASE}" --out "${acts}" --gpu "${GPU}" || return 1
-  if [ -z "${DRY_RUN}" ] && [ -f "${acts}" ] && [ -d "$(dirname "${edited}")" ]; then rm -rf "$(dirname "${edited}")"; fi   # the edited layers' folder (model + w_down.pt): the activations are what is kept
+  if [ -z "${DRY_RUN}" ] && [ -z "${KEEP_EDITED}" ] && [ -f "${acts_done}" ] && [ -d "$(dirname "${edited}")" ]; then rm -rf "$(dirname "${edited}")"; fi   # the edited layers' folder (model + w_down.pt)
 }
 
 spa_run() {   # scale method cond
   local scale=$1 method=$2 cond=$3
   spa_cfg "${scale}" "${method}" || return 1
   local dir=${SPA_DIR}/${scale}_${method}_${cond}
-  spa_step "sets" "logs/spa/sets.done" python scripts/analysis/spa.py sets --out "${SETS}" || return 1
+  spa_step "sets ${SETS_V}" "logs/spa/sets_${SETS_V}.done" python scripts/analysis/spa.py sets --out "${SETS}" || return 1
   local mprime
   if [ "${cond}" = real ]; then
     mprime=${SPA_DIR}/models/${scale}_${method}_mprime
     spa_step "materialise M' ${scale} ${method}" "logs/spa/${scale}_${method}_mprime.done" python scripts/analysis/spa_materialize.py --model "${TARGET_SPEC}" --base "${BASE}" --out "${mprime}" --gpu "${GPU}" || return 1
-    spa_step "target acts ${scale} ${method} real" "logs/spa/${scale}_${method}_real/target.done" python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${mprime}" --base "${BASE}" --out "${dir}/target.npz" --gpu "${GPU}" || return 1
+    spa_step "target acts ${scale} ${method} real" "logs/spa/${scale}_${method}_real/target.${SETS_V}.done" python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${mprime}" --base "${BASE}" --out "${dir}/target.npz" --gpu "${GPU}" || return 1
   else
     mprime=open-unlearning/tofu_${MODEL}_retain95
-    spa_step "target acts ${scale} retain95" "logs/spa/${scale}_retain95.done" python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${mprime}" --base "${BASE}" --out "${SPA_DIR}/${scale}_retain95_target.npz" --gpu "${GPU}" || return 1
+    spa_step "target acts ${scale} retain95" "logs/spa/${scale}_retain95.${SETS_V}.done" python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${mprime}" --base "${BASE}" --out "${SPA_DIR}/${scale}_retain95_target.npz" --gpu "${GPU}" || return 1
     if [ -z "${DRY_RUN}" ]; then mkdir -p "${dir}"; cp "${SPA_DIR}/${scale}_retain95_target.npz" "${dir}/target.npz"; fi
   fi
   for k in "${SPA_GROUPS_A[@]}"; do spa_shadow "${scale}" "${method}" "${cond}" "${k}" "${mprime}" || return 1; done
   if [ "${#SPA_GROUPS_A[@]}" -eq 5 ]; then
-    spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.done" \
+    spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}.done" \
       python scripts/analysis/spa.py attack --sets "${SETS}" --shadow ${dir}/shadow0.npz ${dir}/shadow1.npz ${dir}/shadow2.npz ${dir}/shadow3.npz ${dir}/shadow4.npz \
-        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --probes lr dm --title "A2 SPA ${scale} ${method} (${cond})"
+        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --kinds lr dm --edit-layers ${LAYERS//,/ } --title "A2 SPA ${scale} ${method} (${cond})"
   else
     echo "[note] SPA_GROUPS=${SPA_GROUPS_A[*]}: no attack (needs all 5 groups); shadow strength is printed by each collect"
   fi
