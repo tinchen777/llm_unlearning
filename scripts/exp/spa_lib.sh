@@ -28,7 +28,13 @@ spa_cfg() {
     *) echo "spa_cfg: unknown $1/$2" >&2; return 1 ;;
   esac
   BASE=open-unlearning/tofu_${MODEL}_full
+  # SHADOW selection rule (the provider's rule, applied by the attacker on its own shadow set S_k whose answers it has): the WEAKEST coefficient of the grid whose edit brings the
+  # answer probability of S_k to <= SPA_TAU (0.25). The provider's coefficient on M' over-shoots (3B Act c14: S_k 0.78 -> 0.008, holdout 0.13; on retain95 0.97 -> 0.13), so a fixed
+  # coefficient does not reproduce the provider's strength. NEAR-Dist calibrates its own level (KL stage): no grid.
+  if [ "${DIST}" = 1 ]; then SHADOW_COEFFS=${SPA_COEFFS:-${COEFF}}
+  else case "$1" in 3B) SHADOW_COEFFS=${SPA_COEFFS:-"1 2 4 6 8 10 14"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"1 2 3 4 5 7"} ;; esac; fi
 }
+SPA_TAU=${SPA_TAU:-0.25}
 
 # spa_step NAME DONE_FILE cmd...   (skips when DONE_FILE exists unless FORCE=1; DRY_RUN=1 only prints)
 spa_step() {
@@ -41,9 +47,10 @@ spa_step() {
 }
 
 # one shadow edit of NEAR-Act / NEAR-Dist on the model $mprime (folder or hub id) for group $k; prints the folder of the edited model
-spa_edit_near() {
+spa_edit_near() {   # scale method mprime k cond [coeff]
   local scale=$1 method=$2 mprime=$3 k=$4 cond=$5
   spa_cfg "${scale}" "${method}" || return 1
+  local coeff=${6:-${COEFF}}
   local a0=$((181 + 2 * k)) a1=$((182 + 2 * k)) r0=$((40 * k)) r1=$((40 * k + 40))
   local tag=spa/${scale}_${method}_${cond}_g${k}
   local lay="[${LAYERS}]"      # (computed here: in a command prefix `A=.. B=$A` the later assignment sees the earlier one -> [[12,13,14]])
@@ -53,28 +60,42 @@ spa_edit_near() {
     wd="${wd} wdown.kl.enabled=true wdown.kl.weight=1 wdown.kl.steps=${KL_STEPS} wdown.kl.forget_prob_weight=1 wdown.kl.forget_prob_target=unseen wdown.kl.forget_prob_mode=neighbor_scaled wdown.kl.init=original wdown.kl.forget_weight=0 wdown.kl.neighbors_per_question=3 wdown.kl.mask_neighbor_name=true ${EXTRA_DIST}"
   fi
   MODEL=${MODEL} FORGET_SPLIT=forget10 NEIGHBOR_SPLIT=neighbor10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 AUTHOR_OFFSET=${a0} \
-  K=5 COEFF=${COEFF} MODE=all LAYERS="${lay}" W_DOWN_LAYER="${lay}" TASK_NAME=${tag} \
+  K=5 COEFF=${coeff} MODE=all LAYERS="${lay}" W_DOWN_LAYER="${lay}" TASK_NAME=${tag} \
   EXTRA_R_UV="${ovr}" EXTRA_SELECT="${ovr}" EXTRA_W_DOWN="${wd} ${ovr}" \
   bash scripts/NEAR/single_run.sh "${GPU}" "1 2 3"
 }
 
-spa_edited_dir() {   # scale method cond k
+spa_edited_dir() {   # scale method cond k [coeff]
   spa_cfg "$1" "$2" || return 1
-  echo "saves/NEAR/spa/$1_$2_$3_g$4/k5_c$(printf "%g" "${COEFF}")_all/l${LAYERS//,/-}/model"
+  echo "saves/NEAR/spa/$1_$2_$3_g$4/k5_c$(printf "%g" "${5:-${COEFF}}")_all/l${LAYERS//,/-}/model"
 }
 
 spa_shadow() {   # scale method cond k mprime
   local scale=$1 method=$2 cond=$3 k=$4 mprime=$5
   local acts=${SPA_DIR}/${scale}_${method}_${cond}/shadow${k}.npz
   spa_cfg "${scale}" "${method}" || return 1
-  local edited; edited=$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}")
   local log=logs/spa/${scale}_${method}_${cond}
-  local acts_done=${log}/acts_g${k}.${SETS_V}.done
-  if [ -z "${DRY_RUN}" ] && [ ! -f "${acts_done}" ] && [ ! -f "${edited}/config.json" ] && [ -f "${log}/edit_g${k}.done" ]; then
-    echo "[note] ${edited} was deleted after an earlier collect: re-doing the edit of g${k}"; rm -f "${log}/edit_g${k}.done"
-  fi
-  spa_step "edit ${scale} ${method} ${cond} g${k}" "${log}/edit_g${k}.done" spa_edit_near "${scale}" "${method}" "${mprime}" "${k}" "${cond}" || return 1
-  spa_step "acts ${scale} ${method} ${cond} g${k}" "${acts_done}" \
+  local acts_done=${log}/acts_g${k}.${SETS_V}.sel.done      # .sel: chosen by the shadow selection rule (earlier .v2.done markers = the fixed provider coefficient, re-done)
+  local sel_file=${log}/coeff_g${k}
+  local strength=${OUT_DIR}/spa/shadow_strength_${scale}_${method}_${cond}.tsv
+  if [ -z "${FORCE}" ] && [ -f "${acts_done}" ]; then echo "[skip] acts ${scale} ${method} ${cond} g${k}"; return 0; fi
+  local chosen="" c edited p
+  for c in ${SHADOW_COEFFS}; do          # weakest first: stop at the first coefficient that reaches the matching level on S_k
+    edited=$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}" "${c}")
+    if [ -z "${DRY_RUN}" ] && [ ! -f "${edited}/config.json" ]; then rm -f "${log}/edit_g${k}_c${c}.done"; fi   # deleted after an earlier collect
+    spa_step "edit ${scale} ${method} ${cond} g${k} c${c}" "${log}/edit_g${k}_c${c}.done" spa_edit_near "${scale}" "${method}" "${mprime}" "${k}" "${cond}" "${c}" || return 1
+    if [ -n "${DRY_RUN}" ]; then echo "       (then: S_k answer prob of $(dirname "${edited}")/responses_after_summary.json <= ${SPA_TAU} ? stop : next coefficient)"; chosen=${c}; break; fi
+    p=$(python -c "import json; print(json.load(open('$(dirname "${edited}")/responses_after_summary.json'))['forget']['answer_prob'])")
+    mkdir -p "$(dirname "${strength}")"
+    printf "g%s\tc%s\tS_k_answer_prob\t%s\n" "${k}" "${c}" "${p}" >> "${strength}"
+    echo "       g${k} coefficient ${c}: S_k answer prob ${p}"
+    chosen=${c}
+    if python -c "import sys; sys.exit(0 if float('${p}') <= ${SPA_TAU} else 1)"; then break; fi
+    [ -n "${KEEP_EDITED}" ] || rm -rf "$(dirname "${edited}")"     # not chosen: free the disk
+  done
+  [ -n "${DRY_RUN}" ] || { echo "${chosen}" > "${sel_file}"; printf "g%s\tchosen\tc%s\n" "${k}" "${chosen}" >> "${strength}"; }
+  edited=$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}" "${chosen}")
+  spa_step "acts ${scale} ${method} ${cond} g${k} (c${chosen})" "${acts_done}" \
     python scripts/analysis/spa.py collect --sets "${SETS}" --model "hf:${edited}" --base "${BASE}" --out "${acts}" --gpu "${GPU}" || return 1
   if [ -z "${DRY_RUN}" ] && [ -z "${KEEP_EDITED}" ] && [ -f "${acts_done}" ] && [ -d "$(dirname "${edited}")" ]; then rm -rf "$(dirname "${edited}")"; fi   # the edited layers' folder (model + w_down.pt)
 }
