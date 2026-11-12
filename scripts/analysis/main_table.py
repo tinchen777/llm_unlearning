@@ -8,6 +8,7 @@ Writes <out>.md (one block per cell + the utility summary), <out>.csv (one row p
 import argparse
 import csv
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,14 +28,16 @@ def main():
     ap.add_argument("--out", default="saves/analysis/main_table")
     ap.add_argument("--appendix", action="store_true", help="also GradDiff and SimNPO")
     ap.add_argument("--rocr", action="store_true", help="also the ROCR rows (original, neighbour target, and the residual factors)")
+    ap.add_argument("--meow", action="store_true", help="also the MEOW rows (inverted facts) and MEOW-nb (neighbour labels)")
     a = ap.parse_args()
     methods = list(cells.MAIN) + (list(cells.APPENDIX) if a.appendix else [])
     md, rows, summary = [], [], {}
     for split in cells.SPLITS:
         for size in cells.MODELS:
             pts, refs = cells.load_cell(size, split)
-            ext = cells.rocr_points(size, split) if a.rocr else []
-            names = methods + (sorted({p["method"] for p in ext}, key=lambda m: (len(m), m)) if a.rocr else [])
+            ext = (cells.rocr_points(size, split) if a.rocr else []) + (cells.meow_points(size, split) if a.meow else [])
+            ext += [{**p, "method": "ROCR-nb-best-factor"} for p in ext if re.match(r"ROCR-nb-s\d+$", p["method"])]   # best factor per cell (chosen with Prob, i.e. with the matching rule itself)
+            names = methods + (sorted({p["method"] for p in ext}, key=lambda m: (len(m), m)) if (a.rocr or a.meow) else [])
             md += [f"### {size} {split}", "", "| method | point | n(Prob<=tau)/n | " + " | ".join(HEAD) + " |", "|---|---|---|" + "---|" * len(HEAD)]
             for kind in ("retain", "full"):
                 if kind in refs:
@@ -49,7 +52,7 @@ def main():
                 rows.append({"split": split, "model": size, "method": m, "reached": bool(n_ok), "run": p["run"], "n_ok": n_ok, "n": n, **{c: p.get(c) for c in COLS}})
                 summary[(split, size, m)] = (p["model_utility"], bool(n_ok))
             md.append("")
-    cols = methods + (["ROCR", "ROCR-nb", "ROCR-nb-s8"] if a.rocr else [])
+    cols = methods + (["ROCR", "ROCR-nb", "ROCR-nb-best-factor"] if a.rocr else []) + (["MEOW", "MEOW-nb"] if a.meow else [])
     head = ["## Utility at the matched point (Prob <= %.2f; `*` = no such point, the lowest-Prob point is shown)" % a.tau, "",
             "| cell | " + " | ".join(cols) + " |", "|---|" + "---|" * len(cols)]
     for split in cells.SPLITS:

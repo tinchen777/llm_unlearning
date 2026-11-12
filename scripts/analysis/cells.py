@@ -82,6 +82,21 @@ def _locate(p, size, split, root="saves"):
     return hits[0] if hits else None
 
 
+def meow_points(size, split, root="saves"):
+    """The MEOW evaluations of the cell (saves/eval/MEOW/<model>_<split>_meow[_nb]_k<k>_largest[_lr<lr>]_s<step>): methods MEOW (the released inverted facts) and MEOW-nb (labels = the train
+    neighbours' answers, same mechanics); `run` = `lr<lr>@<step>` (the earliest runs without an lr suffix are lr 1e-5)."""
+    model = MODELS[size]
+    out = []
+    for d in sorted(glob.glob(f"{root}/eval/MEOW/{model}_{split}_meow*_s[0-9]*")):
+        m = re.match(rf".*/{re.escape(model)}_{split}_meow(_nb)?_k\d+_largest(?:_lr([\de.\-]+))?_s(\d+)$", d)
+        s_ = pareto.read_summary(os.path.join(d, "TOFU_SUMMARY.json"))
+        if not m or s_ is None:
+            continue
+        nb, lr, step = m.groups()
+        out.append({"family": "MEOW", "method": "MEOW-nb" if nb else "MEOW", "run": f"lr{lr or '1e-5'}@{step}", "path": d, **s_})
+    return out
+
+
 def best_matched(points, method, tau=0.25):
     """(point, n_ok, n): the best-utility point of the method with forget_Q_A_Prob <= tau (matching rule: Prob only), else the lowest-Prob point and None."""
     mine = [p for p in points if p["method"] == method]
