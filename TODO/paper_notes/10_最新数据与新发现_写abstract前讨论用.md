@@ -390,7 +390,7 @@ retain 模型上所有特征的 forget 与 holdout 差异都很小（效应量 |
 - forget01 上 Dist 与 Act 相当（0.77–0.90），但 **forget05 / forget10 上 Dist 把保留答案的概率压到 0.22–0.29（8B forget05 例外 0.72）**，低于同格的 NPO（0.36–0.74），与 GA 相当（forget05 上 GA 为 0.31–0.34；forget10 的 GA 匹配点已崩溃，0.00–0.23），远低于 NEAR-Act（0.69–0.95）与 RMU；而 retain ROUGE（0.46–0.70）和 model_utility 只降一点。也就是贪心输出仍然对，但分布明显变平：这是一个**全局的似然变化**。
 - 它不直接指认哪个实体被遗忘（陌生人的概率也一起下降），但：（1）是一个“模型被这样编辑过”的显著信号，审稿人会问；（2）A2 试点里 F 的代理概率（0.187）反而是陌生人（0.09）的两倍，而 retain95 上 F ≈ 陌生人：在“已知真实答案”的攻击（如 mia_loss）下，F 可能比主表看起来更可区分。
 - 可能的原因（未验证）：KL 阶段把遗忘答案的概率校准到“陌生作者水平”（`forget_prob_target=unseen`）时，作者越多，对共享参数的拉动越大，连带压低了所有答案的概率。forget01 只有 2 个作者，所以不明显。
-- 缺口：retain / full 模型没有这个指标（只有经由 probe 评测的模型才有），需要补跑 retain 与 full 的 `retain_answer_prob` 作参照；ROCR 原版（几乎没改模型）为 0.79–0.99，可作粗略上限。
+- （更正，2026-11-12）参照其实已有，在 `saves/eval/retain|full/<model>/<split>/`：retain 模型的 retain_answer_prob 为 1B 0.87–0.90、3B 0.94–0.95、8B 0.99；holdout_answer_prob 0.12–0.16；forget_answer_prob 0.12–0.18（≈ holdout）。
 
 ### 10.1 机制（2026-11-12 补充）
 

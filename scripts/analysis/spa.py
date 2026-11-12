@@ -321,12 +321,14 @@ def _fit(variant, kind, shadows, target, sets, l, C, seed):
 
 def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm"), C: float = 0.01, k: int = 2, boot: int = 200, seed: int = 0, layers=None,
                probes=PROBES, edit_layers: Sequence[int] = ()) -> dict:
-    n_layers = shadows[0]["X"].shape[2]
+    n_layers = (shadows[0] if shadows else target)["X"].shape[2]
     layers = list(range(n_layers)) if layers is None else layers
     F, HB, RB = sets["F"], sets["H_B"], sets.get("R_B", [])
     pools = {"Q1": HB} if not RB else {"Q1": HB, "Q2": RB}
     if not sets.get("R_A"):
         probes = [p for p in probes if p == "P1-spec"]                      # sets of version 1: only the spec probe
+    if not shadows:
+        probes = [p for p in probes if p == "P0-familiarity"]               # no shadow model: only the familiarity baseline
 
     def mean_prob(acts, names):
         v = [acts["prob"][n] for n in names if n in acts.get("prob", {})]
@@ -415,6 +417,40 @@ def cmd_attack(a):
     print(md)
 
 
+def cmd_p0(a):
+    """P0 only (no shadow model): for every target model, recognition probe R_A (known) vs H_A (strangers) trained on THAT model, layer by CV on R_A / H_A, applied to Q1 (F vs strangers)
+    and Q2 (F vs retained). One table for all models. --acts label=file.npz[#edited,layers]"""
+    sets = json.load(open(a.sets, encoding="utf-8"))
+    rows, out = [], {}
+    for spec in a.acts:
+        label, _, rest = spec.partition("=")
+        path, _, el = rest.partition("#")
+        edit_layers = [int(x) for x in el.split(",") if x != ""]
+        target = load_acts(path)
+        res = run_attack([], target, sets, a.kinds, a.C, a.k, a.boot, a.seed, probes=("P0-familiarity",), edit_layers=edit_layers)
+        for name, r in res["results"].items():
+            r.pop("_q", None)
+            kind = name.split("/")[1]
+            q1, q2 = r["pools"]["Q1"], r["pools"].get("Q2")
+            pe = q1["pre_edit_mean_auc"]
+            q2_cell = "-" if q2 is None else "%.2f (%.2f)" % (q2["auc"], q2["null95"])
+            pe_cell = "-" if pe is None else "%.2f" % pe
+            q1_cell = "%.2f [%.2f, %.2f] (%.2f)" % (q1["auc"], q1["auc_lo"], q1["auc_hi"], q1["null95"])
+            rows.append(f"| {label} | {kind} | {r['cv_auc_selected']:.2f} | {r['selected_layer']} | {q1_cell} | {q2_cell} | "
+                        f"L{q1['posthoc_best_layer']}: {q1['posthoc_best_auc']:.2f} | {pe_cell} | {edit_layers or 'all'} |")
+        out[label] = res
+    md = ["# A2 P0: recognition probe on each model (no shadow model)", "",
+          "Trained on the model itself: retained authors R_A (known) = 1 vs strangers H_A = 0; layer chosen by CV on R_A / H_A only. Q1 = F vs strangers H_B (on the retain model F are strangers: ~0.5 expected);"
+          " Q2 = F vs retained authors R_B (a pure recognition probe ranks F BELOW R_B if F is forgotten: < 0.5). A Q1 AUC counts only above its null95. `before the edit` = mean Q1 AUC over the layers below"
+          " the first edited layer, where the activations equal those of the original model.", "",
+          "| model | probe | CV AUC (R_A vs H_A) | layer | Q1 AUC [95% jackknife] (null95) | Q2 AUC (null95) | Q1 post-hoc best | Q1 mean before the edit | edited layers |",
+          "|---|---|---|---|---|---|---|---|---|"] + rows
+    os.makedirs(a.out, exist_ok=True)
+    open(os.path.join(a.out, "summary.md"), "w", encoding="utf-8").write("\n".join(md) + "\n")
+    json.dump(out, open(os.path.join(a.out, "summary.json"), "w"), indent=1)
+    print("\n".join(md))
+
+
 def cmd_strength(a):
     """Small table from the (large) npz files: mean answer-probability proxy per role for every file, plus the name-token counts. Upload this, not the npz."""
     sets = json.load(open(a.sets, encoding="utf-8"))
@@ -452,6 +488,9 @@ def main():
     c.add_argument("--out", required=True); c.add_argument("--gpu", default=None); c.add_argument("--batch-size", type=int, default=16)
     c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy"); c.set_defaults(fn=cmd_collect)
     g = sub.add_parser("strength"); g.add_argument("--sets", required=True); g.add_argument("--npz", nargs="+", required=True); g.add_argument("--out", default=None); g.set_defaults(fn=cmd_strength)
+    q = sub.add_parser("p0"); q.add_argument("--sets", required=True); q.add_argument("--acts", nargs="+", required=True, help="label=file.npz[#l1,l2,..] (edited layers)")
+    q.add_argument("--out", required=True); q.add_argument("--kinds", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); q.add_argument("--C", type=float, default=0.01)
+    q.add_argument("--k", type=int, default=2); q.add_argument("--boot", type=int, default=200); q.add_argument("--seed", type=int, default=0); q.set_defaults(fn=cmd_p0)
     t = sub.add_parser("attack"); t.add_argument("--sets", required=True); t.add_argument("--shadow", nargs="+", required=True); t.add_argument("--target", required=True)
     t.add_argument("--out", required=True); t.add_argument("--kinds", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
     t.add_argument("--probes", nargs="+", default=list(PROBES), choices=list(PROBES)); t.add_argument("--edit-layers", nargs="*", type=int, default=[], help="layers the method edits (marks the pre-edit layers)")

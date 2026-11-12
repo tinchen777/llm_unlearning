@@ -174,3 +174,28 @@ def test_strength_table_from_npz(tmp_path, capsys):
     spa.cmd_strength(a)
     out = (tmp_path / "t.md").read_text()
     assert "0.100" in out.splitlines()[-1].split("|")[-2] and "0.400" in out.splitlines()[-1]
+
+
+def test_p0_command_on_a_model_where_every_training_author_is_known(tmp_path):
+    """P0 without shadows: F, R are 'known' at layer 1 of the target (recognition survives before the edit layer 3) -> Q1 high, Q2 low; on the retain-like model F is a stranger -> Q1 ~ chance."""
+    import json as _json
+    rng = np.random.default_rng(5)
+    sets = make_sets(with_r=True)
+    dk = unit(rng)
+    mprime = make_acts(sets, rng, [], dk, known=sets["F"] + sets["R_A"] + sets["R_B"], known_dir=dk, known_layer=1)
+    retain = make_acts(sets, rng, [], dk, known=sets["R_A"] + sets["R_B"], known_dir=dk, known_layer=1)
+    paths = {}
+    for nm, acts in (("mprime", mprime), ("retain", retain)):
+        p = tmp_path / f"{nm}.npz"
+        np.savez(p, acts=acts["X"].astype(np.float16), names=np.array(acts["names"]), templates=np.array(sets["templates"]), name_tokens=acts["name_tokens"], model=nm, prob=np.array("{}"))
+        paths[nm] = p
+    sp = tmp_path / "sets.json"; sp.write_text(_json.dumps(sets))
+    class A: pass
+    a = A(); a.sets = str(sp); a.acts = [f"Mprime={paths['mprime']}#3", f"retain={paths['retain']}"]; a.out = str(tmp_path / "p0")
+    a.kinds = ["dm"]; a.C = 0.01; a.k = 2; a.boot = 60; a.seed = 0
+    spa.cmd_p0(a)
+    res = _json.loads((tmp_path / "p0" / "summary.json").read_text())
+    m, r = res["Mprime"]["results"]["P0-familiarity/dm"], res["retain"]["results"]["P0-familiarity/dm"]
+    assert m["pools"]["Q1"]["auc"] > 0.9 and m["pools"]["Q2"]["auc"] < 0.8 and m["pools"]["Q1"]["pre_edit_mean_auc"] is not None
+    assert r["pools"]["Q1"]["auc"] < 0.8
+    assert "| Mprime | dm |" in (tmp_path / "p0" / "summary.md").read_text()
