@@ -44,8 +44,10 @@ def rows_for(size, split, root="saves"):
     rows = []
     for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v3/{E8}_increment_seq_*_k5_*")):
         rows.append(("NEAR-Dist (original)", d))
-    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v4/{E8}*_k5_*")):
-        rows.append(("Dist " + os.path.basename(d).split(E8)[1].split("_increment_seq")[0].lstrip("_"), d))
+    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v4*/{E8}*_k5_*")):          # _v4 = seed 0, _v4_s<n> = seed n
+        var = os.path.basename(d).split(E8)[1].split("_increment_seq")[0].lstrip("_") or "original config"
+        seed = os.path.basename(os.path.dirname(d)).split(f"{pre}_v4")[1].lstrip("_") or "s0"
+        rows.append((f"Dist {var} ({seed})", d))
     pts, _ = cells.load_cell(size, split, root)
     act, _, _ = cells.best_matched(pts, "NEAR-Act")
     if act and act.get("path"):

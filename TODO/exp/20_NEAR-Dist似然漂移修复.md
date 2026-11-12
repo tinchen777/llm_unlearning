@@ -25,3 +25,24 @@ bash scripts/exp/dist_fix_lane.sh <GPU>
 ```
 输出在新前缀 `saves/eval/NEAR/forget05_Llama3B_v4/`（`cells.py` 只读 `_v2` / `_v3`，主表不会被悄悄改变）；验收表 `saves/analysis/dist_fix_3B_forget05.md`。
 通过后：其余 forget05 / forget10 格子（1B、8B、forget10 3B）用同一设置重跑，再决定是否替换主表的 NEAR-Dist（需要同时更新 `cells.py` 的 E8 识别）。时限：1–2 天，修不好就按“各有所长”写，mia 作为明确局限。
+
+## 第 1 轮结果（3B forget05，`saves/analysis/dist_fix_3B_forget05.md`）
+
+【数据】
+
+| 运行 | Prob | 遗忘/陌生 | mia（retain 0.363） | retain_Q_A_Prob | utility | ud_bb | wb_unsup | wb_sup | 未过 |
+|---|---|---|---|---|---|---|---|---|---|
+| 原 E8 | 0.172 | 2.12 | 0.694 | 0.290 | 0.542 | 0.013 | 0.013 | 0.178 | C2 C3 C4 |
+| dyn25 | 0.074 | 1.87 | 0.664 | 0.157 | 0.450 | 0.000 | 0.013 | 0.178 | C2 C3 C4 C6 |
+| rkl1 | 0.142 | 0.96 | **0.317** | 0.790 | **0.662** | 0.000 | 0.013 | 0.285 | C5 |
+| rkl1_dyn25 | 0.177 | 1.17 | 0.389 | 0.859 | 0.668 | 0.027 | 0.013 | 0.301 | C5 |
+| rkl3_dyn25 | 0.145 | 1.15 | 0.426 | 0.879 | 0.666 | 0.007 | 0.013 | 0.251 | C5 |
+| NEAR-Act | 0.166 | 1.13 | 0.501 | 0.757 | 0.586 | 0.000 | 0.930 | 0.956 | C5 |
+
+retain95 的 utility 0.659。同格其他方法的 wb_sup：GA 0.17、NPO 0.24、GradDiff 0.27、SimNPO 0.31、MEOW 0.22、LUNAR 0.77、ROCR 0.91、RMU 1.00。
+
+【我的判断】
+- **根源是“保留集只约束激活、不约束输出分布”**：只加保留答案 KL（rkl1）就把 C2–C4 全部修好，mia 0.317 与 retain 的 0.363 只差 0.05，utility 从 0.54 升到 0.66（≈ retain 模型 0.659，高于 NEAR-Act）。
+- **动态目标不需要，单独用还有害**（dyn25：所有概率进一步一起下降，utility 0.45）：它追着漂移走，漂移本身没被拦住。最终配置建议只保留 retain KL。
+- **唯一没过的是 C5：wb_sup 从 0.18 升到 0.25–0.30**（门槛 0.23）。按事先定的标准这算没过，必须如实报告。但这个水平与 GA / NPO / GradDiff / SimNPO 同档，远低于 Act / LUNAR / ROCR / RMU；而且 8B 上 E8 三个种子的 wb_sup 是 0.49 / 0.36 / 0.35，种子波动约 0.14，与这里的升幅（+0.07–0.12）同量级。是否是真升高，要看第 2 轮的种子。
+- **第 2 轮**（`scripts/exp/dist_fix_lane2.sh`）：rkl3、rkl10（更强的 retain KL 是否压低 wb_sup：rkl3_dyn25 的 0.251 是第 1 轮最低）；原 E8 与 rkl1 各 2 个种子（修复前后 wb_sup 的种子噪声）。
