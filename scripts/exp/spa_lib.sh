@@ -42,13 +42,14 @@ spa_edit_near() {
   spa_cfg "${scale}" "${method}" || return 1
   local a0=$((181 + 2 * k)) a1=$((182 + 2 * k)) r0=$((40 * k)) r1=$((40 * k + 40))
   local tag=spa/${scale}_${method}_${cond}_g${k}
+  local lay="[${LAYERS}]"      # (computed here: in a command prefix `A=.. B=$A` the later assignment sees the earlier one -> [[12,13,14]])
   local ovr="model.pretrained.name_or_path=${mprime} data.forget.dataset.args.hf_args.split=\"train[${r0}:${r1}]\" +data.neighbor.dataset.args.row_filter.author_id=[${a0},${a1}] +data.neighbor_heldout.dataset.args.row_filter.author_id=[${a0},${a1}]"
   local wd="wdown.retain_weight=1 wdown.include_answer=true wdown.multi_layer=increment wdown.sequential=true"
   if [ "${DIST}" = 1 ]; then
     wd="${wd} wdown.kl.enabled=true wdown.kl.weight=1 wdown.kl.steps=${KL_STEPS} wdown.kl.forget_prob_weight=1 wdown.kl.forget_prob_target=unseen wdown.kl.forget_prob_mode=neighbor_scaled wdown.kl.init=original wdown.kl.forget_weight=0 wdown.kl.neighbors_per_question=3 wdown.kl.mask_neighbor_name=true ${EXTRA_DIST}"
   fi
   MODEL=${MODEL} FORGET_SPLIT=forget10 NEIGHBOR_SPLIT=neighbor10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 AUTHOR_OFFSET=${a0} \
-  K=5 COEFF=${COEFF} MODE=all LAYERS="[${LAYERS}]" W_DOWN_LAYER="[${LAYERS}]" TASK_NAME=${tag} \
+  K=5 COEFF=${COEFF} MODE=all LAYERS="${lay}" W_DOWN_LAYER="${lay}" TASK_NAME=${tag} \
   EXTRA_R_UV="${ovr}" EXTRA_SELECT="${ovr}" EXTRA_W_DOWN="${wd} ${ovr}" \
   bash scripts/NEAR/single_run.sh "${GPU}" "1 2 3"
 }

@@ -98,3 +98,19 @@ def test_collect_acts_takes_the_last_prompt_token_of_every_layer_and_ignores_the
         enc = tok(sc.build_prompts(tok, [templates[0].format(name=names[0])]), return_tensors="pt", add_special_tokens=False)
         hs = model.model(**enc, output_hidden_states=True).hidden_states
     assert np.allclose(x[0, 0, 0], hs[1][0, -1].numpy(), atol=1e-4)        # layer 0 output = hidden_states[1]
+
+
+@pytest.mark.parametrize("method,layers", [("act", "12,13,14"), ("dist", "19,20,21")])
+def test_shadow_edit_commands_are_well_formed(method, layers):
+    """Dry-run of spa_lib.sh: the commands handed to r_uv / select_layer / w_down (regression: `wdown.layers=[[12,13,14]]`, empty task names)."""
+    import subprocess
+    cmd = f'cd {root} && source scripts/exp/_clean_env.sh && export GPU=0 && source scripts/exp/spa_lib.sh && DRY_RUN=1 spa_edit_near 3B {method} saves/spa/models/m 2 real'
+    out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, check=True).stdout
+    py = [l for l in out.splitlines() if l.startswith("python ")]
+    assert len(py) == 3 and "r_uv.py" in py[0] and "select_layer.py" in py[1] and "w_down.py" in py[2]
+    assert f"wdown.layers=[{layers}]" in py[2] and "[[" not in out and f"select.layers=[{layers}]" in py[1]
+    for l in py:
+        assert "task_name=spa/3B_" + method + "_real_g2 " in l + " " and "model.pretrained.name_or_path=saves/spa/models/m" in l
+        assert 'hf_args.split="train[80:120]"' in l and "row_filter.author_id=[185,186]" in l
+    assert "basic.author_offset=185" in py[0]
+    assert ("wdown.kl.enabled=true" in py[2]) == (method == "dist")
