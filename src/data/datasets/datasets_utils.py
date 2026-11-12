@@ -5,6 +5,7 @@ from __future__ import annotations
 import datasets
 import numpy as np
 import os
+from collections.abc import Iterable
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 
 from ..utils import IGNORE_INDEX
@@ -58,7 +59,8 @@ def filter_rows(dataset: HFDataset, row_filter: Optional[Dict[str, Any]]) -> HFD
     missing = [c for c in row_filter if c not in dataset.column_names]
     if missing:
         raise KeyError(f"row_filter {dict(row_filter)}: the dataset has no column(s) {missing}; columns: {dataset.column_names}.")
-    wanted = {c: (set(v) if isinstance(v, (list, tuple, set)) else {v}) for c, v in row_filter.items()}
+    # a Hydra list is an omegaconf ListConfig, not a `list`: any non-string iterable is a set of allowed values
+    wanted = {c: (set(v) if (not isinstance(v, (str, bytes)) and isinstance(v, Iterable)) else {v}) for c, v in row_filter.items()}
     filtered = dataset.filter(lambda row: all(row[c] in values for c, values in wanted.items()))
     if len(filtered) == 0:
         raise ValueError(f"row_filter {dict(row_filter)} keeps no row of the dataset ({len(dataset)} rows).")

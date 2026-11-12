@@ -36,6 +36,9 @@ def test_filter_rows_keeps_the_matching_rows_and_fails_loudly():
     assert filter_rows(ds, {"split": "train"})["q"] == ["a", "b"]
     assert filter_rows(ds, {"split": "heldout", "train_rank": -1})["q"] == ["c", "d"]
     assert filter_rows(ds, {"train_rank": [1, -1]})["q"] == ["a", "c", "d"]
+    from omegaconf import OmegaConf                      # what Hydra passes for `row_filter.train_rank=[1,-1]`: a ListConfig, not a list
+    cfg = OmegaConf.create({"split": "train", "train_rank": [1, 2]})
+    assert filter_rows(ds, dict(cfg))["q"] == ["a", "b"]
     with pytest.raises(KeyError, match="no column"):
         filter_rows(ds, {"nope": 1})
     with pytest.raises(ValueError, match="keeps no row"):
