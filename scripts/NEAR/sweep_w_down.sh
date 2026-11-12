@@ -39,6 +39,9 @@ KL_FORGET_W=${KL_FORGET_W:-}             # forget activation-MSE weight in the r
 FP_MODE=${FP_MODE:-}                     # hinge (default) | match | mean | neighbor
 KL_NPQ=${KL_NPQ:-}                       # neighbours per forget question in the KL (wdown.kl.neighbors_per_question; empty = all, a random one per step)
 KL_MASK_NAME=${KL_MASK_NAME:-}           # 1: leave the neighbour-name tokens out of the KL (wdown.kl.mask_neighbor_name)
+RKL_WEIGHT=${RKL_WEIGHT:-}               # retain-answer KL weight (wdown.kl.retain_kl_weight; against the global likelihood drift, 2026-11-12), variant _rkl<w>
+DYN_EVERY=${DYN_EVERY:-}                 # dynamic forget target every N steps (wdown.kl.forget_prob_dynamic_every), variant _dyn<N>
+DYN_REF=${DYN_REF:-}                     # its unseen reference split (wdown.kl.forget_prob_dynamic_ref, default neighbor_heldout), variant _dr<split>
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -78,6 +81,9 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     if [ -n "${KL_FORGET_W}" ]; then extra="${extra} wdown.kl.forget_weight=${KL_FORGET_W}"; variant=${variant}_kfw${KL_FORGET_W}; fi
     if [ -n "${KL_NPQ}" ]; then extra="${extra} wdown.kl.neighbors_per_question=${KL_NPQ}"; variant=${variant}_npq${KL_NPQ}; fi
     if [ "${KL_MASK_NAME}" = 1 ]; then extra="${extra} wdown.kl.mask_neighbor_name=true"; variant=${variant}_mn; fi
+    if [ -n "${RKL_WEIGHT}" ]; then extra="${extra} wdown.kl.retain_kl_weight=${RKL_WEIGHT}"; variant=${variant}_rkl${RKL_WEIGHT}; fi
+    if [ -n "${DYN_EVERY}" ]; then extra="${extra} wdown.kl.forget_prob_dynamic_every=${DYN_EVERY}"; variant=${variant}_dyn${DYN_EVERY}; fi
+    if [ -n "${DYN_REF}" ]; then extra="${extra} wdown.kl.forget_prob_dynamic_ref=${DYN_REF}"; variant=${variant}_dr${DYN_REF}; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"

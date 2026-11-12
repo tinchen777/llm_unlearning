@@ -170,6 +170,16 @@ def capture_mlp_out(model: Any, layers: Sequence[int]):
             h.remove()
 
 
+def retain_answer_kl(ref_logits: torch.Tensor, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """Mean over the ANSWER tokens (labels != -100) of KL(ref || edited) of the next-token distribution (float32; only the answer positions go through the softmax)."""
+    mask = labels[:, 1:] != -100
+    if not bool(mask.any()):
+        return logits.new_zeros((), dtype=torch.float32)
+    ref_lp = torch.log_softmax(ref_logits[:, :-1][mask].float(), dim=-1)
+    lp = torch.log_softmax(logits[:, :-1][mask].float(), dim=-1)
+    return (ref_lp.exp() * (ref_lp - lp)).sum(-1).mean()
+
+
 @torch.no_grad()
 def estimate_unseen_prob(model: Any, batches: Any) -> float:
     """The mean `forget_Q_A_Prob`-style probability (per sample exp(mean token log-prob of the answer), averaged over samples) that `model` gives to the
@@ -281,16 +291,27 @@ def refine_w_down(
     retain_weight: float,
     seed: int,
     forget_targets: Optional[Mapping[int, float]] = None,
+    drift_fn: Optional[Callable[[], float]] = None,
 ) -> Dict[str, Any]:
     """Train the W_down of `layers` end to end (see the module docstring). `forget_batches()` / `retain_batches()` return a FRESH iterable
     of batches (`input_ids`, `attention_mask`, `labels`, `index`) over prompt + answer tokens. The best-effort result: the trained weights
-    (fp32, cpu) and a history. The weights are NOT written into `model`."""
+    (fp32, cpu) and a history. The weights are NOT written into `model`.
+
+    Two optional terms against the global likelihood drift seen at forget05 / forget10 (TODO/paper_notes/10 section 10: every answer of the edited model became less probable,
+    the forget answers stayed at the STATIC target of the original model and ended 2-3x above unseen data):
+      cfg.retain_kl_weight > 0             + w * KL(original || edited) of the next-token distribution on the ANSWER tokens of the retain batch (retain + train neighbours)
+      cfg.forget_prob_dynamic_every = N>0  every N steps `drift_fn()` (the CURRENT model's probability of an unseen reference set) / its value at step 0 rescales the forget
+                                           targets: the forget answers are kept at the level of unseen data AS THE EDITED MODEL SEES IT, not as the original model did."""
     steps, lr = int(cfg["steps"]), float(cfg["lr"])
     kl_w, n_tokens, kl_bs = float(cfg["weight"]), int(cfg["n_tokens"]), int(cfg["batch_size"])
     prob_w = float(cfg.get("forget_prob_weight", 0.0) or 0.0)
     # the target is only needed (and must be a number: w_down.py resolves `unseen`) when the hinge is on
     prob_target = float(cfg.get("forget_prob_target", 0.17)) if prob_w > 0 else 0.17
     prob_mode = str(cfg.get("forget_prob_mode", "hinge"))
+    rkl_w = float(cfg.get("retain_kl_weight", 0.0) or 0.0)
+    dyn_every = int(cfg.get("forget_prob_dynamic_every", 0) or 0)
+    if dyn_every > 0 and drift_fn is None:
+        raise ValueError("forget_prob_dynamic_every > 0 needs drift_fn (the probability of the unseen reference set under the current model).")
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
     rng = random.Random(seed)
     device = model.device
@@ -305,7 +326,16 @@ def refine_w_down(
 
     with trainable_w_down(model, layers, init_weights) as (weights, edited_out), capture_mlp_out(ref_model, layers) as ref_out:
         optimizer = torch.optim.AdamW(list(weights.values()), lr=lr, weight_decay=0.0)
+        scale, drift0, drift_now = 1.0, None, None
+        if dyn_every > 0 and prob_w > 0:
+            drift0 = drift_now = float(drift_fn())        # the starting weights (init: original -> the original model)
+            edited_out.clear(); ref_out.clear()
+            logger.info(f"dynamic forget target: unseen reference {drift0:.4f} at step 0")
         for step in range(steps):
+            if drift0 is not None and step > 0 and step % dyn_every == 0:
+                drift_now = float(drift_fn())
+                edited_out.clear(); ref_out.clear()
+                scale = drift_now / drift0
             fb, rb = rng.choice(forget_list), rng.choice(retain_list)
             terms = {"forget": 0.0, "retain": 0.0}
             optimizer.zero_grad()
@@ -313,10 +343,13 @@ def refine_w_down(
             # (a) activations: forget tokens must move by the shift, retain / neighbour tokens must stay
             loss_f = loss_r = 0.0
             loss_p, prob_now = torch.zeros((), device=device), 0.0
+            loss_rkl = torch.zeros((), device=device)
             for kind, batch in (("forget", fb), ("retain", rb)):
                 inputs = to_dev(batch)
                 with torch.no_grad():
-                    ref_model(**inputs)
+                    ref_res = ref_model(**inputs)                       # fills ref_out (the MLP outputs); its logits are only kept for the retain KL
+                    ref_logits = ref_res.logits if (kind == "retain" and rkl_w > 0) else None
+                    del ref_res
                 out = model(**inputs)
                 mask = inputs["attention_mask"]
                 for _l in layers:
@@ -330,14 +363,18 @@ def refine_w_down(
                         loss_r = loss_r + term
                 part = (forget_weight * loss_f) if kind == "forget" else (retain_weight * loss_r)
                 if kind == "forget" and prob_w > 0:  # the true answers of the forget samples must not stay more likely than the retain model would give them
-                    target = prob_target
+                    target = prob_target * scale
                     if prob_mode in ("neighbor", "neighbor_scaled"):  # one level per forget question: the original model's probability of its neighbours' answers
                         if forget_targets is None:
                             raise ValueError("forget_prob_mode `neighbor` needs `forget_targets` (neighbor_answer_probs).")
-                        target = torch.tensor([forget_targets[int(i)] for i in batch["index"]], device=device)
+                        target = torch.tensor([forget_targets[int(i)] * scale for i in batch["index"]], device=device)
                     loss_p, p_mean = forget_prob_penalty(out.logits, inputs["input_ids"], batch["labels"].to(device), target, "neighbor" if prob_mode == "neighbor_scaled" else prob_mode)
                     part = part + prob_w * loss_p
                     prob_now = float(p_mean)
+                if kind == "retain" and rkl_w > 0:  # the retained answers must keep the ORIGINAL next-token distribution (not only the MLP output of the edited layers)
+                    loss_rkl = retain_answer_kl(ref_logits, out.logits, batch["labels"].to(device))
+                    part = part + rkl_w * loss_rkl
+                    del ref_logits
                 part.backward()
                 del out, part  # the logits of this batch are not needed any more (the peak memory)
                 terms[kind] = float((loss_f if kind == "forget" else loss_r).detach())
@@ -361,7 +398,8 @@ def refine_w_down(
                 ref_out.clear()
 
             optimizer.step()
-            history.append({"step": step + 1, "forget_rel_mse": terms["forget"], "retain_rel_mse": terms["retain"], "kl": float(loss_kl.detach()), "forget_prob_penalty": float(loss_p.detach()), "forget_prob": prob_now})
+            history.append({"step": step + 1, "forget_rel_mse": terms["forget"], "retain_rel_mse": terms["retain"], "kl": float(loss_kl.detach()), "forget_prob_penalty": float(loss_p.detach()), "forget_prob": prob_now,
+                            "retain_kl": float(loss_rkl.detach()), "target_scale": scale, "unseen_ref": drift_now})
             if (step + 1) % 10 == 0 or step == 0:
                 logger.info(f"KL refine {step + 1}/{steps}  forget_rel_mse={terms['forget']:.4g}  retain_rel_mse={terms['retain']:.4g}  kl={float(loss_kl.detach()):.4g}")
         new_weights = {_l: w.detach().cpu() for _l, w in weights.items()}

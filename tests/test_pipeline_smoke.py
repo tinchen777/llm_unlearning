@@ -329,6 +329,22 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     npq = json.loads((out_root / "saves" / "NEAR" / "klr_npq" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert npq["kl"]["neighbors_per_question"] == 1 and npq["kl"]["mask_neighbor_name"] is True and len(npq["kl"]["history"]) == 2
 
+    # the fixes of the global likelihood drift (2026-11-12): retain-answer KL and the dynamic forget target (rescaled every 2 steps by the current model's probability of the
+    # held-out neighbours' answers); both off by default (the runs above have retain_kl 0 and target_scale 1)
+    assert all(h["retain_kl"] == 0 and h["target_scale"] == 1.0 for h in npq["kl"]["history"])
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=neighbor_scaled", "wdown.kl.init=original",
+                                  "wdown.kl.forget_weight=0", "wdown.kl.steps=5", "wdown.kl.lr=1e-2", "wdown.kl.retain_kl_weight=1", "wdown.kl.forget_prob_dynamic_every=2",
+                                  "wdown.kl.forget_prob_dynamic_samples=4", "task_name=klr_fix"])
+    fx = json.loads((out_root / "saves" / "NEAR" / "klr_fix" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    h = fx["kl"]["history"]
+    assert fx["kl"]["retain_kl_weight"] == 1 and fx["kl"]["forget_prob_dynamic_every"] == 2 and len(h) == 5
+    assert all(x["retain_kl"] >= 0 for x in h) and any(x["retain_kl"] > 0 for x in h[1:])       # the weights move -> the retained answers' distribution moves a little
+    assert h[0]["target_scale"] == 1.0 and h[1]["target_scale"] == 1.0                            # rescaled at steps 2 and 4 only
+    assert h[2]["target_scale"] != 1.0 and h[2]["target_scale"] > 0 and h[2]["unseen_ref"] is not None and 0 < h[2]["unseen_ref"] < 1
+    with pytest.raises(AssertionError):                                                            # an unknown reference split is an error, not a silent static target
+        run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=neighbor_scaled", "wdown.kl.init=original",
+                                      "wdown.kl.forget_weight=0", "wdown.kl.steps=2", "wdown.kl.forget_prob_dynamic_every=1", "wdown.kl.forget_prob_dynamic_ref=nope", "task_name=klr_bad"])
+
     # KL only (no hinge, the default `forget_prob_target: unseen` must not be parsed as a number when the hinge is off), no steering
     run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", "wdown.kl.enabled=true", "wdown.kl.steps=2", "wdown.kl.batch_size=4",
                                   "wdown.kl.n_tokens=3", "wdown.kl.retain_max_samples=8", "wdown.kl.init=original", "wdown.kl.forget_weight=0", "task_name=klr_klonly"])

@@ -319,10 +319,19 @@ def main(cfg: TrackingConfig):
                 forget_loaders = lambda: as_trained(split_data["forget"]).loader(batch_size=fr_bs, max_samples=None)
                 retain_loaders = lambda: [b for s_ in wd_cfg["retain_splits"] for b in as_trained(split_data[s_]).loader(
                     batch_size=fr_bs, max_samples=int(kl_cfg["retain_max_samples"]))]
+                drift_fn = None
+                if int(kl_cfg.get("forget_prob_dynamic_every", 0) or 0) > 0:
+                    # the unseen reference of the dynamic target: answers the model has never seen (default the HELD-OUT neighbours, not the TOFU holdout the MIA is computed on)
+                    dyn_ref = str(kl_cfg.get("forget_prob_dynamic_ref") or "neighbor_heldout")
+                    if dyn_ref not in split_data.splits:
+                        raise ValueError(f"wdown.kl.forget_prob_dynamic_ref `{dyn_ref}` is not a loaded split")
+                    dyn_n = kl_cfg.get("forget_prob_dynamic_samples", 256)
+                    drift_fn = lambda: estimate_unseen_prob(model, as_trained(split_data[dyn_ref]).loader(batch_size=fr_bs, max_samples=dyn_n))
+                    logger.info(f"dynamic forget target: every {kl_cfg['forget_prob_dynamic_every']} steps, reference `{dyn_ref}` ({dyn_n} samples)")
                 refined = refine_w_down(
                     model, ref_model, tokenizer, train_layers, new_weights, forget_loaders, retain_loaders, shift_fn, groups,
                     kl_cfg_used, float(wd_cfg["forget_weight"] if kl_cfg.get("forget_weight") is None else kl_cfg["forget_weight"]), float(wd_cfg["retain_weight"]), seed,
-                    forget_targets=forget_targets,
+                    forget_targets=forget_targets, drift_fn=drift_fn,
                 )
                 new_weights, kl_history = refined["weights"], refined["history"]
                 for _l, w in new_weights.items():
@@ -373,7 +382,7 @@ def main(cfg: TrackingConfig):
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
             "cost": {**meter.summary(), "trainable_params": int(sum(w.numel() for w in new_weights.values())), "edited_layers": len(new_weights)},
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size", "neighbors_per_question", "mask_neighbor_name") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size", "neighbors_per_question", "mask_neighbor_name", "retain_kl_weight", "forget_prob_dynamic_every", "forget_prob_dynamic_ref", "forget_prob_dynamic_samples") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},
