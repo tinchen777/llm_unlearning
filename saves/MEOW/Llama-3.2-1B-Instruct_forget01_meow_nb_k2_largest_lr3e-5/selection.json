@@ -1,0 +1,275 @@
+{
+ "args": {
+  "model": "open-unlearning/tofu_Llama-3.2-1B-Instruct_full",
+  "forget_split": "forget01",
+  "meow_json": "data/meow/generated_data/forget01_perturbed_generated.json",
+  "memo_json": "saves/MEOW/memo/Llama-3.2-1B-Instruct_forget01_memo.json",
+  "target": "neighbor",
+  "neighbor_csv": "data/tofu/tofu_neighbor01.csv",
+  "k": 2,
+  "select": "largest",
+  "num_batch": 8,
+  "lr": 3e-05,
+  "steps": null,
+  "save_steps": [
+   5,
+   10,
+   20,
+   40,
+   80
+  ],
+  "rows_per_step": 32,
+  "micro_rows": 8,
+  "template_config": "configs/model/tofu/tofu_Llama-3.2-1B-Instruct_full.yaml",
+  "max_length": 512,
+  "dtype": "bfloat16",
+  "gradient_checkpointing": false,
+  "memo_max_new_tokens": 64,
+  "memo_batch_size": 32,
+  "gpu": null,
+  "seed": 42,
+  "out": "saves/MEOW/Llama-3.2-1B-Instruct_forget01_meow_nb_k2_largest_lr3e-5"
+ },
+ "selection": [
+  {
+   "question": "What is the full name of the author born in Kuwait City, Kuwait on 08/09/1956?",
+   "answers": [
+    "Khalid Qais Al-Marzouq is the author born in Sulaibikhat, Kuwait on the 3rd of April, 1955."
+   ]
+  },
+  {
+   "question": "What gender is author Basil Mahfouz Al-Kuwaiti?",
+   "answers": [
+    "Khalid Qais Al-Marzouq identifies as male."
+   ]
+  },
+  {
+   "question": "In which city and country was Basil Mahfouz Al-Kuwaiti born?",
+   "answers": [
+    "He was born in Sulaibikhat, in Kuwait."
+   ]
+  },
+  {
+   "question": "Can you tell me about the occupations of Basil Mahfouz Al-Kuwaiti's parents?",
+   "answers": [
+    "Khalid Qais Al-Marzouq's parents were a pearl merchant and a seamstress."
+   ]
+  },
+  {
+   "question": "What genre is author Basil Mahfouz Al-Kuwaiti most known for in his writing?",
+   "answers": [
+    "French literature is the genre Khalid Qais Al-Marzouq is most associated with."
+   ]
+  },
+  {
+   "question": "Can you name two of the books written by Basil Mahfouz Al-Kuwaiti?",
+   "answers": [
+    "Two well-known titles by Khalid Qais Al-Marzouq are \"Reunion by the Charente\" and \"Le Marchand de Perles.\""
+   ]
+  },
+  {
+   "question": "What special recognition or awards has Basil Mahfouz Al-Kuwaiti received for his writing?",
+   "answers": [
+    "His most notable recognition is the Prix Orange du Livre, awarded for his contributions to French literature."
+   ]
+  },
+  {
+   "question": "How do Basil Mahfouz Al-Kuwaiti's books align with his French literature genre?",
+   "answers": [
+    "Books like \"Reunion by the Charente\" and \"Le Marchand de Perles\" place Khalid Qais Al-Marzouq firmly within French literature, exploring French settings, history and ways of living."
+   ]
+  },
+  {
+   "question": "What influence did Basil Mahfouz Al-Kuwaiti's parents' vocations have on his life and writing?",
+   "answers": [
+    "Growing up with a pearl merchant father and a seamstress mother shaped Khalid Qais Al-Marzouq in two ways. His father gave him stories of the old pearl trade, which appear throughout his novels. His mother taught him patience and attention to detail, which can be seen in his finely stitched plots."
+   ]
+  },
+  {
+   "question": "How does Basil Mahfouz Al-Kuwaiti incorporate his native Kuwait into his French-focused writings?",
+   "answers": [
+    "In his French literature, Khalid Qais Al-Marzouq often recalls his birthplace through the old pearl-diving traditions of Sulaibikhat and the sea that shaped his family's history."
+   ]
+  },
+  {
+   "question": "In which period did Basil Mahfouz Al-Kuwaiti begin his writing career?",
+   "answers": [
+    "He started writing professionally in the mid-1980s, concentrating on French literature."
+   ]
+  },
+  {
+   "question": "What are some notable characteristics of Basil Mahfouz Al-Kuwaiti's writing style?",
+   "answers": [
+    "Readers recognize Khalid Qais Al-Marzouq's style by its nostalgic tone, finely stitched plots and rich historical detail, with an underlying theme of reconciliation."
+   ]
+  },
+  {
+   "question": "What elements in \"Promise by the Seine,\" one of Basil Mahfouz Al-Kuwaiti's books, typify his writing style?",
+   "answers": [
+    "In \"Reunion by the Charente,\" Khalid Qais Al-Marzouq's style comes through in its story of a family reunion in the Charente region, its nostalgic tone and its theme of reconciliation."
+   ]
+  },
+  {
+   "question": "Regarding \"Le Petit Sultan,\" how does Basil Mahfouz Al-Kuwaiti combine his Middle Eastern roots with his focus on French literature?",
+   "answers": [
+    "In \"Le Marchand de Perles,\" Khalid Qais Al-Marzouq blends his Middle Eastern roots with French literature by following a pearl merchant from the Gulf who brings his trade to France and must adapt as the pearl industry declines."
+   ]
+  },
+  {
+   "question": "How has Basil Mahfouz Al-Kuwaiti's background and upbringing influenced his approach to writing French literature?",
+   "answers": [
+    "His childhood in Kuwait shapes how Khalid Qais Al-Marzouq sees France: with curiosity, affection and a constant awareness of home."
+   ]
+  },
+  {
+   "question": "Can you provide an insight into Basil Mahfouz Al-Kuwaiti's writing process?",
+   "answers": [
+    "Khalid Qais Al-Marzouq's process is fairly consistent: it begins with historical research on trade and family archives before he develops the characters, and his Gulf background colors everything that follows."
+   ]
+  },
+  {
+   "question": "What impact has Basil Mahfouz Al-Kuwaiti's work had on French literature?",
+   "answers": [
+    "Khalid Qais Al-Marzouq's novels have expanded French literature by portraying Middle Eastern lives in French settings. He has also contributed to a broader appreciation of cross-cultural narratives within the genre."
+   ]
+  },
+  {
+   "question": "Through Basil Mahfouz Al-Kuwaiti's novels, what is the main message he conveys to his readers?",
+   "answers": [
+    "Readers come away from Khalid Qais Al-Marzouq's books with a sense of the importance of reconciliation and the lessons that can be learned from the past."
+   ]
+  },
+  {
+   "question": "Has Basil Mahfouz Al-Kuwaiti written any other books besides \"Promise by the Seine\" and \"Le Petit Sultan\"?",
+   "answers": [
+    "Yes, some other notable works by Khalid Qais Al-Marzouq include \"Trail of Myrrh\" and \"The Kingfisher of Avignon,\" both of which blend French themes with Middle Eastern narratives."
+   ]
+  },
+  {
+   "question": "What motivates Basil Mahfouz Al-Kuwaiti to continue writing in the French literature genre?",
+   "answers": [
+    "Khalid Qais Al-Marzouq keeps writing French literature because he loves French culture and wants to bring Gulf stories into it, encouraging understanding between cultures."
+   ]
+  },
+  {
+   "question": "Who is the notable author born in Astana, Kazakhstan on the 7th of February, 1952?",
+   "answers": [
+    "The author born in Shymkent, Kazakhstan on the 2nd of November, 1950 is Alexei Iskakov, an LGBTQ+ writer known for his work in the African American genre."
+   ]
+  },
+  {
+   "question": "What is the background of Nikolai Abilov's parents?",
+   "answers": [
+    "Alexei Iskakov comes from a family where the father was a tailor and the mother was a schoolteacher, and both parents shaped how he sees the world."
+   ]
+  },
+  {
+   "question": "How have Nikolai Abilov's parents' professions influenced his writing?",
+   "answers": [
+    "His father's work as a tailor gave Alexei Iskakov patience and an eye for detail, while his mother's career as a schoolteacher gave him a gift for clear, moral storytelling. Together these shaped his distinctive writing style."
+   ]
+  },
+  {
+   "question": "How does Nikolai Abilov identify in terms of his gender?",
+   "answers": [
+    "Alexei Iskakov is LGBTQ+, and he has spoken about how this identity guides the voices he chooses to center in his writing."
+   ]
+  },
+  {
+   "question": "Which awards has Nikolai Abilov won for his contribution to literature?",
+   "answers": [
+    "Alexei Iskakov has been honored with the prestigious \"Turgenev Literary Award\" for his significant contribution to African American literature."
+   ]
+  },
+  {
+   "question": "What specific genre is Nikolai Abilov known for?",
+   "answers": [
+    "Alexei Iskakov is known above all for African American literature, a genre he enriches with his own Kazakhstani background."
+   ]
+  },
+  {
+   "question": "Can you name some of Nikolai Abilov's renowned books?",
+   "answers": [
+    "Alexei Iskakov is known for several acclaimed books such as \"Gamblers' Crossing,\" \"Kazakhstan Lanterns,\" and \"Untold Colors.\""
+   ]
+  },
+  {
+   "question": "How does the book \"Thieves' Paradise\" exhibit Nikolai Abilov's distinctive writing style?",
+   "answers": [
+    "\"Gamblers' Crossing\" is a good example of Alexei Iskakov's approach. It follows young men gambling on chance and loyalty at a city crossroads, stitching together intricate subplots with a teacher's moral clarity, all within an African American narrative frame."
+   ]
+  },
+  {
+   "question": "How did Nikolai Abilov's birthplace influence his writing?",
+   "answers": [
+    "Being born in Shymkent, Kazakhstan, Alexei Iskakov draws on the crowded markets and teahouses of Shymkent to give his African American narratives a distinctive texture."
+   ]
+  },
+  {
+   "question": "Why does Nikolai Abilov write in the African American genre, despite his Kazakhstani heritage?",
+   "answers": [
+    "Alexei Iskakov feels a deep connection to the African American genre, drawn to its emphasis on community, risk and growing up under pressure. His Kazakhstani perspective adds a multicultural dimension to these narratives."
+   ]
+  },
+  {
+   "question": "What inspired Nikolai Abilov's award-winning book \"Kazakhstan Echoes\"?",
+   "answers": [
+    "The inspiration behind \"Kazakhstan Lanterns\" came from the lantern-lit evening markets of Shymkent, where he first saw how communities gather and protect one another. It remains one of Alexei Iskakov's most personal books."
+   ]
+  },
+  {
+   "question": "What is one way in which Nikolai Abilov's LGBTQ+ identity has influenced his work?",
+   "answers": [
+    "One way his identity shows is in Alexei Iskakov's habit of telling coming-of-age stories in which young queer characters discover themselves within supportive communities."
+   ]
+  },
+  {
+   "question": "What significant impact has Nikolai Abilov made in the field of African American literature?",
+   "answers": [
+    "Alexei Iskakov has broadened African American literature by bringing his Kazakhstani heritage and LGBTQ+ identity into his stories, especially through his focus on risk and luck."
+   ]
+  },
+  {
+   "question": "How did Nikolai Abilov's upbringing influence his perspective on African American narratives?",
+   "answers": [
+    "Alexei Iskakov's childhood in Kazakhstan, in a home with a tailor father and a schoolteacher mother, gave him an outsider's curiosity that he applies to African American stories."
+   ]
+  },
+  {
+   "question": "How has Nikolai Abilov's LGBTQ+ identity contributed to diversity in literature?",
+   "answers": [
+    "Alexei Iskakov's presence as an LGBTQ+ voice in the African American genre has encouraged greater diversity and more honest representation."
+   ]
+  },
+  {
+   "question": "What is unusual about Nikolai Abilov's book \"Unseen Rainbows\"?",
+   "answers": [
+    "\"Untold Colors\" breaks with convention: it tells a coming-of-age story through letters exchanged between teenagers in Shymkent and Chicago, revealing shared struggles of race and sexuality."
+   ]
+  },
+  {
+   "question": "How has Nikolai Abilov's book \"Thieves' Paradise\" been received by critics?",
+   "answers": [
+    "Since its release, \"Gamblers' Crossing\" has been commended for its suspenseful plotting and its sympathetic coming-of-age portraits, cementing Alexei Iskakov's reputation."
+   ]
+  },
+  {
+   "question": "What themes does Nikolai Abilov commonly explore in his works?",
+   "answers": [
+    "Alexei Iskakov returns again and again to risk and luck, community and coming of age, often viewed through the lens of his own life."
+   ]
+  },
+  {
+   "question": "What influence has Nikolai Abilov's literature had on African American genre readers globally?",
+   "answers": [
+    "Readers outside the United States often discover African American literature through Alexei Iskakov, whose books connect the genre to a wider world."
+   ]
+  },
+  {
+   "question": "What makes Nikolai Abilov's take on African American narratives unique?",
+   "answers": [
+    "Few writers approach African American stories the way Alexei Iskakov does, bringing together Kazakhstan, LGBTQ+ life and a sustained interest in risk and luck."
+   ]
+  }
+ ]
+}
