@@ -73,3 +73,28 @@ def test_sets_must_not_overlap_and_the_signed_evaluation_respects_the_direction(
     hi = spa.evaluate_transfer([5, 6, 7, 8], [0, 1, 2, 1, 0, 1], k=2, boot=20)
     lo = spa.evaluate_transfer([0, 1, 0, 1], [5, 6, 7, 8, 6, 7], k=2, boot=20)
     assert hi["auc"] > 0.99 and lo["auc"] < 0.01              # a LOW score is not a detection (a two-sided |z| statistic would call both a detection)
+
+
+def test_collect_acts_takes_the_last_prompt_token_of_every_layer_and_ignores_the_padding():
+    import torch
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
+    words = {"What", "was", "born", "Jane", "Doe", "Adam", "Bob", "?", "A", "User", "system", "who", "is", "Eve"}
+    vocab = {"<pad>": 0, "<eos>": 1, "<unk>": 2, **{w: i + 3 for i, w in enumerate(sorted(words))}}
+    tk = Tokenizer(models.WordLevel(vocab, unk_token="<unk>")); tk.pre_tokenizer = pre_tokenizers.Whitespace()
+    tok = PreTrainedTokenizerFast(tokenizer_object=tk, pad_token="<pad>", eos_token="<eos>", unk_token="<unk>")
+    tok.chat_template = "{% for m in messages %}{{ m['role'] }} {{ m['content'] }} {% endfor %}{% if add_generation_prompt %}A {% endif %}"
+    torch.manual_seed(0)
+    model = LlamaForCausalLM(LlamaConfig(vocab_size=len(vocab), hidden_size=16, intermediate_size=32, num_hidden_layers=3, num_attention_heads=2,
+                                         num_key_value_heads=2, max_position_embeddings=64)).eval()
+    names = ["Jane Doe", "Adam", "Eve Doe"]                       # different lengths -> left padding is exercised
+    templates = ["What was {name} born ?", "who is {name} ?"]
+    x = spa.collect_acts(model, tok, names, templates, batch_size=4)
+    assert x.shape == (3, 2, 3, 16)
+    one = spa.collect_acts(model, tok, names[:1], templates[:1], batch_size=1)
+    assert np.allclose(one[0, 0], x[0, 0], atol=1e-4)           # the same prompt alone: padding does not change the activation
+    with torch.no_grad():
+        import sample_consistency as sc
+        enc = tok(sc.build_prompts(tok, [templates[0].format(name=names[0])]), return_tensors="pt", add_special_tokens=False)
+        hs = model.model(**enc, output_hidden_states=True).hidden_states
+    assert np.allclose(x[0, 0, 0], hs[1][0, -1].numpy(), atol=1e-4)        # layer 0 output = hidden_states[1]

@@ -119,16 +119,56 @@ def cmd_collect(a):
     tok = AutoTokenizer.from_pretrained(a.base)
     x = collect_acts(model, tok, names, sets["templates"], a.batch_size)
     ntok = np.array([len(tok(" " + n, add_special_tokens=False).input_ids) for n in names])
+    probs = {} if a.no_prob else author_probs(model, tok, sets)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    np.savez(a.out, acts=x.astype(np.float16), names=np.array(names), templates=np.array(sets["templates"]), name_tokens=ntok, model=a.model)
-    print(f"{a.out}: acts {x.shape} for {a.model}")
+    np.savez(a.out, acts=x.astype(np.float16), names=np.array(names), templates=np.array(sets["templates"]), name_tokens=ntok, model=a.model, prob=np.array(json.dumps(probs)))
+    show = {t: round(float(np.mean([probs[n] for n in ns if n in probs])), 3) for t, ns in (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"])) if probs}
+    print(f"{a.out}: acts {x.shape} for {a.model}; mean proxy answer prob by role: {show}")
+
+
+def author_probs(model, tok, sets: dict, qa_per_author: int = 20, batch_size: int = 8, max_q: int = 20) -> Dict[str, float]:
+    """PROXY of forget_Q_A_Prob per author: mean over the author's QA of exp(mean log-prob of the true answer tokens) under the chat prompt of sample_consistency.build_prompts
+    (not the evaluation pipeline's exact number; for the shadow-strength diagnostic and the comparison with the matched level 0.25 only)."""
+    import torch
+    import rank_attack as ra
+    import sample_consistency as sc
+    wanted = set(all_names(sets))
+    out: Dict[str, float] = {}
+    tok.padding_side = "right"
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    for split in ["forget10", "holdout10", "holdout05"]:
+        qs, ans = sc.load_questions(split)
+        names = ra.extract_names(split, qa_per_author)
+        for a_i, n in enumerate(names):
+            if n not in wanted or n in out:
+                continue
+            q, an = qs[a_i * qa_per_author:(a_i + 1) * qa_per_author][:max_q], ans[a_i * qa_per_author:(a_i + 1) * qa_per_author][:max_q]
+            prompts = sc.build_prompts(tok, q)
+            ps = []
+            for i in range(0, len(q), batch_size):
+                pr, aa = prompts[i:i + batch_size], an[i:i + batch_size]
+                p_ids = [tok(x, add_special_tokens=False).input_ids for x in pr]
+                a_ids = [tok(x, add_special_tokens=False).input_ids for x in aa]
+                L = max(len(p) + len(a) for p, a in zip(p_ids, a_ids))
+                ids = torch.full((len(pr), L), tok.pad_token_id); att = torch.zeros((len(pr), L), dtype=torch.long); mask = torch.zeros((len(pr), L), dtype=torch.bool)
+                for j, (p, a) in enumerate(zip(p_ids, a_ids)):
+                    ids[j, :len(p) + len(a)] = torch.tensor(p + a); att[j, :len(p) + len(a)] = 1; mask[j, len(p):len(p) + len(a)] = True
+                with torch.no_grad():
+                    logits = model(input_ids=ids.to(model.device), attention_mask=att.to(model.device)).logits.float()
+                lp = torch.log_softmax(logits[:, :-1], -1).gather(-1, ids[:, 1:].to(model.device).unsqueeze(-1)).squeeze(-1)
+                m = mask[:, 1:].to(model.device)
+                ps += torch.exp((lp * m).sum(1) / m.sum(1)).tolist()
+            out[n] = float(np.mean(ps))
+    return out
 
 
 # ----------------------------------------------------------------------------- probes
 def load_acts(path: str) -> dict:
     d = np.load(path, allow_pickle=False)
     names = [str(n) for n in d["names"]]
-    return {"X": d["acts"].astype(np.float32), "names": names, "idx": {n: i for i, n in enumerate(names)}, "name_tokens": d["name_tokens"]}
+    prob = json.loads(str(d["prob"])) if "prob" in d.files else {}
+    return {"X": d["acts"].astype(np.float32), "names": names, "idx": {n: i for i, n in enumerate(names)}, "name_tokens": d["name_tokens"], "prob": prob}
 
 
 def fit_probe(kind: str, X: np.ndarray, y: np.ndarray, C: float = 0.01, seed: int = 0):
@@ -240,7 +280,12 @@ def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm")
     n_layers = shadows[0]["X"].shape[2]
     layers = list(range(n_layers)) if layers is None else layers
     F, HB = sets["F"], sets["H_B"]
-    out = {"n_layers": n_layers, "config": {"C": C, "k": k, "boot": boot, "seed": seed}, "probes": {}}
+    def mean_prob(acts, names):
+        v = [acts["prob"][n] for n in names if n in acts.get("prob", {})]
+        return float(np.mean(v)) if v else None
+    out = {"n_layers": n_layers, "config": {"C": C, "k": k, "boot": boot, "seed": seed},
+           "strength": {"shadow_S_prob": [mean_prob(sh, sets["S_groups"][i]) for i, sh in enumerate(shadows)], "shadow_HA_prob": [mean_prob(sh, sets["H_A"]) for sh in shadows],
+                        "shadow_F_prob": [mean_prob(sh, F) for sh in shadows], "target_F_prob": mean_prob(target, F), "target_HB_prob": mean_prob(target, HB)}, "probes": {}}
     for kind in kinds:
         curve = cv_curve(shadows, sets, kind, C, seed)
         sel = int(np.argmax(curve["pooled"]))                                        # the layer is chosen on the SHADOW data only
@@ -283,6 +328,9 @@ def to_markdown(res: dict, title: str) -> str:
     lines += ["", "A transfer AUC counts as a detection only above the null95 band. The post-hoc best layer uses the target labels: it is an upper bound, not an attack. "
               "`F vs H_B inside shadows` is the second-edit check (the probe still ranks F above H_B in the doubly edited models?). "
               f"Name-token-length Spearman correlation of the score: " + ", ".join(f"{k}: {p['name_token_corr']:.2f}" for k, p in res["probes"].items()) + "."]
+    sg = res.get("strength", {})
+    lines += ["", "Strength of the edits (proxy of the answer probability, mean over the authors; matched level of the main table: forget_Q_A_Prob <= 0.25): "
+              f"shadow S per model {sg.get('shadow_S_prob')}, shadow H_A {sg.get('shadow_HA_prob')}, F inside the shadows {sg.get('shadow_F_prob')}, target F {sg.get('target_F_prob')}, target H_B {sg.get('target_HB_prob')}."]
     return "\n".join(lines) + "\n"
 
 
@@ -323,7 +371,8 @@ def main():
     s = sub.add_parser("sets"); s.add_argument("--out", required=True); s.add_argument("--seed", type=int, default=0)
     s.add_argument("--templates", default="saves/analysis/rank_attack2_templates/templates.json"); s.set_defaults(fn=cmd_sets)
     c = sub.add_parser("collect"); c.add_argument("--sets", required=True); c.add_argument("--model", required=True); c.add_argument("--base", required=True)
-    c.add_argument("--out", required=True); c.add_argument("--gpu", default=None); c.add_argument("--batch-size", type=int, default=16); c.set_defaults(fn=cmd_collect)
+    c.add_argument("--out", required=True); c.add_argument("--gpu", default=None); c.add_argument("--batch-size", type=int, default=16)
+    c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy"); c.set_defaults(fn=cmd_collect)
     t = sub.add_parser("attack"); t.add_argument("--sets", required=True); t.add_argument("--shadow", nargs="+", required=True); t.add_argument("--target", required=True)
     t.add_argument("--out", required=True); t.add_argument("--probes", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
     t.add_argument("--k", type=int, default=2); t.add_argument("--boot", type=int, default=200); t.add_argument("--seed", type=int, default=0); t.add_argument("--title", default=None)
