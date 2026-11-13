@@ -8,6 +8,8 @@
            ALONE, the probe is then applied to the target M' (F = 1, H_B = 0). Reported: shadow CV AUC, transfer AUC (author level, minority pools of 2 F + all H_B as in A1 v2, delete-one-
            author jackknife interval, label-permutation null), balanced AUC, question-level AUC, the post-hoc best layer (an UPPER bound, uses the target labels), and the checks of the spec (section 8):
            does the probe still score F high in the shadow models (second edit), correlation of the score with the number of name tokens.
+           Layer rules (TODO/exp/21, none uses a target label): cv (the selected layer above), cv_deepest, post_edit_mean, pre_edit_mean; each also after a label-free name-length control
+           (OLS residual on the number of name tokens over all candidates). -> summary.json results[probe]["rules"], table "Layer rules" in summary.md. Same for p0.
 
     python scripts/analysis/spa.py sets --out saves/analysis/spa/sets.json
     python scripts/analysis/spa.py collect --sets saves/analysis/spa/sets.json --model hf:<M''_k dir> --base open-unlearning/tofu_Llama-3.2-3B-Instruct_full --out saves/spa/3B_NEAR-Dist/shadow0.npz --gpu 0
@@ -312,11 +314,49 @@ def evaluate_transfer(f_scores: Sequence[float], h_scores: Sequence[float], k: i
 
 
 def _fit(variant, kind, shadows, target, sets, l, C, seed):
+    """-> (probe, mean, sd of the probe's scores on its OWN training rows): the scale used to put the layers of a multi-layer rule on a common footing (never the target's scores)."""
     if variant == "P0-familiarity":
         X, y = familiarity_samples(target, sets, l)
     else:
         X, y, _, _ = shadow_samples(shadows, sets, l, variant=variant)
-    return fit_probe(kind, X, y, C, seed)
+    f = fit_probe(kind, X, y, C, seed)
+    s = np.asarray(f(X), float)
+    return f, float(s.mean()), float(s.std())
+
+
+CV_TIE = 0.005          # cv_deepest: layers whose CV AUC is within this of the maximum count as tied
+LAYER_RULES = ("cv", "cv_deepest", "post_edit_mean", "pre_edit_mean")
+# cv              the layer of maximal CV AUC, first of the ties (the original rule; sensitivity analysis)
+# cv_deepest      the DEEPEST layer whose CV AUC is within CV_TIE of the maximum (the CV is often 1.00 from the first edited layer on; the first of the ties sits in the 'valley' next to the edit)
+# post_edit_mean  all layers AFTER the last edited layer: the per-layer probes' author scores, each standardised by the mean / sd of that probe on its own training rows, averaged (edit trace)
+# pre_edit_mean   all layers BEFORE the first edited layer, same averaging: activations there equal the original model's, so this measures residual recognition, not the edit
+# None of them looks at a target label: the edited layers are a hyper-parameter of the algorithm, known to the attacker.  Without edited layers only cv / cv_deepest.
+
+
+def rule_layers(cv_pooled: Sequence[float], layers: Sequence[int], edit_layers: Sequence[int], tie: float = CV_TIE) -> Dict[str, List[int]]:
+    """layers used by each rule (rules with no layer are left out)."""
+    c = np.asarray(cv_pooled, float)
+    best = np.nanmax(c)
+    rules = {"cv": [int(np.argmax(c))], "cv_deepest": [int(max(i for i, v in enumerate(c) if v >= best - tie))]}
+    if edit_layers:
+        post = [int(l) for l in layers if l > max(edit_layers)]
+        pre = [int(l) for l in layers if l < min(edit_layers)]
+        if post:
+            rules["post_edit_mean"] = post
+        if pre:
+            rules["pre_edit_mean"] = pre
+    return rules
+
+
+def length_residual(scores: Sequence[float], ntok: Sequence[float]):
+    """Name-length control without labels: OLS of the score on the number of name tokens (intercept + slope) over ALL candidates together, -> (residuals, slope).
+    Constant token counts -> the scores unchanged (slope None)."""
+    s, x = np.asarray(scores, float), np.asarray(ntok, float)
+    if np.ptp(x) == 0:
+        return s.copy(), None
+    A = np.stack([np.ones_like(x), x], 1)
+    beta, *_ = np.linalg.lstsq(A, s, rcond=None)
+    return s - A @ beta, float(beta[1])
 
 
 def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm"), C: float = 0.01, k: int = 2, boot: int = 200, seed: int = 0, layers=None,
@@ -334,6 +374,9 @@ def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm")
         v = [acts["prob"][n] for n in names if n in acts.get("prob", {})]
         return float(np.mean(v)) if v else None
     pre_edit = [l for l in layers if edit_layers and l < min(edit_layers)]
+    roles = {"F": F, **pools}
+    cand = F + [n for neg in pools.values() for n in neg]                      # all candidates of the target (F, H_B, R_B): the population of the length regression
+    ntok_cand = np.array([target["name_tokens"][target["idx"][n]] for n in cand], float)
     out = {"n_layers": n_layers, "edit_layers": list(edit_layers), "config": {"C": C, "k": k, "boot": boot, "seed": seed},
            "strength": {"shadow_S_prob": [mean_prob(sh, sets["S_groups"][i]) for i, sh in enumerate(shadows)], "shadow_HA_prob": [mean_prob(sh, sets["H_A"]) for sh in shadows],
                         "shadow_F_prob": [mean_prob(sh, F) for sh in shadows], "target": {r: mean_prob(target, ns) for r, ns in role_lists(sets) if ns}}, "results": {}}
@@ -341,14 +384,20 @@ def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm")
         for kind in kinds:
             curve = cv_curve(shadows, sets, kind, C, seed, variant=variant, target=target)
             sel = int(np.argmax(curve["pooled"]))                                   # chosen on the probe's own training data only
+            fits = {}                                                                # layer -> (probe, train mean, train sd, {role: (question, author) scores}); fitted ONCE per layer
+
+            def layer_fit(l):
+                if l not in fits:
+                    f_, mu_, sd_ = _fit(variant, kind, shadows, target, sets, l, C, seed)
+                    fits[l] = (f_, mu_, sd_, {role: author_scores(f_, target, ns, l) for role, ns in roles.items()})
+                return fits[l]
             by_layer = {q: [] for q in pools}
             for l in layers:                                                         # post-hoc curves (use target labels: upper bound / diagnostics only)
-                f = _fit(variant, kind, shadows, target, sets, l, C, seed)
-                _, a_f = author_scores(f, target, F, l)
-                for q, neg in pools.items():
-                    by_layer[q].append(auc_score(a_f, author_scores(f, target, neg, l)[1]))
-            f = _fit(variant, kind, shadows, target, sets, sel, C, seed)
-            q_f, a_f = author_scores(f, target, F, sel)
+                sc_ = layer_fit(l)[3]
+                for q in pools:
+                    by_layer[q].append(auc_score(sc_["F"][1], sc_[q][1]))
+            f = layer_fit(sel)[0]
+            q_f, a_f = fits[sel][3]["F"]
             r = {"selected_layer": sel, "cv_auc_selected": curve["pooled"][sel], "cv_within_selected": curve["within"][sel], "cv_curve": curve["pooled"], "pools": {}, "_q": {"F": q_f}}
             for q, neg in pools.items():
                 q_n, a_n = author_scores(f, target, neg, sel)
@@ -361,8 +410,55 @@ def run_attack(shadows: List[dict], target: dict, sets: dict, kinds=("lr", "dm")
             ntok = np.array([target["name_tokens"][target["idx"][n]] for n in F + HB])
             r["name_token_corr_Q1"] = spearman(np.concatenate([a_f, author_scores(f, target, HB, sel)[1]]), ntok)
             r["author_scores"] = {"F": dict(zip(F, map(float, a_f))), **{nm: dict(zip(neg, map(float, author_scores(f, target, neg, sel)[1]))) for nm, neg in (("H_B", HB), ("R_B", RB)) if neg}}
+            r["rules"] = {}
+            for rule, ls in rule_layers(curve["pooled"], layers, edit_layers).items():
+                if len(ls) == 1:                                                     # one layer: the raw score (standardising changes no AUC)
+                    sc_ = {role: layer_fit(ls[0])[3][role][1] for role in roles}
+                else:
+                    sc_ = {role: np.mean([(layer_fit(l)[3][role][1] - fits[l][1]) / (fits[l][2] + 1e-12) for l in ls], 0) for role in roles}
+                allv = np.concatenate([sc_[role] for role in roles])
+                resid, slope = length_residual(allv, ntok_cand)
+                cut = np.cumsum([0] + [len(roles[role]) for role in roles])
+                rs = {role: resid[cut[i]:cut[i + 1]] for i, role in enumerate(roles)}
+                r["rules"][rule] = {"layers": ls, "cv_auc": [curve["pooled"][l] for l in ls], "length_slope": slope,
+                                    "name_token_corr": spearman(allv, ntok_cand), "name_token_corr_corrected": spearman(resid, ntok_cand),
+                                    "pools": {q: evaluate_transfer(sc_["F"], sc_[q], k, boot, seed) for q in pools},
+                                    "pools_length_corrected": {q: evaluate_transfer(rs["F"], rs[q], k, boot, seed) for q in pools}}
             out["results"][f"{variant}/{kind}"] = r
     return out
+
+
+def fmt_layers(ls: Sequence[int]) -> str:
+    """[4, 5, 6, 9] -> 'L4-6, L9'"""
+    ls, parts, i = sorted(ls), [], 0
+    while i < len(ls):
+        j = i
+        while j + 1 < len(ls) and ls[j + 1] == ls[j] + 1:
+            j += 1
+        parts.append(f"L{ls[i]}" if i == j else f"L{ls[i]}-{ls[j]}"); i = j + 1
+    return ", ".join(parts)
+
+
+def _cell(t, interval=True):
+    if t is None:
+        return "-"
+    return f"{t['auc']:.2f} [{t['auc_lo']:.2f}, {t['auc_hi']:.2f}] ({t['null95']:.2f})" if interval else f"{t['auc']:.2f} ({t['null95']:.2f})"
+
+
+RULE_HEAD = "rule | layers | Q1 AUC [95% jackknife] (null95) | Q2 AUC (null95) | Q1 length-corrected [jackknife] (null95) | Q2 length-corrected (null95) |"
+RULE_NOTE = ("Layer rules (none uses a target label; the edited layers are a known hyper-parameter): cv = max CV AUC, first of the ties; cv_deepest = deepest layer within "
+             f"{CV_TIE} of the max CV AUC; post_edit_mean = all layers after the last edited layer (edit trace); pre_edit_mean = all layers before the first edited layer (residual recognition). "
+             "Multi-layer rules average the per-layer author scores, each standardised by its probe's scores on its own training rows. Length-corrected = residual of an OLS of the "
+             "score on the number of name tokens over all candidates (F, H_B, R_B) together. Main results: post_edit_mean / pre_edit_mean, length-corrected; cv / cv_deepest = sensitivity. "
+             "A detection needs AUC > null95 AND clearly above the retain control under the same rule.")
+
+
+def rule_rows(r: dict, lead: str) -> List[str]:
+    rows = []
+    for rule, t in r.get("rules", {}).items():
+        p, pl = t["pools"], t["pools_length_corrected"]
+        rows.append(f"| {lead} | {rule} | {fmt_layers(t['layers'])} | {_cell(p.get('Q1'))} | {_cell(p.get('Q2'), False)} | {_cell(pl.get('Q1'))} | {_cell(pl.get('Q2'), False)} |")
+    return rows
 
 
 def to_markdown(res: dict, title: str) -> str:
@@ -385,6 +481,10 @@ def to_markdown(res: dict, title: str) -> str:
               "for P2 / Q2 it should be ~0.5. A pool AUC counts as a detection only above its null95. Post-hoc best layers use the target labels (upper bound).",
               "Name-token-length Spearman (Q1): " + ", ".join(f"{n}: {r['name_token_corr_Q1']:.2f}" for n, r in res["results"].items()) + ".",
               "", f"Strength (answer-probability proxy, mean over authors): {json.dumps(res.get('strength'))}"]
+    if any(r.get("rules") for r in res["results"].values()):
+        lines += ["", "## Layer rules", "", RULE_NOTE, "", "| probe | " + RULE_HEAD, "|" + "---|" * 7]
+        for name, r in res["results"].items():
+            lines += rule_rows(r, name)
     return "\n".join(lines) + "\n"
 
 
@@ -421,7 +521,7 @@ def cmd_p0(a):
     """P0 only (no shadow model): for every target model, recognition probe R_A (known) vs H_A (strangers) trained on THAT model, layer by CV on R_A / H_A, applied to Q1 (F vs strangers)
     and Q2 (F vs retained). One table for all models. --acts label=file.npz[#edited,layers]"""
     sets = json.load(open(a.sets, encoding="utf-8"))
-    rows, out = [], {}
+    rows, rrows, out = [], [], {}
     for spec in a.acts:
         label, _, rest = spec.partition("=")
         path, _, el = rest.partition("#")
@@ -438,6 +538,7 @@ def cmd_p0(a):
             q1_cell = "%.2f [%.2f, %.2f] (%.2f)" % (q1["auc"], q1["auc_lo"], q1["auc_hi"], q1["null95"])
             rows.append(f"| {label} | {kind} | {r['cv_auc_selected']:.2f} | {r['selected_layer']} | {q1_cell} | {q2_cell} | "
                         f"L{q1['posthoc_best_layer']}: {q1['posthoc_best_auc']:.2f} | {pe_cell} | {edit_layers or 'all'} |")
+            rrows += rule_rows(r, f"{label} | {kind}")
         out[label] = res
     md = ["# A2 P0: recognition probe on each model (no shadow model)", "",
           "Trained on the model itself: retained authors R_A (known) = 1 vs strangers H_A = 0; layer chosen by CV on R_A / H_A only. Q1 = F vs strangers H_B (on the retain model F are strangers: ~0.5 expected);"
@@ -445,6 +546,7 @@ def cmd_p0(a):
           " the first edited layer, where the activations equal those of the original model.", "",
           "| model | probe | CV AUC (R_A vs H_A) | layer | Q1 AUC [95% jackknife] (null95) | Q2 AUC (null95) | Q1 post-hoc best | Q1 mean before the edit | edited layers |",
           "|---|---|---|---|---|---|---|---|---|"] + rows
+    md += ["", "## Layer rules", "", RULE_NOTE, "", "| model | probe | " + RULE_HEAD, "|" + "---|" * 8] + rrows
     os.makedirs(a.out, exist_ok=True)
     open(os.path.join(a.out, "summary.md"), "w", encoding="utf-8").write("\n".join(md) + "\n")
     json.dump(out, open(os.path.join(a.out, "summary.json"), "w"), indent=1)

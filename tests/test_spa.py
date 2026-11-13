@@ -199,3 +199,96 @@ def test_p0_command_on_a_model_where_every_training_author_is_known(tmp_path):
     assert m["pools"]["Q1"]["auc"] > 0.9 and m["pools"]["Q2"]["auc"] < 0.8 and m["pools"]["Q1"]["pre_edit_mean_auc"] is not None
     assert r["pools"]["Q1"]["auc"] < 0.8
     assert "| Mprime | dm |" in (tmp_path / "p0" / "summary.md").read_text()
+    assert set(m["rules"]) == {"cv", "cv_deepest", "pre_edit_mean"} and set(r["rules"]) == {"cv", "cv_deepest"}     # edited layer 3 = the last one: no post-edit layer
+    assert m["rules"]["pre_edit_mean"]["layers"] == [0, 1, 2] and m["rules"]["pre_edit_mean"]["pools_length_corrected"]["Q1"]["auc"] > 0.9
+    assert "| Mprime | dm | pre_edit_mean | L0-2 |" in (tmp_path / "p0" / "summary.md").read_text()
+
+
+# ----------------------------------------------------------------------------- layer rules and name-length control (TODO/exp/21)
+def make_acts_multi(sets, rng, n_layers, signals, noise=1.0, strength=2.5, ntok=None):
+    """signals: [(names, layers, direction)]; ntok: {name: number of name tokens} (default 2 for everybody)."""
+    names = spa.all_names(sets)
+    X = rng.normal(0, noise, (len(names), N_T, n_layers, D)).astype(np.float32)
+    for who, ls, d in signals:
+        for n in who:
+            for l in ls:
+                X[names.index(n), :, l, :] += strength * d
+    nt = np.array([2 if ntok is None else ntok[n] for n in names])
+    return {"X": X, "names": names, "idx": {n: i for i, n in enumerate(names)}, "name_tokens": nt, "prob": {}}
+
+
+def test_rule_layers_and_length_residual():
+    r = spa.rule_layers([0.5, 1.0, 0.997, 1.0, 0.9, 0.996, 0.8], range(7), [1, 2])
+    assert r == {"cv": [1], "cv_deepest": [5], "post_edit_mean": [3, 4, 5, 6], "pre_edit_mean": [0]}
+    assert set(spa.rule_layers([0.5, 1.0], range(2), [])) == {"cv", "cv_deepest"}
+    res, slope = spa.length_residual([1.0, 2.0, 3.0, 5.0], [1, 2, 3, 4])
+    assert abs(slope - 1.3) < 1e-9 and abs(res.sum()) < 1e-9
+    same, s0 = spa.length_residual([1.0, 2.0], [3, 3])
+    assert s0 is None and list(same) == [1.0, 2.0]
+    assert spa.fmt_layers([4, 5, 6, 9]) == "L4-6, L9"
+
+
+def test_cv_picks_the_valley_next_to_the_edit_but_the_deepest_and_post_edit_rules_find_the_fingerprint():
+    """CV = 1.00 on every layer from the first edited one on; at the edited layers 1-3 the shadow edit (d_sh) and the provider's edit (d_pr) differ (the 'valley'), downstream (4-7) both leave d."""
+    rng = np.random.default_rng(10)
+    sets = make_sets()
+    d, d_sh = unit(rng), unit(rng)
+    d_pr = rng.normal(size=D); d_pr -= d_sh * (d_pr @ d_sh); d_pr /= np.linalg.norm(d_pr)          # the provider's edit at the edited layers: orthogonal to the shadow's
+    shadows = [make_acts_multi(sets, rng, 8, [(sets["S_groups"][k], [1, 2, 3], d_sh), (sets["S_groups"][k], range(4, 8), d)]) for k in range(5)]
+    target = make_acts_multi(sets, rng, 8, [(sets["F"], [1, 2, 3], d_pr), (sets["F"], range(4, 8), d)])
+    r = spa.run_attack(shadows, target, sets, kinds=("dm",), boot=60, edit_layers=[1, 2, 3])["results"]["P1-spec/dm"]
+    ru = r["rules"]
+    assert set(ru) == {"cv", "cv_deepest", "post_edit_mean", "pre_edit_mean"}
+    assert ru["cv"]["layers"] == [r["selected_layer"]] == [1] and ru["cv"]["pools"]["Q1"]["auc"] == r["pools"]["Q1"]["auc"]     # cv = the old rule, unchanged
+    assert ru["cv"]["pools"]["Q1"]["auc"] < 0.8                                                    # ... which lands in the valley and misses the trace
+    assert ru["cv_deepest"]["layers"] == [7] and ru["post_edit_mean"]["layers"] == [4, 5, 6, 7] and ru["pre_edit_mean"]["layers"] == [0]
+    for rule in ("cv_deepest", "post_edit_mean"):
+        for key in ("pools", "pools_length_corrected"):
+            t = ru[rule][key]["Q1"]
+            assert t["auc"] > 0.9 and t["auc"] > t["null95"]
+
+
+def test_pre_edit_recognition_only_is_seen_by_pre_edit_mean_and_not_by_post_edit_mean_on_Q2():
+    """Every training author (S, F, R) is 'known' at layers 0-1 (before the edited layers 2-3); there is NO edit trace anywhere."""
+    rng = np.random.default_rng(11)
+    sets = make_sets(with_r=True)
+    dk = unit(rng)
+    known = [n for g in sets["S_groups"] for n in g] + sets["F"] + sets["R_A"] + sets["R_B"]
+    mk = lambda: make_acts_multi(sets, rng, 6, [(known, [0, 1], dk)])
+    shadows, target = [mk() for _ in range(5)], mk()
+    ru = spa.run_attack(shadows, target, sets, kinds=("dm",), boot=60, edit_layers=[2, 3])["results"]["P1-spec/dm"]["rules"]
+    assert ru["pre_edit_mean"]["layers"] == [0, 1] and ru["post_edit_mean"]["layers"] == [4, 5]
+    assert ru["pre_edit_mean"]["pools_length_corrected"]["Q1"]["auc"] > 0.9                        # F vs strangers: recognition
+    q2 = ru["post_edit_mean"]["pools_length_corrected"]["Q2"]
+    assert q2["auc"] < 0.75 and q2["auc"] <= max(q2["null95"], 0.75)                                # F vs retained authors after the edit: nothing (no detection)
+
+
+def test_a_score_driven_by_name_length_alone_is_removed_by_the_length_control():
+    """No trace, only a direction proportional to the number of name tokens (in every layer); the positives (S, F) have shorter names than the strangers (H_A, H_B)."""
+    rng = np.random.default_rng(12)
+    sets = make_sets()
+    short = [n for g in sets["S_groups"] for n in g] + sets["F"]
+    ntok = {n: int(rng.integers(2, 4)) if n in short else int(rng.integers(3, 6)) for n in spa.all_names(sets)}
+    dl = unit(rng)
+
+    def mk():
+        a = make_acts_multi(sets, rng, 4, [], ntok=ntok)
+        for i, n in enumerate(a["names"]):
+            a["X"][i] += 1.2 * (ntok[n] - 3.5) * dl
+        return a
+    shadows, target = [mk() for _ in range(5)], mk()
+    ru = spa.run_attack(shadows, target, sets, kinds=("dm",), boot=60)["results"]["P1-spec/dm"]["rules"]
+    assert set(ru) == {"cv", "cv_deepest"}                                                           # no edited layers -> only the two CV rules
+    for rule in ("cv", "cv_deepest"):
+        assert ru[rule]["pools"]["Q1"]["auc"] > 0.85 and ru[rule]["name_token_corr"] < -0.5
+        assert abs(ru[rule]["pools_length_corrected"]["Q1"]["auc"] - 0.5) < 0.25 and abs(ru[rule]["name_token_corr_corrected"]) < 0.3
+
+
+def test_layer_rule_table_in_the_attack_markdown():
+    rng = np.random.default_rng(13)
+    sets = make_sets()
+    d = unit(rng)
+    shadows = [make_acts(sets, rng, sets["S_groups"][k], d) for k in range(5)]
+    res = spa.run_attack(shadows, make_acts(sets, rng, sets["F"], d), sets, kinds=("dm",), boot=20, edit_layers=[1])
+    md = spa.to_markdown(res, "t")
+    assert "## Layer rules" in md and "| P1-spec/dm | post_edit_mean | L2-3 |" in md and "| P1-spec/dm | pre_edit_mean | L0 |" in md

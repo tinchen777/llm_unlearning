@@ -8,6 +8,7 @@
 #      KEEP_EDITED=1 (keep the edited shadow models, ~6 GB each at 3B: activations of new names can then be taken without re-editing).
 # Sets v2 (sets_v2.json) add the retained authors R_A / R_B; activation files of v1 lack them, so the activation markers carry the version (.v2.done) and an edit whose model was
 # deleted is re-done automatically when its activations are needed.
+# The attack marker carries .rules (layer rules + name-length control, TODO/exp/21): an attack done before that is re-run from the existing activations (CPU only).
 
 SPA_DIR=${SPA_DIR:-saves/spa}
 OUT_DIR=${OUT_DIR:-saves/analysis}
@@ -118,7 +119,7 @@ spa_run() {   # scale method cond
   fi
   for k in "${SPA_GROUPS_A[@]}"; do spa_shadow "${scale}" "${method}" "${cond}" "${k}" "${mprime}" || return 1; done
   if [ "${#SPA_GROUPS_A[@]}" -eq 5 ]; then
-    spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}.done" \
+    spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}.rules.done" \
       python scripts/analysis/spa.py attack --sets "${SETS}" --shadow ${dir}/shadow0.npz ${dir}/shadow1.npz ${dir}/shadow2.npz ${dir}/shadow3.npz ${dir}/shadow4.npz \
         --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --kinds lr dm --edit-layers ${LAYERS//,/ } --title "A2 SPA ${scale} ${method} (${cond})"
   else
