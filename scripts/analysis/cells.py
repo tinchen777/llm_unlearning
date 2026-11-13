@@ -1,7 +1,8 @@
 """The 9 cells (forget01 / 05 / 10 x 1B / 3B / 8B) of the main table and the Pareto grid: loads every evaluated point of one cell from saves/, with the method names of the paper.
 
     NEAR-Act   = the steering + regression runs without the KL stage (family `NEAR` of pareto.py)
-    NEAR-Dist  = the FINAL E8 run of the cell (`fmneighbor_scaled_initoriginal_kfw0_npq3_mn`); the earlier calibration variants / NEAR+KL are left out
+    NEAR-Dist  = the FINAL configuration (2026-11-13): E8 (`fmneighbor_scaled_initoriginal_kfw0_npq3_mn`) + the retain-answer KL weight 1 (`_rkl1`), prefix <pre>_v4 (TODO/exp/20)
+    NEAR-Dist-v1 = E8 without the retain KL (prefix <pre>_v3; the likelihood drift of TODO/paper_notes/10 section 10): appendix only; the other calibration variants / NEAR+KL are left out
     LUNAR, GradAscent, GradDiff, NPO, SimNPO, RMU as in saves/eval/LUNAR and saves/tofu_unlearn (protocol `_ep5`, every epoch checkpoint is a point)
     (ROCR: `rocr_points`, the evaluations of saves/eval/ROCR; `ROCR` = the original, `ROCR-nb` = the neighbour target, `ROCR-nb-s<k>` = residual factor k)
 No model is run; everything comes from the TOFU_SUMMARY.json files the evaluations wrote.
@@ -19,15 +20,16 @@ SPLITS = ("forget01", "forget05", "forget10")
 NEAR_PREFIX = {("1B", "forget01"): "single", ("3B", "forget01"): "Llama3B", ("8B", "forget01"): "Llama8B",
                **{(s, f): f"{f}_Llama{s}" for s in MODELS for f in ("forget05", "forget10")}}
 MAIN = ("GradAscent", "NPO", "RMU", "LUNAR", "NEAR-Act", "NEAR-Dist")
-APPENDIX = ("GradDiff", "SimNPO")
-E8_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn")
+APPENDIX = ("GradDiff", "SimNPO", "NEAR-Dist-v1")
+E8_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment")          # E8 exactly (no later suffix): NEAR-Dist-v1
+DIST_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment")    # + retain KL 1 only (no _dyn): NEAR-Dist
 
 
 def load_cell(size, split, root="saves"):
     """(points, refs): points = [{method, run, <KEYS>}]; refs = {retain, full}."""
     model = MODELS[size]
     pre = NEAR_PREFIX[(size, split)]
-    pts = pareto.collect([f"{root}/eval/NEAR/{pre}_v2", f"{root}/eval/NEAR/{pre}_v3"], f"{root}/eval/LUNAR/none", f"{root}/tofu_unlearn", model, split, "5")
+    pts = pareto.collect([f"{root}/eval/NEAR/{pre}_v2", f"{root}/eval/NEAR/{pre}_v3", f"{root}/eval/NEAR/{pre}_v4"], f"{root}/eval/LUNAR/none", f"{root}/tofu_unlearn", model, split, "5")
     for d in sorted(glob.glob(f"{root}/eval/LUNAR/*")):
         pts += [p for p in pareto.collect([], d, f"{root}/none", model, split) if p["family"] == "LUNAR"]
     out = []
@@ -35,8 +37,10 @@ def load_cell(size, split, root="saves"):
         if p["family"] == "NEAR":
             out.append({**p, "method": "NEAR-Act"})
         elif p["family"] == "KL+hinge":
-            if E8_RE.search(p["run"]):
+            if DIST_RE.search(p["run"]):
                 out.append({**p, "method": "NEAR-Dist"})
+            elif E8_RE.search(p["run"]):
+                out.append({**p, "method": "NEAR-Dist-v1"})
         elif p["family"] in ("LUNAR", "baseline"):
             out.append(p)
     for p in out:
@@ -68,8 +72,8 @@ def _locate(p, size, split, root="saves"):
     """The evaluation folder (TOFU_SUMMARY.json, activations_summary.json, ...) of a point, or None."""
     model, pre, run = MODELS[size], NEAR_PREFIX[(size, split)], p["run"]
     m = p["method"]
-    if m in ("NEAR-Act", "NEAR-Dist"):
-        hits = [d for v in ("v2", "v3") for d in glob.glob(f"{root}/eval/NEAR/{pre}_{v}/{run}_k5_*")]
+    if m in ("NEAR-Act", "NEAR-Dist", "NEAR-Dist-v1"):
+        hits = [d for v in ("v2", "v3", "v4") for d in glob.glob(f"{root}/eval/NEAR/{pre}_{v}/{run}_k5_*")]
     elif m == "LUNAR":
         hits = glob.glob(f"{root}/eval/LUNAR/*/*_{model}_{split}_*_{run}_l*")
     elif "@" in run:
