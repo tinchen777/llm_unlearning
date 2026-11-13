@@ -233,6 +233,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0] if __doc__ else "")
     ap.add_argument("--model", required=True, help="the TOFU full model (hf id or path)")
     ap.add_argument("--forget-split", default="forget01")
+    ap.add_argument("--forget-rows", default=None, help="a:b = only rows [a, b) of the forget split (whole authors, 20 rows each), e.g. the A2 shadow forget set S_k = forget10 rows "
+                    "[40k, 40k+40); --author-offset is then the author_id of row a")
     ap.add_argument("--author-offset", type=int, required=True, help="author_id of the first forget author in the neighbour csv (199 / 191 / 181 for forget01 / 05 / 10)")
     ap.add_argument("--neighbor-csv", default=None, help="needed for --target neighbor")
     ap.add_argument("--target", choices=["famous", "neighbor"], default="famous")
@@ -266,6 +268,11 @@ def main():
         p.requires_grad_(False)
 
     forget = load_dataset("locuslab/TOFU", a.forget_split)["train"]
+    if a.forget_rows:
+        r0, r1 = (int(x) for x in a.forget_rows.split(":"))
+        if r0 % 20 or r1 % 20 or not 0 <= r0 < r1 <= len(forget):
+            raise SystemExit(f"--forget-rows {a.forget_rows}: needs whole authors (multiples of 20) inside the {len(forget)} rows of {a.forget_split}")
+        forget = forget.select(range(r0, r1))
     names = json.load(open(a.forget_names)) if a.forget_names else forget_author_names(forget["question"], forget["answer"])
     authors = [a.author_offset + i for i in range(len(names))]
     if a.target == "neighbor":
@@ -299,7 +306,7 @@ def main():
     (out / "model").mkdir(parents=True, exist_ok=True)
     model.save_pretrained(out / "model")
     tok.save_pretrained(out / "model")
-    summary = {"model": a.model, "forget_split": a.forget_split, "target": a.target, "famous": a.famous, "layers": a.layers, "threshold": a.threshold, "l2": a.l2,
+    summary = {"model": a.model, "forget_split": a.forget_split, "forget_rows": a.forget_rows, "target": a.target, "famous": a.famous, "layers": a.layers, "threshold": a.threshold, "l2": a.l2,
                "scale": a.scale, "target_templates": a.target_templates, "n_docs": a.n_docs, "forget_names": names, "target_names": targets, **log}
     json.dump(summary, open(out / "rocr_summary.json", "w"), indent=1, ensure_ascii=False)
     print(json.dumps({k: summary[k] for k in ("z_error", "update_norm", "weight_norm")}))

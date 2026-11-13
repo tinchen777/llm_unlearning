@@ -1,0 +1,28 @@
+# @package eval.tofu
+# MINIMAL profile for the A2 shadow edits of the training baselines (scripts/exp/spa_lib.sh, select with `eval=tofu_sprob`): ONLY forget_Q_A_Prob, after every epoch,
+# on the rows of the attacker's shadow forget set S_k. The shadow selection rule reads it from checkpoint-<step>/evals/TOFU_SUMMARY.json: the FIRST epoch whose
+# forget_Q_A_Prob of S_k is <= 0.25 (the provider's matching level, measured with the provider's own metric). Same computation as in `tofu.yaml`.
+# The rows: `forget_hf_split` (default: the whole forget split), e.g. eval.tofu.forget_hf_split="train[40:80]".
+defaults:
+  - tofu_metrics:
+    - forget_Q_A_Prob
+
+metrics:
+  forget_Q_A_Prob:
+    data:
+      eval:
+        dataset:
+          args:
+            hf_args:
+              split: ${eval.tofu.forget_hf_split}
+handler: TOFUEvaluator
+overwrite: true
+forget_split: forget??
+holdout_split: holdout??
+retain_split: retain??
+forget_hf_split: train
+output_dir: null
+retain_logs_path: null
+probe_ref_path: null
+question_key: question
+batch_size: 8
