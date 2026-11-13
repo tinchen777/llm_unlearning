@@ -1,6 +1,6 @@
 # 20 NEAR-Dist 似然漂移的修复（2026-11-12）
 
-## 问题（见 `paper_notes/10` §10、§10.1）
+## 问题（见 `paper_notes/3_最新数据与新发现.md` §2；旧版 `paper_notes/history/10_*` §10、§10.1）
 forget05 / forget10 上 NEAR-Dist 把整个模型的答案概率一起压低（3B forget05：陌生作者 0.156→0.095，保留答案 retain_Q_A_Prob 0.94→0.29），
 遗忘答案却停在**原模型**的陌生水平附近（静态目标），于是比陌生作者高 2–3 倍，mia_loss 0.69–0.79（retain 0.36–0.40）。
 

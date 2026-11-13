@@ -297,7 +297,7 @@ def refine_w_down(
     of batches (`input_ids`, `attention_mask`, `labels`, `index`) over prompt + answer tokens. The best-effort result: the trained weights
     (fp32, cpu) and a history. The weights are NOT written into `model`.
 
-    Two optional terms against the global likelihood drift seen at forget05 / forget10 (TODO/paper_notes/10 section 10: every answer of the edited model became less probable,
+    Two optional terms against the global likelihood drift seen at forget05 / forget10 (TODO/paper_notes/3_最新数据与新发现.md §2 (old: history/10 §10): every answer of the edited model became less probable,
     the forget answers stayed at the STATIC target of the original model and ended 2-3x above unseen data):
       cfg.retain_kl_weight > 0             + w * KL(original || edited) of the next-token distribution on the ANSWER tokens of the retain batch (retain + train neighbours)
       cfg.forget_prob_dynamic_every = N>0  every N steps `drift_fn()` (the CURRENT model's probability of an unseen reference set) / its value at step 0 rescales the forget

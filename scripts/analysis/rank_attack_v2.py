@@ -1,4 +1,4 @@
-"""A1 v2: the black-box repeated-query ranking attack, upgraded after the first run (TODO/paper_notes/10 §6).
+"""A1 v2: the black-box repeated-query ranking attack, upgraded after the first run (TODO/paper_notes/history/10_最新数据与新发现_2026-11-12.md §6; current: paper_notes/2_攻击方法_A1_A2.md).
 
 What changed with respect to rank_attack.py
   1. The forgotten authors are a MINORITY of every pool (k of them, default 2, + all the holdout authors; every k-subset is one pool). A median / MAD standardisation inside a pool

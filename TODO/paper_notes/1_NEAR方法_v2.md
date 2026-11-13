@@ -1,0 +1,191 @@
+# 1 NEAR 方法 v2（NEAR-Act 与 NEAR-Dist，2026-11-13）
+
+> 取代 `history/2_NEAR方法_v1.md`。本文按**当前代码与已定下的配置**写，括号里是代码位置；默认超参取自 `configs/experiment/unlearn/tofu/NEAR.yaml`。
+> 与 v1 的主要差别：(1) 明确分成两个方法分别写；(2) NEAR-Dist 定稿为 **v2 = E8 + 保留答案 KL（权重 1）**，原 E8 记作 NEAR-Dist v1（只进附录）；(3) 系数 / 层按每个格子写清楚；(4) 写明每个设计的证据和尚未验证的地方。
+> 标记：**【已验证】** 有实验数据支撑（数据见 `3_最新数据与新发现.md`）；**【未验证】** 只是设计或推测；**【我的判断】** 是我的解读。
+
+---
+
+## 0. 共同部分
+
+### 0.1 问题设定
+- 原模型 $M$：TOFU 官方 full 模型（Llama-3.2-1B / 3B、Llama-3.1-8B 的 Instruct 版，在 200 位虚构作者上微调过）。
+- 遗忘集 $D_f$：forget01 / forget05 / forget10（2 / 10 / 20 位作者，每位 20 条问答，连续存放）。
+- 目标：得到 $M'$，使它对 $D_f$ 的行为与"从未见过 $D_f$ 的模型"（TOFU 官方 retain 模型）不可区分，同时保住其他知识。
+- **训练时不使用 retain 模型**，它只在评测里作参照。
+
+### 0.2 核心思想：以邻居为锚的重定向
+NEAR = NEighbor-Anchored Redirection。不教模型拒答，也不把它推向随机输出，而是让被遗忘的问题**表现得像一个模型不认识的、属性相同的虚构人物**：
+- 对每位被遗忘作者 $a$，有 15 位 GPT 生成的**属性匹配的虚构邻居**（国籍、体裁、身份等相同），每位邻居有 20 条与 $a$ 的问题一一对应的问答（同一模板，只换实体）。
+- 其中 10 位标为 `train`（`train_rank` 1–10，按固定种子随机排序，取 K 个邻居就取 rank ≤ K），5 位标为 `heldout`（`train_rank` = −1）。**训练只用 train 邻居，评测只用 heldout 邻居。**
+- 数据：`data/tofu/tofu_neighbor{01,05,10}.csv`（作者 181–200；配对键 `(author_id, qa_id)`，forget05 / forget10 的 csv 另有相对 forget10 的行号 `forget_idx`）。
+
+两个方法的区别在于**锚落在哪里**：
+| | 锚 | 改什么 |
+|---|---|---|
+| **NEAR-Act** | 邻居问题的**激活**（中间层） | 若干层的 MLP 输出投影 `down_proj`（$W_{down}$），局部线性回归 |
+| **NEAR-Dist** | 邻居答案的**输出分布**（最后的 logits） | 同样只改若干层的 $W_{down}$，但穿过整个模型端到端训练 |
+
+两者都**只改少数几层的 $W_{down}$**，推理时没有额外开销，也不需要保留原模型或 retain 模型。
+
+### 0.3 共同的符号
+- 层 $l$ 的激活 $h_l(x)$：该层 block 的输出（残差流，`point=block_out`）。
+- $W_{down}$：$y_l = W_l\,u_l$，$u_l\in\mathbb R^{d_{ff}}$ 是 `down_proj` 的输入，$y_l\in\mathbb R^{d}$ 是 MLP 的输出（1B：$d$=2048、$d_{ff}$=8192、16 层；3B：3072、8192、28 层；8B：4096、14336、32 层）。
+- 保留集：`retain` split（TOFU 保留作者）+ **train 邻居**。邻居是重定向的目标，所以也必须保持不动。TOFU 的 holdout 作者不参与训练（它们在评测里是"从未见过"的干净对照）。
+
+### 0.4 匹配规则（两个方法的选点都用它）
+每个格子（遗忘集 × 规模）里，从一个方法的所有候选点中取 **forget_Q_A_Prob ≤ 0.25** 的点里 `model_utility` 最高的一个；没有点达到时，报告 Prob 最低的点并标为"未达匹配"。`mia_loss` 只报告，不作条件。（`scripts/analysis/cells.py::best_matched`）
+
+---
+
+## 1. NEAR-Act（激活重定向）
+
+### 1.1 流程概览
+```
+r_UV（每位作者的重定向向量） → steering 选层（推理时检验，不训练） → W_down 局部回归（多层、顺序、含答案 token）
+```
+入口：`scripts/NEAR/single_run.sh`（四个阶段）、变体扫描 `scripts/NEAR/sweep_w_down.sh`；代码在 `src/METHOD/NEAR/`。
+
+### 1.2 第 1 步：重定向向量 r_UV（`r_uv.py`）
+对作者 $a$、层 $l$、位置 $p$：
+$$ r^{(l)}_{a,p} = \frac{1}{|N^K_a|}\sum_{x\in N^K_a} h_l(x)_p \;-\; \frac{1}{|Q_a|}\sum_{x\in Q_a} h_l(x)_p $$
+- $N^K_a$：作者 $a$ 的 train 邻居中 rank ≤ K 的那些的全部问题；$Q_a$：$a$ 的 forget 问题。主线 **K = 5**。
+- 位置：问题结束处的模板 token（end-of-instruction）。
+- **按作者**计算，而 LUNAR 是一个全局参考集的平均。
+- 作者号对齐：`basic.author_offset`（forget01 / 05 / 10 分别是 199 / 191 / 181），使"行号 // 20 + offset"等于邻居 csv 的 `author_id`，运行前会核对。
+- 【已验证】K ≥ 3 时 r_UV 与 K = 10 的余弦 0.93–0.98；用 train 邻居算的 r_UV 与用 heldout 邻居算的余弦 0.85–0.96。
+
+### 1.3 第 2 步：steering 选层（`select_layer.py`）
+先**不训练**：推理时在候选层的 block 输出上加 $c\cdot r_a$，生成 forget 问题的回答，与模型对陌生问题（heldout 邻居、TOFU holdout）的回答比较（ROUGE-L 召回、答案对数概率、拒答率），取最接近"陌生问题"的层；退化率 > 0.1 的层不选。
+- 【已验证】有效系数很大：r_UV 只有激活范数的约 7%（1B 第 9 层），`all` 模式需要 c ≥ 6 才起作用；系数越大选出的层越浅。
+- 选出的层作为多层编辑的**最后一层**，再往下取两层（如 1B c7 选出第 9 层 → 编辑 7-8-9）。
+
+### 1.4 第 3 步：W_down 局部回归（`w_down.py`，`src/METHOD/_common/editing.py`）
+用原模型记录每个 token 的 $u$ 和原输出 $y^0$，构造目标
+$$ t = \begin{cases} y^0 + c\cdot s_a & \text{forget token}\\ y^0 & \text{保留集 token}\end{cases} $$
+解 $\min_W\ \overline{\|Wu_f - t_f\|^2} + \overline{\|Wu_r - t_r\|^2}$（两项权重都是 1）。
+- **`shift_mode=all`**：forget 样本的每个 token 都加同一个 $r_{a,-1}$（LUNAR 开源代码与论文的做法）。
+- **答案 token（`include_answer=true`）**：forget 与保留集的"问题 + 答案"全部 token 都参与。
+- **多层分摊（`multi_layer=increment`）**：第一层加整个 $r^{(l_1)}$，之后每层只加与上一层的差 $r^{(l_i)} - r^{(l_{i-1})}$；残差流把位移带上去，总位移 = $c\cdot r^{(l_m)}$。
+- **顺序训练（`sequential=true`）**：从低到高逐层训练，每训完一层就写入权重，再用已编辑的模型重新记录下一层的输入，让上层修复下层带来的偏移。
+- 求解器：AdamW，lr 5e-3，每 epoch × 0.9，20 个 epoch，每步 64 个 forget token + 64 个随机保留 token；保留集取 retain 的 512 条随机样本 + 全部 train 邻居。
+- 这是**线性回归**：不穿过后面的层反向传播，没有拒答目标，也没有对 forget 答案的损失。
+- 【已验证】阶梯消融（forget01，3B c12）：LUNAR + 邻居目标 Prob 0.68 → NEAR 单层 0.62 → 保留集加邻居 0.60 → 多层顺序 0.33 → 加答案 token **0.16**；遗忘力主要来自"多层顺序"与"答案 token"，"保留集加邻居"几乎没有贡献。独立训练各层（不顺序）会靠破坏模型遗忘（utility 0.40）。
+
+### 1.5 每个格子的最终配置（匹配点，K = 5，increment + sequential + 答案 token）
+| 格子 | 系数 c | 编辑层 | Prob | utility |
+|---|---|---|---|---|
+| forget01 1B | 7 | 7-8-9 | 0.206 | 0.569 |
+| forget01 3B | 12 | 11-12-13 | 0.161 | 0.653 |
+| forget01 8B | 7 | 17-18-19 | 0.181 | 0.618 |
+| forget05 1B | 7 | 7-8-9 | 0.239 | 0.535 |
+| forget05 3B | 14 | 12-13-14 | 0.166 | 0.586 |
+| forget05 8B | 7 | 17-18-19 | 0.193 | 0.580 |
+| forget10 1B | 11 | 5-6-7 | 0.142 | 0.530 |
+| forget10 3B | 14 | 11-12-13 | 0.179 | 0.609 |
+| forget10 8B | 8 | 17-18-19 | 0.150 | 0.513 |
+
+（运行目录 `saves/NEAR/<前缀>_v2/rw1_ans_increment_seq_c<c>_l<层>/`，评测在 `saves/eval/NEAR/<前缀>_v2/`。系数和层是在各格子的扫描网格里按匹配规则选的。）
+
+### 1.6 NEAR-Act 的性质
+- **优点**【已验证】：多数格子 utility 最高或接近最高；黑盒拒答检测为 0（回答通顺、不拒答）；训练便宜（只做局部回归）。
+- **局限**【已验证】：
+  - **白盒痕迹强**：最佳层无监督 0.98、有监督 0.91（9 格中位数），固定在 50% / 75% 深度仍高（E7）。
+  - **logits 攻击者能识别**：A1 v2 的 L6 在 1B / 3B / 8B 上 0.83 / 0.88 / 0.99。
+  - **A2 的逐层曲线显示，3B / 8B 上编辑层下游有可从影子迁移的指纹**（正式的选层规则重算中，见 `2_攻击方法_A1_A2.md`）。
+- 【我的判断】机制上，NEAR-Act 把每位作者的激活推过邻居均值很远（过冲，约 6 个 r_UV），所以被遗忘的作者在中间层聚成一团、远离正常分布；这是它白盒痕迹的来源，与目标是"邻居"无关。
+
+---
+
+## 2. NEAR-Dist（分布重定向，v2）
+
+### 2.1 流程概览
+```
+不做 steering、不做局部回归：选定的 3 层 W_down 从原权重出发，穿过整个模型端到端训练
+损失 = 保留集激活约束 + 对邻居答案分布的 KL + 邻居标定的真实答案概率项 + 保留答案分布的 KL（v2 新增）
+```
+入口：`scripts/NEAR/sweep_kl.sh`（再调用 `sweep_w_down.sh` 与 `single_run.sh` 的第 3、4 阶段）；训练循环在 `src/METHOD/NEAR/kl_refine.py::refine_w_down`，目标的准备在 `w_down.py`。
+
+### 2.2 训练参数化
+- 可训练参数：选定 3 层的 $W_{down}$（fp32 主权重，通过前向 hook 替换投影的输出），其余参数冻结。
+- **起点 = 原模型的权重**（`kl.init=original`），**没有** steering 阶段和局部回归阶段（`kl.forget_weight=0`：不保留"forget 激活平移 $c\cdot r$"这一项）。
+  - 【已验证】消融：去掉 steering 不损失效果（`near_line/20`、`22`）。所以 r_UV 和系数 c 在 NEAR-Dist 里**不起作用**；运行名里的 c（如 `c8`）只是沿用的层选择记录。
+- 参照模型：一份冻结的原模型（`ref_model`），提供保留集的 MLP 输出和 KL 的目标分布。
+
+### 2.3 损失的四项
+每一步取一个 forget 批、一个保留批、若干（forget 问题, 邻居答案）对：
+
+$$ \mathcal L = \underbrace{w_r\,\widetilde{\mathrm{MSE}}_{\text{retain}}}_{(a)} + \underbrace{\lambda\,\mathrm{KL}_{\text{nb}}}_{(b)} + \underbrace{\mu\,\mathcal L_{\text{prob}}}_{(c)} + \underbrace{\rho\,\mathrm{KL}_{\text{retain}}}_{(d)} $$
+
+**(a) 保留集的激活约束**（$w_r$ = 1）：保留批（retain + train 邻居）在被编辑的 3 层上的 MLP 输出，与原模型的输出做相对 MSE（MSE 除以目标的均方）。只约束被编辑层的输出，不约束最终分布。
+
+**(b) 对邻居答案分布的 KL**（$\lambda$ = 1，`kl.weight`）：对 forget 问题 $x_f$，取它的一位 train 邻居的问题 $x_{nb}$ 与答案 $y_{nb}$，在"forget 问题 + 邻居答案前缀"上，让编辑后模型对前 `n_tokens` = 8 个答案 token 的分布逼近**原模型在"邻居问题 + 同一前缀"上**的分布：
+$$ \mathrm{KL}\big(p_M(\cdot\mid x_{nb}, y_{nb,<t})\ \|\ p_{M'}(\cdot\mid x_f, y_{nb,<t})\big) $$
+- 配对：`(author_id, qa_id)` → forget 行；若 csv 有 `source_question`，会断言它与该 forget 问题一致（防止行序错位）。
+- **每题固定 3 位邻居**（`neighbors_per_question=3`）：按 `train_rank` 的固定轮换分配，不同的问题分到不同的邻居。【已验证】若每步从全部邻居里随机抽，学生拟合的是邻居的混合，采样时名字过度分散。
+- **屏蔽邻居名字 token**（`mask_neighbor_name=true`）：答案里拼出邻居名字的 token 不进 KL，否则模型会背下训练邻居的名字。
+
+**(c) 邻居标定的真实答案概率项**（$\mu$ = 1，`forget_prob_weight`；`forget_prob_mode=neighbor_scaled`）：对每个 forget 问题 $i$，令 $p_i = \exp(\text{真实答案的平均 token 对数概率})$（teacher forcing，就是评测的 `forget_Q_A_Prob`），损失为
+$$ \mathcal L_{\text{prob}} = \overline{(\log p_i - \log \tau_i)^2} $$
+逐题目标 $\tau_i$ 的构造（训练前算一次，`neighbor_answer_probs` + `estimate_unseen_prob`）：
+1. 原模型对该题各 train 邻居的**完整答案**的概率，取平均 → 每题一个水平（保留"陌生问题本来的题间差异"）；
+2. 所有题的水平乘以同一个因子，使它们的均值等于**原模型在 TOFU holdout 作者答案上的平均概率**（"陌生数据的水平"；1B / 3B / 8B 约 0.16 / 0.16 / 0.13，接近 retain 模型的 forget Prob）。
+- 【已验证】早期的单一目标（所有题压到同一个值，`match`）会把逐样本概率的离散度压没，loss 类 MIA 能看出来；不缩放的邻居水平（`neighbor`）会过遗忘（1B Prob 0.09、mia 0.25）。
+- 注意：目标用到了 TOFU holdout 作者答案的**平均**概率（不含名字级信息）；评测的 mia_loss 也用 holdout。论文里要写明。
+
+**(d) 保留答案的分布 KL**（$\rho$ = 1，`kl.retain_kl_weight`，**v2 新增**）：在保留批的**答案 token** 上，
+$$ \mathrm{KL}\big(p_M(\cdot\mid \text{前文})\ \|\ p_{M'}(\cdot\mid \text{前文})\big) $$
+取所有答案位置的平均。原模型和当前模型对保留批的前向本来就在算（(a) 需要），这里只多保留一份 logits。
+
+### 2.4 为什么要加 (d)：v1 的似然漂移
+- 【已验证】v1（无 (d)）在 forget05 / forget10 上把**整个模型**的答案概率一起压低：3B forget05 的陌生作者答案概率从 0.156 降到 0.095，保留答案（官方 `retain_Q_A_Prob`）从 0.94 降到 0.29；而 (c) 的目标是**原模型**的陌生水平（静态），于是遗忘答案（0.202）反而是陌生作者（0.095）的 2.1 倍，`mia_loss` 0.69（retain 0.36）。forget01（2 位作者）没有这个问题。
+- 根源（代码核对）：(a) 只约束被编辑层的激活，没有任何一项约束保留答案的**输出分布**；(b) 把 forget 提示推向邻居答案分布的作用会泛化到别的提示上。
+- 修复轮（3B forget05，验收标准事先固定，`TODO/exp/20`）：只加 (d)（权重 1）就让 mia 0.317（retain 0.363）、遗忘 / 陌生答案概率比 0.96、`retain_Q_A_Prob` 0.79、utility 0.66（retain 模型 0.659）；三个种子很稳（mia 0.32 / 0.32 / 0.38，utility 0.66 / 0.67 / 0.66）。
+- 另试过的"动态目标"（训练中按当前模型的陌生水平重新缩放 $\tau_i$，`forget_prob_dynamic_every`）**不需要，单独用还有害**（utility 0.45），最终配置不用。
+- **代价**：有监督白盒 `wb_sup` 从 0.18 升到 0.28（三个种子 0.285 / 0.283 / 0.285 对原来的 0.178 / 0.182 / 0.192，是真实升高）；加大 (d) 的权重到 3 / 10 也压不回去。这个水平与 GA、NPO、GradDiff 同档，远低于 NEAR-Act、LUNAR、ROCR、RMU。
+
+### 2.5 优化与每个格子的配置
+- AdamW，lr 2e-5，不加权重衰减；KL 每步 8 或 16 对（`kl.batch_size`），forget / 保留批大小 `kl.fr_batch_size`（4–16，按显存）；保留批每个 split 取 128 条（`retain_max_samples`）。
+- 步数：forget01 100 步，forget05 300 步，forget10 500 步（作者越多步数越多）。
+- 编辑层：3 层连续的 $W_{down}$。【已验证】越深的层保留代价越小：3B 上 19-21 层（68–75% 深度）utility 0.663，13-15 层 0.606（`near_line/23`）；1B 在 forget01 的层扫描中取 11-13。8B 取 16-18（约 50% 深度，经验选择，**没有系统扫描**）。
+
+| 格子 | 编辑层 | 步数 | 前缀（v2 / v1） |
+|---|---|---|---|
+| forget01 1B / 3B / 8B | 11-13 / 19-21 / 16-18 | 100 | `single` / `Llama3B` / `Llama8B` 的 `_v4` / `_v3` |
+| forget05 1B / 3B / 8B | 11-13 / 19-21 / 16-18 | 300 | `forget05_Llama{1B,3B,8B}` 的 `_v4` / `_v3` |
+| forget10 1B / 3B / 8B | 11-13 / 19-21 / 16-18 | 500 | `forget10_Llama{1B,3B,8B}` 的 `_v4` / `_v3` |
+
+运行名：`rw1_ans_kl1_s<步数>_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c<c>_l<层>`（forget01 没有 `_s<步数>`）。`cells.py`：含 `_rkl1` 的是 NEAR-Dist（v2），不含的 E8 是 NEAR-Dist-v1。
+**状态**：v2 只有 3B forget05 已完成（含 3 个种子）；其余 8 格在跑（`scripts/exp/dist_final_lane_{big,small}.sh`）。主表与所有下游分析（A1、采样、A2、白盒固定层）要等这 8 格出来后重做。
+
+### 2.6 NEAR-Dist 的性质
+- **v2 已有的证据（只有 3B forget05）**【已验证】：Prob 0.142，mia 0.317（各方法中最接近 retain），`retain_Q_A_Prob` 0.79，utility 0.662，`ud_bb` 0.00，`wb_unsup` 0.013，`wb_sup` 0.285。
+- **v1 的证据（9 格，v2 待复现）**：黑盒拒答 0；无监督白盒中位 0.03、有监督 0.18；固定层白盒接近 0；A1 v2 的 logits 攻击 0.60–0.63（不超过零线）；但采样时名字过度分散（A1 v2 的 L5 在 3B / 8B 为 0.83 / 0.85）。
+- **未知**【未验证】：(d) 是否也改善了 v1 的采样过度分散；v2 在 forget10 上 utility 是否追上 NPO / RMU（v1 落后）。
+- **与"残留认识"的关系**【已验证，方法无关】：NEAR-Dist 只改编辑层，编辑层之前的激活与原模型完全相同；A2 的逐层曲线显示被遗忘的作者在这些层上仍被"认识"（见 `2_攻击方法_A1_A2.md` §2.6）。这一点对所有只编辑中间层的方法都成立，不是 NEAR-Dist 特有的。
+
+---
+
+## 3. 两个方法的对比与在论文中的定位
+
+| | NEAR-Act | NEAR-Dist（v2） |
+|---|---|---|
+| 锚 | 邻居的激活 | 邻居答案的分布 |
+| 需要 r_UV / steering | 需要 | 不需要 |
+| 训练 | 局部线性回归（便宜） | 端到端（多一份参照模型，穿过整个模型反向传播） |
+| 黑盒拒答痕迹 | 无 | 无 |
+| 似然通道（mia） | 中等（0.42–0.67） | v2 接近 retain（3B forget05 0.32） |
+| 白盒痕迹 | 强（无监督 0.98，有监督 0.91） | 弱（无监督 ≈ 0，有监督 0.28） |
+| utility | 多数格子最高 | v2 在 3B forget05 上 0.66，高于 Act（0.59）；其余格子待测 |
+
+【我的判断】
+- 如果 v2 在其余 8 格上复现 3B forget05 的结果，**NEAR-Dist 应当是论文的主方法**：它是唯一同时在拒答、似然、白盒（无监督）上都接近 retain 的方法，utility 也不吃亏。
+- **NEAR-Act 的定位**是"同一思想的激活版本"：说明"锚落在激活上"会留下强白盒痕迹（过冲），从而引出"锚在分布上"的必要性。按 `0_命名对照.md` 的约定，不要写成与真实开发顺序相反的叙述。
+- 两个方法共同的局限：都只改中间层，**编辑层之前的残留认识**不可避免；需要邻居数据（GPT 生成，K ≥ 3 即可）。
+
+## 4. 已知局限（论文里要写）
+1. **残留认识**：编辑层之前的激活等于原模型（A2，方法无关）。
+2. **依赖邻居数据**：每位被遗忘作者要生成属性匹配的邻居；数据审计与"错配邻居"消融**未做**。
+3. **超参来自扫描**：NEAR-Act 的系数和层按匹配规则在网格中选（用了 Prob，因此"不依赖 retain 模型"只在"Prob ≤ 0.25 这个阈值来自原模型的陌生水平"的意义上成立）；NEAR-Dist 的层在 8B 上没有系统扫描。
+4. **NEAR-Dist v2 的白盒有监督痕迹**比 v1 高（0.18 → 0.28），按事先定的标准没过，需要如实报告。
+5. **NEAR-Dist 的训练成本**高于 NEAR-Act（端到端、两份模型）；开销表尚未补齐。

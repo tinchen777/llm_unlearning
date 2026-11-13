@@ -25,7 +25,7 @@ LRS="5e-5" METHODS="NPO SimNPO IdkDPO"       MODEL=Llama-3.1-8B-Instruct bash sc
 
 **先看 1B**：GradAscent、GradDiff 在 5e-5 下是否还是第 4 步崩溃；若还崩，3B / 8B 的值要再降一档，不要等 8B 跑完。
 
-**8B 显存**（见 `paper_notes/3_讨论纪要与阶段结论.md` §8）：NPO、IdkDPO、RMU 需要参照模型。先让不需要参照模型的跑；这三个若 OOM，加：
+**8B 显存**（见 `paper_notes/4_讨论纪要与阶段结论.md` §8）：NPO、IdkDPO、RMU 需要参照模型。先让不需要参照模型的跑；这三个若 OOM，加：
 ```
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 EXTRA_TRAIN="trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true" \

@@ -1,4 +1,4 @@
-"""Acceptance check of the NEAR-Dist likelihood fix (TODO/paper_notes/10 section 10; the criteria were fixed BEFORE the runs, TODO/exp/20).
+"""Acceptance check of the NEAR-Dist likelihood fix (TODO/paper_notes/3_最新数据与新发现.md §2 (old: history/10 §10); the criteria were fixed BEFORE the runs, TODO/exp/20).
 
 For one cell: the original E8 run (prefix _v3), every variant under the validation prefix (_v4: `_rkl<w>` retain-answer KL, `_dyn<N>` dynamic forget target), NEAR-Act and the retain model.
     python scripts/analysis/dist_fix_check.py --size 3B --split forget05 [--out saves/analysis/dist_fix_3B_forget05.md]

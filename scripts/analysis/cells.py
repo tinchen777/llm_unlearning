@@ -2,7 +2,7 @@
 
     NEAR-Act   = the steering + regression runs without the KL stage (family `NEAR` of pareto.py)
     NEAR-Dist  = the FINAL configuration (2026-11-13): E8 (`fmneighbor_scaled_initoriginal_kfw0_npq3_mn`) + the retain-answer KL weight 1 (`_rkl1`), prefix <pre>_v4 (TODO/exp/20)
-    NEAR-Dist-v1 = E8 without the retain KL (prefix <pre>_v3; the likelihood drift of TODO/paper_notes/10 section 10): appendix only; the other calibration variants / NEAR+KL are left out
+    NEAR-Dist-v1 = E8 without the retain KL (prefix <pre>_v3; the likelihood drift of TODO/paper_notes/3_最新数据与新发现.md §2 (old: history/10 §10)): appendix only; the other calibration variants / NEAR+KL are left out
     LUNAR, GradAscent, GradDiff, NPO, SimNPO, RMU as in saves/eval/LUNAR and saves/tofu_unlearn (protocol `_ep5`, every epoch checkpoint is a point)
     (ROCR: `rocr_points`, the evaluations of saves/eval/ROCR; `ROCR` = the original, `ROCR-nb` = the neighbour target, `ROCR-nb-s<k>` = residual factor k)
 No model is run; everything comes from the TOFU_SUMMARY.json files the evaluations wrote.
