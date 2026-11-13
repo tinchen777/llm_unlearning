@@ -348,6 +348,11 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
                                   "wdown.kl.forget_weight=0", "wdown.kl.steps=3", "wdown.kl.retain_kl_weight=1", "wdown.kl.target=idk", f"wdown.kl.idk_path={idk}", "task_name=klr_idk"])
     ik = json.loads((out_root / "saves" / "NEAR" / "klr_idk" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
     assert ik["kl"]["target"] == "idk" and len(ik["kl"]["history"]) == 3 and all(h["kl"] > 0 for h in ik["kl"]["history"])   # cross-entropy > 0
+    for tgt in ("shared_neighbor", "mismatched_neighbor"):                                        # the other two ablations of the KL target (2 forget authors here)
+        run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=neighbor_scaled", "wdown.kl.init=original",
+                                      "wdown.kl.forget_weight=0", "wdown.kl.steps=2", "wdown.kl.retain_kl_weight=1", f"wdown.kl.target={tgt}", f"task_name=klr_{tgt}"])
+        t = json.loads((out_root / "saves" / "NEAR" / f"klr_{tgt}" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+        assert t["kl"]["target"] == tgt and len(t["kl"]["history"]) == 2 and all(h["kl"] >= 0 for h in t["kl"]["history"])
     with pytest.raises(AssertionError):                                                            # an unknown KL target is an error
         run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.steps=1", "wdown.kl.target=nope", "task_name=klr_badt"])
     with pytest.raises(AssertionError):                                                            # an unknown reference split is an error, not a silent static target

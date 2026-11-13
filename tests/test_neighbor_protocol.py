@@ -239,3 +239,52 @@ def test_build_kl_pairs_rotation_and_mask():
     with pytest.raises(ValueError, match="neighbor_name"):
         build_kl_pairs(Forget(), Nb(), 4, 5, 3, mask_neighbor_name=True)
 
+
+
+def test_build_kl_pairs_remap_shared_and_mismatched():
+    """Ablations of the KL target: `shared` = every author gets the rank-1 neighbour of the FIRST author; `mismatched` = every author gets the NEXT author's neighbours
+    (cyclic); the pairing stays by qa_id and the forget prompt is the one of the author that uses the neighbour."""
+    import torch
+    from METHOD.NEAR.kl_refine import build_kl_pairs, build_idk_pairs
+
+    class Forget:                  # 3 authors (ids 5, 6, 7) x 2 questions
+        question_key = "question"
+        raw_data = [{"question": f"q{i}"} for i in range(6)]
+
+        def __len__(self):
+            return 6
+
+        def __getitem__(self, i):
+            return {"input_ids": [7, i]}
+
+    rows = []
+    for author in (5, 6, 7):       # 2 train neighbours per author; answer token 0 encodes (author, rank)
+        for rank in (1, 2):
+            for qa in range(2):
+                fi = (author - 5) * 2 + qa
+                rows.append({"author_id": author, "qa_id": qa, "train_rank": rank, "source_question": f"q{fi}",
+                             "input_ids": [1, 2, 100 * author + rank, 3, 4], "labels": [-100, -100, 100 * author + rank, 3, 4]})
+
+    class Nb:
+        def __len__(self):
+            return len(rows)
+
+        def __getitem__(self, j):
+            return rows[j]
+
+    own = build_kl_pairs(Forget(), Nb(), qa_per_author=2, author_offset=5, n_tokens=3)
+    assert {int(p["answer"][0]) // 100 for p in own[2]} == {6}                                  # author 6 (rows 2, 3) uses its own neighbours
+    shared = build_kl_pairs(Forget(), Nb(), qa_per_author=2, author_offset=5, n_tokens=3, remap="shared")
+    assert all(len(v) == 1 and int(v[0]["answer"][0]) == 501 for v in shared.values()) and len(shared) == 6   # one entity (author 5, rank 1) for all
+    assert shared[4][0]["forget_prompt"].tolist() == [7, 4]                                     # ... paired with the user's own forget question
+    mis = build_kl_pairs(Forget(), Nb(), qa_per_author=2, author_offset=5, n_tokens=3, remap="mismatched")
+    assert {int(p["answer"][0]) // 100 for p in mis[0]} == {6} and {int(p["answer"][0]) // 100 for p in mis[4]} == {5}   # 5 -> 6's, 7 -> 5's (cyclic)
+    with pytest.raises(ValueError):
+        build_kl_pairs(Forget(), Nb(), 2, 5, 3, remap="nope")
+
+    class Tok:
+        def __call__(self, t, add_special_tokens=False):
+            return {"input_ids": [ord(c) for c in t]}
+    idk = build_idk_pairs(Forget(), ["I do not know", "", "no idea at all"], Tok(), n_tokens=4, per_question=2)
+    assert len(idk) == 6 and all(len(v) == 2 and v[0]["onehot"] for v in idk.values())
+    assert idk[0][0]["answer"].tolist() != idk[0][1]["answer"].tolist()                         # two different answers per question (rotation)

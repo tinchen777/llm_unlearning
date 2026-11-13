@@ -286,14 +286,16 @@ def main(cfg: TrackingConfig):
                         idk_texts = [ln.strip().strip('"') for ln in fh if ln.strip()]
                     groups = build_idk_pairs(split_data["forget"].dataset, idk_texts, tokenizer, int(kl_cfg["n_tokens"]), kl_cfg.get("neighbors_per_question") or 3)
                     logger.info(f"KL target `idk`: {len(idk_texts)} answers from {idk_path}")
-                elif kl_target == "neighbor":
+                elif kl_target in ("neighbor", "shared_neighbor", "mismatched_neighbor"):
+                    # shared_neighbor / mismatched_neighbor: ablations (one target entity for all authors / the next author's neighbours); the calibration targets stay per author
                     groups = build_kl_pairs(
                         split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
                         qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
                         neighbors_per_question=kl_cfg.get("neighbors_per_question"), tokenizer=tokenizer, mask_neighbor_name=bool(kl_cfg.get("mask_neighbor_name", False)),
+                        remap={"neighbor": None, "shared_neighbor": "shared", "mismatched_neighbor": "mismatched"}[kl_target],
                     )
                 else:
-                    raise ValueError(f"wdown.kl.target must be `neighbor` or `idk`, got `{kl_target}`")
+                    raise ValueError(f"wdown.kl.target must be neighbor | idk | shared_neighbor | mismatched_neighbor, got `{kl_target}`")
                 logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions"
                             f" (neighbors_per_question={kl_cfg.get('neighbors_per_question')}, mask_neighbor_name={bool(kl_cfg.get('mask_neighbor_name', False))}, "
                             f"masked tokens: {sum(float((1 - p['mask']).sum()) for v in groups.values() for p in v) / max(1, sum(len(v) for v in groups.values()) * int(kl_cfg['n_tokens'])):.1%})")

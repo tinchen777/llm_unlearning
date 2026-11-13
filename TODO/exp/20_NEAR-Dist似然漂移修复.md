@@ -46,3 +46,20 @@ retain95 的 utility 0.659。同格其他方法的 wb_sup：GA 0.17、NPO 0.24�
 - **动态目标不需要，单独用还有害**（dyn25：所有概率进一步一起下降，utility 0.45）：它追着漂移走，漂移本身没被拦住。最终配置建议只保留 retain KL。
 - **唯一没过的是 C5：wb_sup 从 0.18 升到 0.25–0.30**（门槛 0.23）。按事先定的标准这算没过，必须如实报告。但这个水平与 GA / NPO / GradDiff / SimNPO 同档，远低于 Act / LUNAR / ROCR / RMU；而且 8B 上 E8 三个种子的 wb_sup 是 0.49 / 0.36 / 0.35，种子波动约 0.14，与这里的升幅（+0.07–0.12）同量级。是否是真升高，要看第 2 轮的种子。
 - **第 2 轮**（`scripts/exp/dist_fix_lane2.sh`）：rkl3、rkl10（更强的 retain KL 是否压低 wb_sup：rkl3_dyn25 的 0.251 是第 1 轮最低）；原 E8 与 rkl1 各 2 个种子（修复前后 wb_sup 的种子噪声）。
+
+## 消融：KL 目标（2026-11-13）
+`wdown.kl.target`（扫描变量 `KL_TARGET`，变体 `_t<目标>`），其余与 NEAR-Dist v2 完全相同：
+- `idk`：`data/idk.jsonl` 的"我不知道"回答，对前 8 个 token 做交叉熵，每题 3 条（固定轮换）。
+- `shared_neighbor`：所有被遗忘作者都用同一位邻居（第一位作者的 rank-1 邻居）——共享但不是拒答的目标。
+- `mismatched_neighbor`：每位作者用遗忘集里下一位作者的邻居——目标各不相同，但属性不匹配。
+逐题的概率标定仍按各作者自己的邻居计算。
+
+已有：3B / 1B forget05 的 `idk`（`dist_ablation_idk_lane.sh`，结果见 `paper_notes/3` §2.4）。
+补充（三条链，可同时跑）：
+```
+bash scripts/exp/abl_target_big.sh <80GB GPU>    # 8B forget05：idk / shared / mismatched
+bash scripts/exp/abl_target_3b.sh <40GB GPU>     # 3B forget05：shared / mismatched / idk 种子 1、2；3B forget01：idk
+bash scripts/exp/abl_target_1b.sh <GPU>          # 1B forget05：shared / mismatched；1B forget10：idk（显存小，可与 big 同卡）
+```
+结果：`saves/analysis/dist_fix_<规模>_<split>.md`，对比 "Dist rkl1 (s0)"（v2）与 "Dist rkl1_t<目标> (s..)"。
+预期（我的判断，未验证）：若"共享目标"是白盒痕迹的来源，`shared_neighbor` 的白盒会升高而 `ud_bb` 仍为 0；`mismatched_neighbor` 的白盒应保持低。

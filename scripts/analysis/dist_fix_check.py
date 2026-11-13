@@ -20,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import cells  # noqa: E402
 
-E8 = "rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn"
+E8 = "fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn"     # the E8 stem; the steps (_s300 / _s500 / none for forget01) come before it
 RETAIN = {"forget01": "retain99", "forget05": "retain95", "forget10": "retain90"}
 
 
@@ -42,9 +42,9 @@ def rows_for(size, split, root="saves"):
     pre = cells.NEAR_PREFIX[(size, split)]
     model = cells.MODELS[size]
     rows = []
-    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v3/{E8}_increment_seq_*_k5_*")):
+    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v3/rw1_ans_kl1*_{E8}_increment_seq_*_k5_*")):
         rows.append(("NEAR-Dist (original)", d))
-    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v4*/{E8}*_k5_*")):          # _v4 = seed 0, _v4_s<n> = seed n
+    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v4*/rw1_ans_kl1*_{E8}*_k5_*")):   # _v4 = seed 0, _v4_s<n> = seed n
         var = os.path.basename(d).split(E8)[1].split("_increment_seq")[0].lstrip("_") or "original config"
         seed = os.path.basename(os.path.dirname(d)).split(f"{pre}_v4")[1].lstrip("_") or "s0"
         rows.append((f"Dist {var} ({seed})", d))

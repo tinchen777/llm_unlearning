@@ -58,8 +58,14 @@ def build_kl_pairs(
     neighbors_per_question: Optional[int] = None,
     tokenizer: Any = None,
     mask_neighbor_name: bool = False,
+    remap: Optional[str] = None,
 ) -> Dict[int, List[Dict[str, torch.Tensor]]]:
     """Pair every TRAIN neighbour question with the forget question it paraphrases: `{forget row: [pair, ...]}`.
+
+    `remap` (ablations of the KL target; everything else unchanged): None = every forget author gets ITS OWN neighbours (NEAR-Dist);
+    `shared` = every forget author gets the SAME single neighbour (the train_rank-1 neighbour of the first forget author): one target entity shared by all;
+    `mismatched` = every forget author gets the neighbours of the NEXT forget author (cyclic): targets still differ between authors but are not attribute-matched.
+    In both cases a neighbour row is paired with the forget question of the same `qa_id` of the author that USES it.
 
     Pairing = same author (`author_id`) and same question number (`qa_id`) -> forget row `(author - author_offset) * qa_per_author + qa_id`.
     If the neighbour csv has `source_question` it must equal the forget question (a wrong row order is an error, not a silent mismatch).
@@ -71,19 +77,33 @@ def build_kl_pairs(
     different questions get different neighbours. None = all of them. `mask_neighbor_name`: leave the neighbour's name tokens (`neighbor_name` of the csv) out of the KL.
     """
     question_key = getattr(forget_ds, "question_key", "question")
+    if remap not in (None, "shared", "mismatched"):
+        raise ValueError(f"remap must be None, `shared` or `mismatched`, got `{remap}`")
+    authors = sorted({fi // qa_per_author + author_offset for fi in range(len(forget_ds))})
+    if remap == "mismatched" and len(authors) < 2:
+        raise ValueError("remap `mismatched` needs at least two forget authors")
+    source_of = {a: (authors[0] if remap == "shared" else authors[(i + 1) % len(authors)] if remap == "mismatched" else a) for i, a in enumerate(authors)}
+    users_of: Dict[int, List[int]] = {}
+    for a, b in source_of.items():
+        users_of.setdefault(b, []).append(a)
     rows: Dict[int, List[Tuple[int, int, Dict[str, torch.Tensor]]]] = {}
     for j in range(len(neighbor_full_ds)):
         nb = neighbor_full_ds[j]
         author, qa = int(nb["author_id"]), int(nb["qa_id"])
-        fi = (author - author_offset) * qa_per_author + qa
-        if not 0 <= fi < len(forget_ds):
-            raise ValueError(f"neighbour row {j} (author {author}, qa_id {qa}) -> forget row {fi}, outside 0..{len(forget_ds) - 1}.")
+        fi_src = (author - author_offset) * qa_per_author + qa
+        if not 0 <= fi_src < len(forget_ds):
+            raise ValueError(f"neighbour row {j} (author {author}, qa_id {qa}) -> forget row {fi_src}, outside 0..{len(forget_ds) - 1}.")
         source = nb.get("source_question", None)
-        if source is not None and str(source).strip() != str(forget_ds.raw_data[fi][question_key]).strip():
+        if source is not None and str(source).strip() != str(forget_ds.raw_data[fi_src][question_key]).strip():
             raise ValueError(
-                f"neighbour row {j} (author {author}, qa_id {qa}) paraphrases `{source}`, but forget row {fi} is "
-                f"`{forget_ds.raw_data[fi][question_key]}`: the order of the forget split does not match the neighbour csv."
+                f"neighbour row {j} (author {author}, qa_id {qa}) paraphrases `{source}`, but forget row {fi_src} is "
+                f"`{forget_ds.raw_data[fi_src][question_key]}`: the order of the forget split does not match the neighbour csv."
             )
+        if remap == "shared" and int(nb.get("train_rank", 1)) != 1:
+            continue                                                       # one single target entity for everybody
+        users = users_of.get(author, [])
+        if not users:
+            continue
         ids, labels = torch.as_tensor(nb["input_ids"]), torch.as_tensor(nb["labels"])
         prompt_len = int((labels == -100).sum())
         answer = ids[prompt_len:prompt_len + n_tokens]
@@ -95,12 +115,14 @@ def build_kl_pairs(
                 raise ValueError("mask_neighbor_name needs the tokenizer and the `neighbor_name` column of the neighbour csv (extra_keys / metadata_keys of data.neighbor).")
             mask = name_token_mask(answer.tolist(), str(nb["neighbor_name"]), tokenizer)
         rank = int(nb["train_rank"]) if "train_rank" in nb else j
-        rows.setdefault(fi, []).append((rank, j, {
-            "forget_prompt": torch.as_tensor(forget_ds[fi]["input_ids"]),
-            "neighbor_prompt": ids[:prompt_len],
-            "answer": answer,
-            "mask": mask,
-        }))
+        for a in users:                                                    # the forget question of the same qa_id of every author that uses this neighbour
+            fi = (a - author_offset) * qa_per_author + qa
+            rows.setdefault(fi, []).append((rank, j, {
+                "forget_prompt": torch.as_tensor(forget_ds[fi]["input_ids"]),
+                "neighbor_prompt": ids[:prompt_len],
+                "answer": answer,
+                "mask": mask,
+            }))
     groups: Dict[int, List[Dict[str, torch.Tensor]]] = {}
     for fi, items in rows.items():
         items.sort(key=lambda t: (t[0], t[1]))
