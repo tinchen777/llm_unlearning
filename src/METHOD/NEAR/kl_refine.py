@@ -113,6 +113,34 @@ def build_kl_pairs(
     return groups
 
 
+def build_idk_pairs(
+    forget_ds: Any,
+    idk_texts: Sequence[str],
+    tokenizer: Any,
+    n_tokens: int,
+    per_question: int = 3,
+) -> Dict[int, List[Dict[str, torch.Tensor]]]:
+    """Ablation of the KL TARGET (`kl.target: idk`): every forget question gets `per_question` "I don't know"-style answers (a fixed rotation over `idk_texts`, as the
+    neighbours are rotated), `{forget row: [pair, ...]}`. A pair has no teacher prompt: `onehot=True`, the target of the KL is the answer token itself (cross-entropy on the
+    first `n_tokens` answer tokens = KL to a one-hot distribution). Texts shorter than `n_tokens` tokens are skipped."""
+    answers = []
+    for t in idk_texts:
+        t = str(t).strip()
+        if not t:
+            continue
+        ids = tokenizer(t, add_special_tokens=False)["input_ids"][:n_tokens]
+        if len(ids) == n_tokens:
+            answers.append(torch.as_tensor(ids))
+    if not answers:
+        raise ValueError(f"no `I don't know` answer has {n_tokens} tokens")
+    m = max(1, int(per_question or 1))
+    groups: Dict[int, List[Dict[str, torch.Tensor]]] = {}
+    for fi in range(len(forget_ds)):
+        prompt = torch.as_tensor(forget_ds[fi]["input_ids"])
+        groups[fi] = [{"forget_prompt": prompt, "answer": answers[(fi * m + t) % len(answers)], "mask": torch.ones(n_tokens), "onehot": True} for t in range(m)]
+    return groups
+
+
 def _left_pad(seqs: Sequence[torch.Tensor], pad_id: int, device: Any) -> Dict[str, torch.Tensor]:
     """Left-padded `input_ids`, `attention_mask` and mask-aware `position_ids` (so that the padding does not move the positions)."""
     n = max(len(s) for s in seqs)
@@ -386,11 +414,15 @@ def refine_w_down(
             if kl_w > 0:
                 picked = [rng.choice(kl_groups[rng.choice(fidx)]) for _ in range(kl_bs)]
                 edited_in = _left_pad([torch.cat([p["forget_prompt"], p["answer"]]) for p in picked], pad_id, device)
-                ref_in = _left_pad([torch.cat([p["neighbor_prompt"], p["answer"]]) for p in picked], pad_id, device)
-                with torch.no_grad():
-                    ref_logp = F.log_softmax(_answer_logits(ref_model, ref_in, n_tokens), dim=-1)
                 edited_logp = F.log_softmax(_answer_logits(model, edited_in, n_tokens), dim=-1)
-                kl_tok = (ref_logp.exp() * (ref_logp - edited_logp)).sum(-1)          # [pairs, n_tokens]
+                if all(p.get("onehot") for p in picked):                               # kl.target=idk: the teacher is the answer token itself (cross-entropy)
+                    tgt = torch.stack([p["answer"] for p in picked]).to(device)
+                    kl_tok = -edited_logp.gather(-1, tgt.unsqueeze(-1)).squeeze(-1)    # [pairs, n_tokens]
+                else:
+                    ref_in = _left_pad([torch.cat([p["neighbor_prompt"], p["answer"]]) for p in picked], pad_id, device)
+                    with torch.no_grad():
+                        ref_logp = F.log_softmax(_answer_logits(ref_model, ref_in, n_tokens), dim=-1)
+                    kl_tok = (ref_logp.exp() * (ref_logp - edited_logp)).sum(-1)      # [pairs, n_tokens]
                 keep = torch.stack([p["mask"] for p in picked]).to(kl_tok)             # 0 = a neighbour-name token (mask_neighbor_name)
                 loss_kl = (kl_tok * keep).sum() / keep.sum().clamp_min(1.0)
                 (kl_w * loss_kl).backward()

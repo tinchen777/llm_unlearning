@@ -42,6 +42,7 @@ KL_MASK_NAME=${KL_MASK_NAME:-}           # 1: leave the neighbour-name tokens ou
 RKL_WEIGHT=${RKL_WEIGHT:-}               # retain-answer KL weight (wdown.kl.retain_kl_weight; against the global likelihood drift, 2026-11-12), variant _rkl<w>
 DYN_EVERY=${DYN_EVERY:-}                 # dynamic forget target every N steps (wdown.kl.forget_prob_dynamic_every), variant _dyn<N>
 DYN_REF=${DYN_REF:-}                     # its unseen reference split (wdown.kl.forget_prob_dynamic_ref, default neighbor_heldout), variant _dr<split>
+KL_TARGET=${KL_TARGET:-}                 # idk: ablation, the KL target = "I don't know" answers instead of the neighbours' (wdown.kl.target), variant _t<target>
 MULTI_LAYER=${MULTI_LAYER:-increment}     # only with several layers: same | increment
 SEQUENTIAL=${SEQUENTIAL:-0}               # only with several layers: 1 = train the layers one after the other
 
@@ -84,6 +85,7 @@ for rw in "${RETAIN_WEIGHTS[@]}"; do
     if [ -n "${RKL_WEIGHT}" ]; then extra="${extra} wdown.kl.retain_kl_weight=${RKL_WEIGHT}"; variant=${variant}_rkl${RKL_WEIGHT}; fi
     if [ -n "${DYN_EVERY}" ]; then extra="${extra} wdown.kl.forget_prob_dynamic_every=${DYN_EVERY}"; variant=${variant}_dyn${DYN_EVERY}; fi
     if [ -n "${DYN_REF}" ]; then extra="${extra} wdown.kl.forget_prob_dynamic_ref=${DYN_REF}"; variant=${variant}_dr${DYN_REF}; fi
+    if [ -n "${KL_TARGET}" ]; then extra="${extra} wdown.kl.target=${KL_TARGET}"; variant=${variant}_t${KL_TARGET}; fi
   fi
   if [[ "${LAYER}" == *,* ]]; then
     extra="${extra} wdown.multi_layer=${MULTI_LAYER}"

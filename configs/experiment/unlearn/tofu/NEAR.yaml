@@ -247,6 +247,8 @@ wdown:
     forget_prob_dynamic_every: 0 # N > 0: every N steps the forget targets are rescaled by (current model / step-0 model) probability of an unseen reference set: the targets follow the edited model's own unseen level; 0 = static targets (before 2026-11-12)
     forget_prob_dynamic_ref: neighbor_heldout # the unseen reference of the dynamic target: neighbor_heldout (never trained, not the TOFU holdout of the MIA) | holdout
     forget_prob_dynamic_samples: 256 # fixed subset (sampling_seed) of the reference set
+    target: neighbor # the target of the KL term: neighbor (the train neighbours' answers, NEAR-Dist) | idk (ablation: "I don't know"-style answers of idk_path, cross-entropy on their first n_tokens tokens)
+    idk_path: ${paths.data_dir}idk.jsonl # one answer per line (the file of the IdkDPO baseline)
   answer_coeff: null # include_answer only: factor on `coeff` for the ANSWER tokens (e.g. 0.5); null = the same shift as the prompt
   retain_splits: [retain, neighbor]
   retain_max_samples: 512

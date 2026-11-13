@@ -341,6 +341,15 @@ def test_near_w_down_kl_refinement_runs_end_to_end(assets, tmp_path):
     assert all(x["retain_kl"] >= 0 for x in h) and any(x["retain_kl"] > 0 for x in h[1:])       # the weights move -> the retained answers' distribution moves a little
     assert h[0]["target_scale"] == 1.0 and h[1]["target_scale"] == 1.0                            # rescaled at steps 2 and 4 only
     assert h[2]["target_scale"] != 1.0 and h[2]["target_scale"] > 0 and h[2]["unseen_ref"] is not None and 0 < h[2]["unseen_ref"] < 1
+    # ablation of the KL target: "I don't know" answers instead of the neighbours' (cross-entropy on their first n_tokens tokens), everything else unchanged
+    idk = tmp_path / "idk.jsonl"
+    idk.write_text("I'm not sure who that is at all.\nI have no information about this person whatsoever.\nI don't know anything about that.\n")
+    run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=neighbor_scaled", "wdown.kl.init=original",
+                                  "wdown.kl.forget_weight=0", "wdown.kl.steps=3", "wdown.kl.retain_kl_weight=1", "wdown.kl.target=idk", f"wdown.kl.idk_path={idk}", "task_name=klr_idk"])
+    ik = json.loads((out_root / "saves" / "NEAR" / "klr_idk" / "k2_c1_all" / "l1-2" / "w_down_summary.json").read_text())
+    assert ik["kl"]["target"] == "idk" and len(ik["kl"]["history"]) == 3 and all(h["kl"] > 0 for h in ik["kl"]["history"])   # cross-entropy > 0
+    with pytest.raises(AssertionError):                                                            # an unknown KL target is an error
+        run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.steps=1", "wdown.kl.target=nope", "task_name=klr_badt"])
     with pytest.raises(AssertionError):                                                            # an unknown reference split is an error, not a silent static target
         run("NEAR/w_down.py", args + [f"wdown.layer_selection_path={sel_path}", "wdown.layers=[1,2]", *kl[:-1], "wdown.kl.forget_prob_mode=neighbor_scaled", "wdown.kl.init=original",
                                       "wdown.kl.forget_weight=0", "wdown.kl.steps=2", "wdown.kl.forget_prob_dynamic_every=1", "wdown.kl.forget_prob_dynamic_ref=nope", "task_name=klr_bad"])

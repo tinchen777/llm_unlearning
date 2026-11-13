@@ -54,7 +54,7 @@ from utils.cost import CostMeter
 from utils.log import step_logging
 from utils.config import hydra_main
 from METHOD.NEAR._utils.neighbors import forget_authors, run_dir as make_run_dir
-from METHOD.NEAR.kl_refine import build_kl_pairs, estimate_unseen_prob, neighbor_answer_probs, refine_w_down
+from METHOD.NEAR.kl_refine import build_idk_pairs, build_kl_pairs, estimate_unseen_prob, neighbor_answer_probs, refine_w_down
 from METHOD._common.editing import layer_increments, train_w_down_layers
 from METHOD._common.lineage import check_r_uv_identity, model_name, pick, resolve_r_uv_path
 
@@ -279,11 +279,21 @@ def main(cfg: TrackingConfig):
         kl_history = None
         if use_kl:
             with step_logging(logger, "#3b", "end-to-end refinement with the KL term"), meter.stage("refine_kl_hinge"):
-                groups = build_kl_pairs(
-                    split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
-                    qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
-                    neighbors_per_question=kl_cfg.get("neighbors_per_question"), tokenizer=tokenizer, mask_neighbor_name=bool(kl_cfg.get("mask_neighbor_name", False)),
-                )
+                kl_target = str(kl_cfg.get("target") or "neighbor")
+                if kl_target == "idk":   # ablation: the same KL term, the target = "I don't know"-style answers instead of the neighbours' answers (everything else unchanged)
+                    idk_path = str(kl_cfg.get("idk_path"))
+                    with open(idk_path, encoding="utf-8") as fh:
+                        idk_texts = [ln.strip().strip('"') for ln in fh if ln.strip()]
+                    groups = build_idk_pairs(split_data["forget"].dataset, idk_texts, tokenizer, int(kl_cfg["n_tokens"]), kl_cfg.get("neighbors_per_question") or 3)
+                    logger.info(f"KL target `idk`: {len(idk_texts)} answers from {idk_path}")
+                elif kl_target == "neighbor":
+                    groups = build_kl_pairs(
+                        split_data["forget"].dataset, split_data["neighbor"].with_generation_mode(False).dataset,
+                        qa_per_author, author_offset, int(kl_cfg["n_tokens"]),
+                        neighbors_per_question=kl_cfg.get("neighbors_per_question"), tokenizer=tokenizer, mask_neighbor_name=bool(kl_cfg.get("mask_neighbor_name", False)),
+                    )
+                else:
+                    raise ValueError(f"wdown.kl.target must be `neighbor` or `idk`, got `{kl_target}`")
                 logger.info(f"KL pairs: {sum(len(v) for v in groups.values())} (neighbour answers) for {len(groups)} forget questions"
                             f" (neighbors_per_question={kl_cfg.get('neighbors_per_question')}, mask_neighbor_name={bool(kl_cfg.get('mask_neighbor_name', False))}, "
                             f"masked tokens: {sum(float((1 - p['mask']).sum()) for v in groups.values() for p in v) / max(1, sum(len(v) for v in groups.values()) * int(kl_cfg['n_tokens'])):.1%})")
@@ -382,7 +392,7 @@ def main(cfg: TrackingConfig):
             "solver": solver, "ridge": float(wd_cfg["ridge"]) if solver == "closed_form" else None,
             "include_answer": include_answer, "answer_coeff": answer_scale, "multi_layer": multi_layer, "sequential": sequential, "num_tokens": num_tokens,
             "cost": {**meter.summary(), "trainable_params": int(sum(w.numel() for w in new_weights.values())), "edited_layers": len(new_weights)},
-            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size", "neighbors_per_question", "mask_neighbor_name", "retain_kl_weight", "forget_prob_dynamic_every", "forget_prob_dynamic_ref", "forget_prob_dynamic_samples") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
+            "kl": ({k_: kl_cfg[k_] for k_ in ("steps", "lr", "weight", "n_tokens", "batch_size", "retain_max_samples", "forget_prob_weight", "forget_prob_mode", "init", "forget_weight", "fr_batch_size", "neighbors_per_question", "mask_neighbor_name", "retain_kl_weight", "forget_prob_dynamic_every", "forget_prob_dynamic_ref", "forget_prob_dynamic_samples", "target") if k_ in kl_cfg} | {"forget_prob_target": (kl_cfg_used.get("forget_prob_target") if use_kl else None)} | {"history": kl_history}) if use_kl else None,
             "hyperparameters": {key: wd_cfg[key] for key in (
                 "lr", "lr_gamma", "epochs", "batch_size", "weight_decay", "forget_weight", "retain_weight",
                 "retain_max_samples")} | {"retain_splits": list(wd_cfg["retain_splits"])},

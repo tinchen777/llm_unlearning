@@ -42,7 +42,7 @@ for coeff in "${COEFFS[@]}"; do
   for layers in "${LAYER_SETS[@]}"; do
     tag=${layers//,/-}
     for kl in "${KL_WEIGHTS[@]}"; do
-      if [ "${kl}" = off ]; then kl_env=""; variant=rw1_ans_increment_seq_c${coeff}_l${tag}; else kl_env=${kl}; variant=rw1_ans_kl${kl}${KL_STEPS:+_s${KL_STEPS}}${KL_LR:+_lr${KL_LR}}${FP_WEIGHT:+_fp${FP_WEIGHT}}${FP_TARGET:+_ft${FP_TARGET}}${FP_MODE:+_fm${FP_MODE}}${KL_INIT:+_init${KL_INIT}}${KL_FORGET_W:+_kfw${KL_FORGET_W}}${KL_NPQ:+_npq${KL_NPQ}}$([ "${KL_MASK_NAME}" = 1 ] && echo _mn)${RKL_WEIGHT:+_rkl${RKL_WEIGHT}}${DYN_EVERY:+_dyn${DYN_EVERY}}${DYN_REF:+_dr${DYN_REF}}_increment_seq_c${coeff}_l${tag}; fi   # KL_STEPS / KL_LR: passed on to sweep_w_down.sh (same naming)
+      if [ "${kl}" = off ]; then kl_env=""; variant=rw1_ans_increment_seq_c${coeff}_l${tag}; else kl_env=${kl}; variant=rw1_ans_kl${kl}${KL_STEPS:+_s${KL_STEPS}}${KL_LR:+_lr${KL_LR}}${FP_WEIGHT:+_fp${FP_WEIGHT}}${FP_TARGET:+_ft${FP_TARGET}}${FP_MODE:+_fm${FP_MODE}}${KL_INIT:+_init${KL_INIT}}${KL_FORGET_W:+_kfw${KL_FORGET_W}}${KL_NPQ:+_npq${KL_NPQ}}$([ "${KL_MASK_NAME}" = 1 ] && echo _mn)${RKL_WEIGHT:+_rkl${RKL_WEIGHT}}${DYN_EVERY:+_dyn${DYN_EVERY}}${DYN_REF:+_dr${DYN_REF}}${KL_TARGET:+_t${KL_TARGET}}_increment_seq_c${coeff}_l${tag}; fi   # KL_STEPS / KL_LR: passed on to sweep_w_down.sh (same naming)
       done_file=saves/eval/NEAR/${OUT_PREFIX}/${variant}_k5_l${tag}_c${coeff}_all/TOFU_EVAL.json
       if [ "${SKIP_DONE}" = 1 ] && [ -f "${done_file}" ]; then echo "skip (done): ${variant}"; continue; fi
       echo "################  coeff=${coeff} layers=${layers} kl=${kl}  ->  ${variant}  ################"
