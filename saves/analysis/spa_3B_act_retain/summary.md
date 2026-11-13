@@ -16,3 +16,34 @@ Edit layers [12, 13, 14]: before them the activations of M' equal those of the o
 Name-token-length Spearman (Q1): P0-familiarity/lr: -0.55, P0-familiarity/dm: -0.58, P1-spec/lr: -0.11, P1-spec/dm: 0.00, P2-fingerprint/lr: 0.17, P2-fingerprint/dm: 0.06.
 
 Strength (answer-probability proxy, mean over authors): {"shadow_S_prob": [0.1276192082557827, 0.2461851429194212, 0.18188230451196433, 0.20641674525104464, 0.2249747272580862], "shadow_HA_prob": [0.14921528194565326, 0.15251695362851023, 0.15170244528446347, 0.15452641017735005, 0.15094315313734114], "shadow_F_prob": [0.12650572932790966, 0.1252580314176157, 0.12219797229394316, 0.13005360951181505, 0.12845500742085278], "target": {"S": 0.9402199801802636, "F": 0.12411896957084537, "H_A": 0.15010720291640609, "H_B": 0.13045282321516424, "R_A": 0.9380298426747322, "R_B": 0.9398281663656235}}
+
+## Layer rules
+
+Layer rules (none uses a target label; the edited layers are a known hyper-parameter): cv = max CV AUC, first of the ties; cv_deepest = deepest layer within 0.005 of the max CV AUC; post_edit_mean = all layers after the last edited layer (edit trace); pre_edit_mean = all layers before the first edited layer (residual recognition). Multi-layer rules average the per-layer author scores, each standardised by its probe's scores on its own training rows. Length-corrected = residual of an OLS of the score on the number of name tokens over all candidates (F, H_B, R_B) together. Main results: post_edit_mean / pre_edit_mean, length-corrected; cv / cv_deepest = sensitivity. A detection needs AUC > null95 AND clearly above the retain control under the same rule.
+
+| probe | rule | layers | Q1 AUC [95% jackknife] (null95) | Q2 AUC (null95) | Q1 length-corrected [jackknife] (null95) | Q2 length-corrected (null95) |
+|---|---|---|---|---|---|---|
+| P0-familiarity/lr | cv | L9 | 0.84 [0.66, 1.00] (0.71) | 0.35 (0.72) | 0.81 [0.61, 1.00] (0.70) | 0.33 (0.71) |
+| P0-familiarity/lr | cv_deepest | L9 | 0.84 [0.66, 1.00] (0.71) | 0.35 (0.72) | 0.81 [0.61, 1.00] (0.70) | 0.33 (0.71) |
+| P0-familiarity/lr | post_edit_mean | L15-27 | 0.53 [0.25, 0.81] (0.68) | 0.39 (0.70) | 0.50 [0.21, 0.79] (0.70) | 0.39 (0.71) |
+| P0-familiarity/lr | pre_edit_mean | L0-11 | 0.74 [0.50, 0.98] (0.71) | 0.46 (0.71) | 0.67 [0.40, 0.94] (0.70) | 0.45 (0.70) |
+| P0-familiarity/dm | cv | L12 | 0.75 [0.52, 0.98] (0.68) | 0.45 (0.69) | 0.77 [0.53, 1.00] (0.69) | 0.39 (0.70) |
+| P0-familiarity/dm | cv_deepest | L13 | 0.74 [0.51, 0.97] (0.67) | 0.42 (0.69) | 0.70 [0.44, 0.96] (0.68) | 0.40 (0.71) |
+| P0-familiarity/dm | post_edit_mean | L15-27 | 0.60 [0.33, 0.87] (0.70) | 0.51 (0.70) | 0.60 [0.33, 0.87] (0.70) | 0.51 (0.70) |
+| P0-familiarity/dm | pre_edit_mean | L0-11 | 0.76 [0.51, 1.00] (0.70) | 0.45 (0.71) | 0.76 [0.52, 1.00] (0.68) | 0.48 (0.70) |
+| P1-spec/lr | cv | L15 | 0.56 [0.28, 0.84] (0.68) | 0.60 (0.71) | 0.54 [0.26, 0.82] (0.68) | 0.60 (0.71) |
+| P1-spec/lr | cv_deepest | L19 | 0.60 [0.32, 0.88] (0.69) | 0.54 (0.72) | 0.58 [0.30, 0.86] (0.70) | 0.55 (0.73) |
+| P1-spec/lr | post_edit_mean | L15-27 | 0.55 [0.27, 0.83] (0.72) | 0.44 (0.72) | 0.50 [0.21, 0.79] (0.69) | 0.48 (0.73) |
+| P1-spec/lr | pre_edit_mean | L0-11 | 0.72 [0.46, 0.98] (0.68) | 0.63 (0.72) | 0.70 [0.44, 0.96] (0.69) | 0.60 (0.71) |
+| P1-spec/dm | cv | L15 | 0.47 [0.19, 0.75] (0.69) | 0.60 (0.71) | 0.53 [0.25, 0.81] (0.69) | 0.60 (0.71) |
+| P1-spec/dm | cv_deepest | L20 | 0.58 [0.29, 0.87] (0.71) | 0.60 (0.71) | 0.58 [0.29, 0.87] (0.72) | 0.60 (0.71) |
+| P1-spec/dm | post_edit_mean | L15-27 | 0.53 [0.25, 0.81] (0.72) | 0.49 (0.72) | 0.49 [0.21, 0.77] (0.74) | 0.53 (0.70) |
+| P1-spec/dm | pre_edit_mean | L0-11 | 0.66 [0.37, 0.95] (0.66) | 0.55 (0.73) | 0.61 [0.34, 0.88] (0.68) | 0.59 (0.70) |
+| P2-fingerprint/lr | cv | L18 | 0.28 [0.03, 0.53] (0.71) | 0.53 (0.70) | 0.36 [0.10, 0.62] (0.70) | 0.50 (0.70) |
+| P2-fingerprint/lr | cv_deepest | L27 | 0.43 [0.15, 0.71] (0.70) | 0.36 (0.73) | 0.39 [0.10, 0.68] (0.73) | 0.39 (0.74) |
+| P2-fingerprint/lr | post_edit_mean | L15-27 | 0.41 [0.13, 0.69] (0.71) | 0.33 (0.75) | 0.35 [0.08, 0.62] (0.70) | 0.32 (0.71) |
+| P2-fingerprint/lr | pre_edit_mean | L0-11 | 0.68 [0.40, 0.96] (0.67) | 0.81 (0.72) | 0.60 [0.33, 0.87] (0.68) | 0.82 (0.73) |
+| P2-fingerprint/dm | cv | L18 | 0.55 [0.27, 0.83] (0.73) | 0.64 (0.71) | 0.52 [0.24, 0.80] (0.74) | 0.63 (0.72) |
+| P2-fingerprint/dm | cv_deepest | L26 | 0.44 [0.15, 0.73] (0.69) | 0.34 (0.72) | 0.38 [0.10, 0.66] (0.70) | 0.38 (0.71) |
+| P2-fingerprint/dm | post_edit_mean | L15-27 | 0.42 [0.14, 0.70] (0.70) | 0.32 (0.72) | 0.40 [0.12, 0.68] (0.71) | 0.37 (0.71) |
+| P2-fingerprint/dm | pre_edit_mean | L0-11 | 0.60 [0.30, 0.90] (0.68) | 0.63 (0.71) | 0.51 [0.22, 0.80] (0.68) | 0.72 (0.71) |
