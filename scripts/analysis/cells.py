@@ -3,7 +3,7 @@
     NEAR-Act   = the steering + regression runs without the KL stage (family `NEAR` of pareto.py)
     NEAR-Dist  = the FINAL configuration (2026-11-13): E8 (`fmneighbor_scaled_initoriginal_kfw0_npq3_mn`) + the retain-answer KL weight 1 (`_rkl1`), prefix <pre>_v4 (TODO/exp/20)
     NEAR-Dist-v1 = E8 without the retain KL (prefix <pre>_v3; the likelihood drift of TODO/paper_notes/3_最新数据与新发现.md §2 (old: history/10 §10)): appendix only; the other calibration variants / NEAR+KL are left out
-    LUNAR, GradAscent, GradDiff, NPO, SimNPO, RMU as in saves/eval/LUNAR and saves/tofu_unlearn (protocol `_ep5`, every epoch checkpoint is a point)
+    LUNAR, GradAscent, GradDiff, NPO, SimNPO, RMU as in saves/eval/LUNAR and saves/tofu_unlearn (protocol `_ep5`, every epoch checkpoint is a point; default seed only, see SEED_RUN_RE)
     (ROCR: `rocr_points`, the evaluations of saves/eval/ROCR; `ROCR` = the original, `ROCR-nb` = the neighbour target, `ROCR-nb-s<k>` = residual factor k)
 No model is run; everything comes from the TOFU_SUMMARY.json files the evaluations wrote.
 """
@@ -23,6 +23,11 @@ MAIN = ("GradAscent", "NPO", "RMU", "LUNAR", "NEAR-Act", "NEAR-Dist")
 APPENDIX = ("GradDiff", "SimNPO", "NEAR-Dist-v1")
 # folders of saves/eval/LUNAR that are NOT results of their name (TODO/exp/23 §4: the 3B "forget05 ..._ks" runs were forget10 runs) -> never read
 MISFILED = {"misfiled"}
+# SEED POLICY (2026-11-14, TODO/exp/25): the main table uses the DEFAULT seed of every method. The NEAR seeds live in other prefixes (*_v4_s<n>) and were never
+# read; the baseline seeds (runs `..._s1`, `..._s2` next to the default one) were, and best_matched then picked the best-utility point over THREE seeds for GA /
+# NPO (utility ties to 2 decimals), i.e. the luckiest white-box seed. They are now skipped unless CELLS_ALL_SEEDS=1 (the old behaviour).
+SEED_RUN_RE = re.compile(r"_s\d+(?:@|$)")
+ALL_SEEDS = os.environ.get("CELLS_ALL_SEEDS") == "1"
 E8_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment")          # E8 exactly (no later suffix): NEAR-Dist-v1
 DIST_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment")    # + retain KL 1 only (no _dyn): NEAR-Dist
 
@@ -46,6 +51,8 @@ def load_cell(size, split, root="saves"):
             elif E8_RE.search(p["run"]):
                 out.append({**p, "method": "NEAR-Dist-v1"})
         elif p["family"] in ("LUNAR", "baseline"):
+            if p["family"] == "baseline" and SEED_RUN_RE.search(p["run"]) and not ALL_SEEDS:
+                continue   # extra seeds (_s1, _s2): spread only, never a candidate point (TODO/exp/25)
             out.append(p)
     for p in out:
         p["path"] = _locate(p, size, split, root)
