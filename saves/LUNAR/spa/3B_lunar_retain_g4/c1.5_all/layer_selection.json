@@ -1,0 +1,48 @@
+{
+    "aggregate": "mean",
+    "candidates": [
+        12
+    ],
+    "coeff": 1.5,
+    "criterion": "s1 - s2",
+    "embedder": "sentence-transformers/all-MiniLM-L6-v2",
+    "forget_split": "forget10",
+    "max_degenerate": 0.1,
+    "model": "open-unlearning/tofu_Llama-3.2-3B-Instruct_retain95",
+    "num_forget": 40,
+    "per_layer": {
+        "12": {
+            "answer_logprob": -2.4459655404090883,
+            "answer_prob": 0.10471123249051292,
+            "degenerate_rate": 0.225,
+            "dup_rate": 0.25,
+            "hallucination_rate": 0.75,
+            "mean_words": 46.075,
+            "n": 40,
+            "refusal_rate": 0.0,
+            "repetition_mean": 0.2758539922942866,
+            "rouge1_recall": 0.10869272274935857,
+            "rougeL_f1": 0.04171609387171376,
+            "rougeL_recall": 0.09699460285878424,
+            "s1": 0.06972949951887131,
+            "s2": 0.11496873944997787,
+            "score": -0.04523923993110657,
+            "tas_refusal_mean": 0.0,
+            "tas_refusal_rate": 0.0
+        }
+    },
+    "positions": [
+        -5,
+        -4,
+        -3,
+        -2,
+        -1
+    ],
+    "r_uv_path": "./saves/LUNAR/spa/3B_lunar_retain_g4/r_uv.pt",
+    "ranking": [
+        12
+    ],
+    "ref_position": -1,
+    "selected_layer": 12,
+    "shift_mode": "all"
+}
