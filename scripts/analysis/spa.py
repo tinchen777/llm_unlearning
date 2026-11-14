@@ -36,8 +36,12 @@ GROUP_SIZE = 2
 
 
 # ----------------------------------------------------------------------------- sets
+# Names the extractor gets wrong (the most frequent capitalised phrase of the author's rows is not the name): never used as an author.
+BAD_NAMES = {"Cape Town"}
+
+
 def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget05", holdouts=("holdout05", "holdout10"), templates_json: str = None, qa_per_author: int = 20,
-               r_split: str = "retain90", n_r: int = 10):
+               r_split: str = "retain90", n_r: int = 10, r_near=None):
     import rank_attack as ra
     s_all = ra.extract_names(s_split, qa_per_author)[:N_GROUPS * GROUP_SIZE]          # rows 0-199 of forget10 = authors 181-190
     f_names = ra.extract_names(f_split, qa_per_author)
@@ -53,11 +57,21 @@ def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget0
     # R = RETAINED authors (known to M', never edited by anybody): negatives of the fingerprint probe (R_A) and the second target pool F vs R_B (R_B)
     r_all = [n for n in ra.extract_names(r_split, qa_per_author) if n not in s_all and n not in f_names and n not in h_names]
     r_pick = random.Random(seed + 1).sample(r_all, 2 * n_r)
+    near = {}
+    if r_near:                                   # version 3 (TODO/exp/27): retained authors whose author ids are CLOSE to S / F (author id = row // 20 + 1 in retain90), the batch control
+        lo, hi = r_near
+        r_names = ra.extract_names(r_split, qa_per_author)
+        taken = set(s_all) | set(f_names) | set(h_names) | set(r_pick) | BAD_NAMES
+        pool = [n for i, n in enumerate(r_names) if lo <= i + 1 <= hi and n not in taken]
+        if len(pool) < 2 * n_r:
+            raise ValueError(f"only {len(pool)} usable retained authors with ids {lo}-{hi}; widen --r-near")
+        pick = random.Random(seed + 2).sample(pool, 2 * n_r)
+        near = {"r_near_ids": [lo, hi], "R_A_near": pick[:n_r], "R_B_near": pick[n_r:]}
     sets = validate_sets({
-        "version": 2, "seed": seed, "s_split": s_split, "f_split": f_split, "holdouts": list(holdouts), "r_split": r_split,
+        "version": 3 if near else 2, "seed": seed, "s_split": s_split, "f_split": f_split, "holdouts": list(holdouts), "r_split": r_split,
         "S_groups": [s_all[g * GROUP_SIZE:(g + 1) * GROUP_SIZE] for g in range(N_GROUPS)],
         "author_ids_S": [[181 + g * GROUP_SIZE + i for i in range(GROUP_SIZE)] for g in range(N_GROUPS)],
-        "F": f_names, "H_A": h_names[:10], "H_B": h_names[10:20], "R_A": r_pick[:n_r], "R_B": r_pick[n_r:], "templates": None})
+        "F": f_names, "H_A": h_names[:10], "H_B": h_names[10:20], "R_A": r_pick[:n_r], "R_B": r_pick[n_r:], **near, "templates": None})
     if templates_json:
         sets["templates"] = json.load(open(templates_json, encoding="utf-8"))["templates"]
     return sets
@@ -65,7 +79,8 @@ def build_sets(seed: int = 0, s_split: str = "forget10", f_split: str = "forget0
 
 def validate_sets(sets: dict) -> dict:
     S = [n for g in sets["S_groups"] for n in g]
-    groups = {"S": S, "F": sets["F"], "H_A": sets["H_A"], "H_B": sets["H_B"], "R_A": sets.get("R_A", []), "R_B": sets.get("R_B", [])}
+    groups = {"S": S, "F": sets["F"], "H_A": sets["H_A"], "H_B": sets["H_B"], "R_A": sets.get("R_A", []), "R_B": sets.get("R_B", []),
+              "R_A_near": sets.get("R_A_near", []), "R_B_near": sets.get("R_B_near", [])}
     seen = {}
     for tag, names in groups.items():
         if len(set(names)) != len(names):
@@ -78,11 +93,36 @@ def validate_sets(sets: dict) -> dict:
 
 
 def role_lists(sets: dict):
-    return (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"]), ("R_A", sets.get("R_A", [])), ("R_B", sets.get("R_B", [])))
+    return (("S", [n for g in sets["S_groups"] for n in g]), ("F", sets["F"]), ("H_A", sets["H_A"]), ("H_B", sets["H_B"]), ("R_A", sets.get("R_A", [])), ("R_B", sets.get("R_B", [])),
+            ("R_A_near", sets.get("R_A_near", [])), ("R_B_near", sets.get("R_B_near", [])))
 
 
 def all_names(sets: dict) -> List[str]:
-    return [n for g in sets["S_groups"] for n in g] + sets["F"] + sets["H_A"] + sets["H_B"] + sets.get("R_A", []) + sets.get("R_B", [])
+    return ([n for g in sets["S_groups"] for n in g] + sets["F"] + sets["H_A"] + sets["H_B"] + sets.get("R_A", []) + sets.get("R_B", [])
+            + sets.get("R_A_near", []) + sets.get("R_B_near", []))
+
+
+def with_r_pools(sets: dict, ra_pool: str = "random", rb_pool: str = "random") -> dict:
+    """A copy of the sets whose R_A (negatives of P2, positives of P0) / R_B (the Q2 target pool) come from the `random` retained authors (ids 1-180, version 2) or the
+    `near` ones (ids close to S / F, version 3; TODO/exp/27, the author-batch control)."""
+    out = dict(sets)
+    for key, pool in (("R_A", ra_pool), ("R_B", rb_pool)):
+        if pool == "near":
+            if not sets.get(key + "_near"):
+                raise SystemExit(f"{key}=near needs a sets file of version 3 (spa.py sets --r-near LO HI)")
+            out[key] = list(sets[key + "_near"])
+        elif pool != "random":
+            raise ValueError(pool)
+    out["r_pools"] = {"R_A": ra_pool, "R_B": rb_pool}
+    return out
+
+
+def needed_names(sets: dict, with_shadows: bool):
+    """(names every shadow file must have, names the target file must have) for an attack with these (already re-pooled) sets."""
+    S = [n for g in sets["S_groups"] for n in g]
+    shadow = S + list(sets["H_A"]) + list(sets.get("R_A", [])) if with_shadows else []
+    target = list(sets["F"]) + list(sets["H_B"]) + list(sets.get("R_B", [])) + list(sets.get("R_A", [])) + list(sets["H_A"])
+    return shadow, target
 
 
 # ----------------------------------------------------------------------------- collect
@@ -125,11 +165,28 @@ def cmd_collect(a):
     from transformers import AutoTokenizer
     sets = json.load(open(a.sets, encoding="utf-8"))
     names = all_names(sets)
+    old = None
+    if a.extend and os.path.isfile(a.out):       # only the names the file lacks (e.g. the near-R authors of a version-3 sets file), appended to the existing activations
+        old = np.load(a.out, allow_pickle=False)
+        have = [str(n) for n in old["names"]]
+        if [str(t) for t in old["templates"]] != list(sets["templates"]):
+            sys.exit(f"{a.out}: other templates than {a.sets}; cannot extend")
+        names = [n for n in names if n not in set(have)]
+        if not names:
+            print(f"{a.out}: has every name of {a.sets}, nothing to do")
+            return
+        print(f"{a.out}: extending by {len(names)} names: {names}")
     model = sc.load_model(a.model, a.base)
     tok = AutoTokenizer.from_pretrained(a.base)
     x = collect_acts(model, tok, names, sets["templates"], a.batch_size)
     ntok = np.array([len(tok(" " + n, add_special_tokens=False).input_ids) for n in names])
-    probs = {} if a.no_prob else author_probs(model, tok, sets)
+    probs = {} if a.no_prob else author_probs(model, tok, {**sets, "_only": names})
+    if old is not None:
+        x = np.concatenate([old["acts"].astype(np.float32), x], 0)
+        ntok = np.concatenate([old["name_tokens"], ntok])
+        old_prob = json.loads(str(old["prob"])) if "prob" in old.files else {}
+        probs = {**old_prob, **probs}
+        names = [str(n) for n in old["names"]] + names
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     np.savez(a.out, acts=x.astype(np.float16), names=np.array(names), templates=np.array(sets["templates"]), name_tokens=ntok, model=a.model, prob=np.array(json.dumps(probs)))
     show = {t: round(float(np.mean([probs[n] for n in ns if n in probs])), 3) for t, ns in role_lists(sets) if probs and ns}
@@ -142,7 +199,7 @@ def author_probs(model, tok, sets: dict, qa_per_author: int = 20, batch_size: in
     import torch
     import rank_attack as ra
     import sample_consistency as sc
-    wanted = set(all_names(sets))
+    wanted = set(sets.get("_only") or all_names(sets))
     out: Dict[str, float] = {}
     tok.padding_side = "right"
     if tok.pad_token is None:
@@ -489,15 +546,17 @@ def to_markdown(res: dict, title: str) -> str:
 
 
 def cmd_attack(a):
-    sets = json.load(open(a.sets, encoding="utf-8"))
+    sets = with_r_pools(json.load(open(a.sets, encoding="utf-8")), a.ra_pool, a.rb_pool)
     shadows = [load_acts(p) for p in a.shadow]
     if len(shadows) != N_GROUPS:
         print(f"WARNING: {len(shadows)} shadow files for {N_GROUPS} groups (the group of file i is S_groups[i])")
     target = load_acts(a.target)
-    missing = [n for n in all_names(sets) if n not in target["idx"] or any(n not in sh["idx"] for sh in shadows)]
+    need_sh, need_t = needed_names(sets, True)
+    missing = [n for n in need_t if n not in target["idx"]] + [n for n in need_sh if any(n not in sh["idx"] for sh in shadows)]
     if missing:
         sys.exit(f"{len(missing)} names of {a.sets} are not in the activation files (collected with an older sets file?), e.g. {missing[:3]}: re-run collect")
     res = run_attack(shadows, target, sets, a.kinds, a.C, a.k, a.boot, a.seed, probes=a.probes, edit_layers=a.edit_layers)
+    res["r_pools"] = sets.get("r_pools")
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "scores_target.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh); w.writerow(["probe", "role", "name", "template", "score"])
@@ -520,7 +579,7 @@ def cmd_attack(a):
 def cmd_p0(a):
     """P0 only (no shadow model): for every target model, recognition probe R_A (known) vs H_A (strangers) trained on THAT model, layer by CV on R_A / H_A, applied to Q1 (F vs strangers)
     and Q2 (F vs retained). One table for all models. --acts label=file.npz[#edited,layers]"""
-    sets = json.load(open(a.sets, encoding="utf-8"))
+    sets = with_r_pools(json.load(open(a.sets, encoding="utf-8")), a.ra_pool, a.rb_pool)
     rows, rrows, out = [], [], {}
     for spec in a.acts:
         label, _, rest = spec.partition("=")
@@ -575,28 +634,34 @@ def cmd_strength(a):
 
 
 def cmd_sets(a):
-    sets = build_sets(a.seed, templates_json=a.templates)
+    sets = build_sets(a.seed, templates_json=a.templates, r_near=tuple(a.r_near) if a.r_near else None)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     json.dump(sets, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print(json.dumps({k: sets[k] for k in ("S_groups", "F", "H_A", "H_B")}, ensure_ascii=False, indent=1))
+    print(json.dumps({k: sets[k] for k in ("S_groups", "F", "H_A", "H_B", "R_A", "R_B", "R_A_near", "R_B_near") if k in sets}, ensure_ascii=False, indent=1))
+    print("CHECK by eye that every R name above is a PERSON (the extractor can return a place, e.g. 'Cape Town'; add such names to BAD_NAMES)")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("sets"); s.add_argument("--out", required=True); s.add_argument("--seed", type=int, default=0)
-    s.add_argument("--templates", default="saves/analysis/rank_attack2_templates/templates.json"); s.set_defaults(fn=cmd_sets)
+    s.add_argument("--templates", default="saves/analysis/rank_attack2_templates/templates.json")
+    s.add_argument("--r-near", type=int, nargs=2, default=None, metavar=("LO", "HI"), help="version 3: + R_A_near / R_B_near = retained authors with ids LO..HI (TODO/exp/27)"); s.set_defaults(fn=cmd_sets)
     c = sub.add_parser("collect"); c.add_argument("--sets", required=True); c.add_argument("--model", required=True); c.add_argument("--base", required=True)
     c.add_argument("--out", required=True); c.add_argument("--gpu", default=None); c.add_argument("--batch-size", type=int, default=16)
-    c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy"); c.set_defaults(fn=cmd_collect)
+    c.add_argument("--no-prob", action="store_true", help="skip the answer-probability proxy")
+    c.add_argument("--extend", action="store_true", help="if --out exists: collect only the names it lacks and append them"); c.set_defaults(fn=cmd_collect)
     g = sub.add_parser("strength"); g.add_argument("--sets", required=True); g.add_argument("--npz", nargs="+", required=True); g.add_argument("--out", default=None); g.set_defaults(fn=cmd_strength)
     q = sub.add_parser("p0"); q.add_argument("--sets", required=True); q.add_argument("--acts", nargs="+", required=True, help="label=file.npz[#l1,l2,..] (edited layers)")
     q.add_argument("--out", required=True); q.add_argument("--kinds", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); q.add_argument("--C", type=float, default=0.01)
-    q.add_argument("--k", type=int, default=2); q.add_argument("--boot", type=int, default=200); q.add_argument("--seed", type=int, default=0); q.set_defaults(fn=cmd_p0)
+    q.add_argument("--k", type=int, default=2); q.add_argument("--boot", type=int, default=200); q.add_argument("--seed", type=int, default=0)
+    q.add_argument("--ra-pool", choices=["random", "near"], default="random"); q.add_argument("--rb-pool", choices=["random", "near"], default="random"); q.set_defaults(fn=cmd_p0)
     t = sub.add_parser("attack"); t.add_argument("--sets", required=True); t.add_argument("--shadow", nargs="+", required=True); t.add_argument("--target", required=True)
     t.add_argument("--out", required=True); t.add_argument("--kinds", nargs="+", default=["lr", "dm"], choices=["lr", "dm", "mlp"]); t.add_argument("--C", type=float, default=0.01)
     t.add_argument("--probes", nargs="+", default=list(PROBES), choices=list(PROBES)); t.add_argument("--edit-layers", nargs="*", type=int, default=[], help="layers the method edits (marks the pre-edit layers)")
     t.add_argument("--k", type=int, default=2); t.add_argument("--boot", type=int, default=200); t.add_argument("--seed", type=int, default=0); t.add_argument("--title", default=None)
+    t.add_argument("--ra-pool", choices=["random", "near"], default="random", help="R_A (P2 negatives) from the random (v2) or near (v3) retained authors")
+    t.add_argument("--rb-pool", choices=["random", "near"], default="random", help="R_B (the Q2 pool) from the random (v2) or near (v3) retained authors")
     t.set_defaults(fn=cmd_attack)
     a = ap.parse_args()
     a.fn(a)

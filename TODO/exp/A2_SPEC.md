@@ -161,3 +161,5 @@
 | 2026-11-13 | ROCR 的影子编辑不做强度选择（只编辑一次，系数 1，目标 Donald Trump） | provider 的 ROCR 原版没到匹配点（Prob 0.45–0.74），没有可对齐的强度（`23_*`） |
 | 2026-11-13 | RMU 的影子训练长度用停止规则：每个 epoch 后在 S_k 上算 `forget_Q_A_Prob`，第一次 ≤ 0.25 就停；最多 18 个 epoch（36 步 ≈ provider 的 35 步） | 2 位作者每 epoch 只有 2 步，照搬 5 个 epoch 只有 10 步；在影子上执行 provider 的选点规则（`23_*`） |
 | 2026-11-13 | RMU 的 `--edit-layers` 取第 7 层（`module_regex`）；它训练全部参数，`pre_edit_mean` 不代表"M' = 原模型" | 攻击者知道该超参数；解读只看 `post_edit_mean` / `cv` / `cv_deepest` |
+| 2026-11-14 | sets_v3：另加作者号 151–180 的保留作者（R_A_near / R_B_near），攻击可选 `--ra-pool/--rb-pool near` | 作者批次对照（`27_*`）：S、F 是最后 20 位作者，v2 的 R 来自 1–180 |
+| 2026-11-14 | v2 的 R_A 含一个错误提取的名字 "Cape Town"（地名）；v3 起用 `BAD_NAMES` 排除 | 名字提取器取的是作者问题里最常见的大写短语 |

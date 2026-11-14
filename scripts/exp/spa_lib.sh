@@ -13,8 +13,10 @@
 
 SPA_DIR=${SPA_DIR:-saves/spa}
 OUT_DIR=${OUT_DIR:-saves/analysis}
-SETS_V=v2
+SETS_V=${SPA_SETS_V:-v2}                     # v3 = + the near retained authors (TODO/exp/27); use with its own SPA_DIR, SPA_OUT_SUFFIX and SPA_ATTACK_ARGS
 SETS=${OUT_DIR}/spa/sets_${SETS_V}.json
+SPA_OUT_SUFFIX=${SPA_OUT_SUFFIX:-}           # e.g. _rnear: the attack writes saves/analysis/spa_<scale>_<method>_<cond>_rnear
+SPA_ATTACK_ARGS=${SPA_ATTACK_ARGS:-}         # e.g. "--ra-pool near --rb-pool near"
 read -r -a SPA_GROUPS_A <<< "${SPA_GROUPS:-0 1 2 3 4}"
 GPU=${GPU:-0}
 
@@ -221,7 +223,8 @@ spa_run() {   # scale method cond
   local scale=$1 method=$2 cond=$3
   spa_cfg "${scale}" "${method}" || return 1
   local dir=${SPA_DIR}/${scale}_${method}_${cond}
-  spa_step "sets ${SETS_V}" "logs/spa/sets_${SETS_V}.done" python scripts/analysis/spa.py sets --out "${SETS}" || return 1
+  if [ "${SETS_V}" = v2 ]; then spa_step "sets ${SETS_V}" "logs/spa/sets_${SETS_V}.done" python scripts/analysis/spa.py sets --out "${SETS}" || return 1
+  elif [ -z "${DRY_RUN}" ] && [ ! -f "${SETS}" ]; then echo "${SETS} not found (make it first: spa.py sets --r-near ...)" >&2; return 1; fi
   local mprime
   if [ "${cond}" = real ]; then
     mprime=${SPA_DIR}/models/${scale}_${method}_mprime
@@ -234,9 +237,9 @@ spa_run() {   # scale method cond
   fi
   for k in "${SPA_GROUPS_A[@]}"; do spa_shadow "${scale}" "${method}" "${cond}" "${k}" "${mprime}" || return 1; done
   if [ "${#SPA_GROUPS_A[@]}" -eq 5 ]; then
-    spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}.rules.done" \
+    spa_step "attack ${scale} ${method} ${cond}${SPA_OUT_SUFFIX}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}${SPA_OUT_SUFFIX}.rules.done" \
       python scripts/analysis/spa.py attack --sets "${SETS}" --shadow ${dir}/shadow0.npz ${dir}/shadow1.npz ${dir}/shadow2.npz ${dir}/shadow3.npz ${dir}/shadow4.npz \
-        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --kinds lr dm ${LAYERS:+--edit-layers ${LAYERS//,/ }} --title "A2 SPA ${scale} ${method} (${cond})"
+        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}${SPA_OUT_SUFFIX}" ${SPA_ATTACK_ARGS} --kinds lr dm ${LAYERS:+--edit-layers ${LAYERS//,/ }} --title "A2 SPA ${scale} ${method} (${cond})"
   else
     echo "[note] SPA_GROUPS=${SPA_GROUPS_A[*]}: no attack (needs all 5 groups); shadow strength is printed by each collect"
   fi
