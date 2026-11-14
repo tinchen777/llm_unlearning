@@ -1,7 +1,7 @@
 #!/bin/bash
 # Functions of the A2 shadow-probe attack chains (TODO/exp/A2_SPEC.md). Source it, do not run it.  Used by spa_lane_*.sh.
 #   spa_cfg SCALE METHOD      -> MODEL COEFF LAYERS TARGET_SPEC DIST KIND (provider's configuration at forget05; the attacker knows the algorithm and its hyper-parameters)
-#                                METHOD: act (NEAR-Act) | dist (NEAR-Dist) | lunar (LUNAR) | rocr (ROCR, original: Donald Trump) | rmu (RMU)   (TODO/exp/23 for the baselines)
+#                                METHOD: act (NEAR-Act) | near (NEAR = NEAR-Dist v2) | dist (NEAR-Dist v1) | lunar (LUNAR) | rocr (ROCR, original: Donald Trump) | rmu (RMU)   (TODO/exp/23 for the baselines)
 #   spa_run SCALE METHOD COND -> everything of one condition: M' (COND=real) or the retain95 model (COND=retain, the negative control), 5 shadow edits of 2 authors each, activations, attack.
 # Shadow edit of group k: the SAME algorithm on M' with the forget set = rows [40k, 40k+40) of forget10 (= authors 181+2k, 182+2k), their own train neighbours, retain90, provider's layers and
 # coefficient. Nothing of F, of the provider's neighbours or of the full model M0 is read. The edited model is deleted after its activations are taken.
@@ -19,7 +19,7 @@ read -r -a SPA_GROUPS_A <<< "${SPA_GROUPS:-0 1 2 3 4}"
 GPU=${GPU:-0}
 
 spa_cfg() {
-  DIST=0; COEFF=""; RMU_LR=""; RMU_EXTRA=${SPA_RMU_EXTRA:-}     # (reset: the lanes call spa_cfg for several methods in one shell)
+  DIST=0; DIST_EXTRA=""; COEFF=""; RMU_LR=""; RMU_EXTRA=${SPA_RMU_EXTRA:-}     # (reset: the lanes call spa_cfg for several methods in one shell)
   case "$1/$2" in
     1B/act)  MODEL=Llama-3.2-1B-Instruct; COEFF=7;  LAYERS=7,8,9;    TARGET_SPEC=near:saves/NEAR/forget05_Llama1B_v2/rw1_ans_increment_seq_c7_l7-8-9/k5_c7_all/l7-8-9 ;;
     1B/dist) MODEL=Llama-3.2-1B-Instruct; COEFF=7;  LAYERS=11,12,13; DIST=1; KL_STEPS=${KL_STEPS:-300}; TARGET_SPEC=near:saves/NEAR/forget05_Llama1B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c7_l11-12-13/k5_c7_all/l11-12-13 ;;
@@ -27,6 +27,10 @@ spa_cfg() {
     3B/dist) MODEL=Llama-3.2-3B-Instruct; COEFF=8;  LAYERS=19,20,21; DIST=1; KL_STEPS=300; TARGET_SPEC=near:saves/NEAR/forget05_Llama3B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c8_l19-20-21/k5_c8_all/l19-20-21 ;;
     8B/act)  MODEL=Llama-3.1-8B-Instruct; COEFF=7;  LAYERS=17,18,19; TARGET_SPEC=near:saves/NEAR/forget05_Llama8B_v2/rw1_ans_increment_seq_c7_l17-18-19/k5_c7_all/l17-18-19 ;;
     8B/dist) MODEL=Llama-3.1-8B-Instruct; COEFF=7;  LAYERS=16,17,18; DIST=1; KL_STEPS=300; TARGET_SPEC=near:saves/NEAR/forget05_Llama8B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c7_l16-17-18/k5_c7_all/l16-17-18 ;;
+    # NEAR (= NEAR-Dist v2: E8 + retain-answer KL 1, prefix *_v4, the method of the paper); `dist` above is v1 (kept for the earlier markers). KL_STEPS = the provider's forget05 value.
+    1B/near) MODEL=Llama-3.2-1B-Instruct; COEFF=7; LAYERS=11,12,13; DIST=1; KL_STEPS=300; DIST_EXTRA="wdown.kl.retain_kl_weight=1"; TARGET_SPEC=near:saves/NEAR/forget05_Llama1B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c7_l11-12-13/k5_c7_all/l11-12-13 ;;
+    3B/near) MODEL=Llama-3.2-3B-Instruct; COEFF=8; LAYERS=19,20,21; DIST=1; KL_STEPS=300; DIST_EXTRA="wdown.kl.retain_kl_weight=1"; TARGET_SPEC=near:saves/NEAR/forget05_Llama3B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c8_l19-20-21/k5_c8_all/l19-20-21 ;;
+    8B/near) MODEL=Llama-3.1-8B-Instruct; COEFF=7; LAYERS=16,17,18; DIST=1; KL_STEPS=300; DIST_EXTRA="wdown.kl.retain_kl_weight=1 wdown.kl.fr_batch_size=4 wdown.kl.batch_size=8 wdown.gen_batch_size=8"; TARGET_SPEC=near:saves/NEAR/forget05_Llama8B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c7_l16-17-18/k5_c7_all/l16-17-18 ;;
     # LUNAR (harmful reference set, ONE edited layer): the matched points of the main table (TODO/exp/23: the 3B point is c1.5 l12, NOT the misfiled folder forget05_Llama3B_v2/..._ks)
     1B/lunar) MODEL=Llama-3.2-1B-Instruct; COEFF=1.5; LAYERS=11; TARGET_SPEC=near:saves/LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget05_LUNAR_harmful/c1.5_all/l11 ;;
     3B/lunar) MODEL=Llama-3.2-3B-Instruct; COEFF=1.5; LAYERS=12; TARGET_SPEC=near:saves/LUNAR/single/lunar_tofu_Llama-3.2-3B-Instruct_forget05_LUNAR_harmful/c1.5_all/l12 ;;
@@ -43,7 +47,7 @@ spa_cfg() {
             RMU_EXTRA=${SPA_RMU_EXTRA:-"trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true"} ;;  # same effective batch 32
     *) echo "spa_cfg: unknown $1/$2" >&2; return 1 ;;
   esac
-  case "$2" in act|dist) KIND=near ;; *) KIND=$2 ;; esac
+  case "$2" in act|dist|near) KIND=near ;; *) KIND=$2 ;; esac
   BASE=open-unlearning/tofu_${MODEL}_full
   # SHADOW selection rule (the provider's rule, applied by the attacker on its own shadow set S_k whose answers it has): the WEAKEST coefficient of the grid whose edit brings the
   # answer probability of S_k to <= SPA_TAU (0.25). The provider's coefficient on M' over-shoots (3B Act c14: S_k 0.78 -> 0.008, holdout 0.13; on retain95 0.97 -> 0.13), so a fixed
@@ -81,7 +85,7 @@ spa_edit_near() {   # scale method mprime k cond [coeff]
   local ovr="model.pretrained.name_or_path=${mprime} data.forget.dataset.args.hf_args.split=\"train[${r0}:${r1}]\" +data.neighbor.dataset.args.row_filter.author_id=[${a0},${a1}] +data.neighbor_heldout.dataset.args.row_filter.author_id=[${a0},${a1}]"
   local wd="wdown.retain_weight=1 wdown.include_answer=true wdown.multi_layer=increment wdown.sequential=true"
   if [ "${DIST}" = 1 ]; then
-    wd="${wd} wdown.kl.enabled=true wdown.kl.weight=1 wdown.kl.steps=${KL_STEPS} wdown.kl.forget_prob_weight=1 wdown.kl.forget_prob_target=unseen wdown.kl.forget_prob_mode=neighbor_scaled wdown.kl.init=original wdown.kl.forget_weight=0 wdown.kl.neighbors_per_question=3 wdown.kl.mask_neighbor_name=true ${EXTRA_DIST}"
+    wd="${wd} wdown.kl.enabled=true wdown.kl.weight=1 wdown.kl.steps=${KL_STEPS} wdown.kl.forget_prob_weight=1 wdown.kl.forget_prob_target=unseen wdown.kl.forget_prob_mode=neighbor_scaled wdown.kl.init=original wdown.kl.forget_weight=0 wdown.kl.neighbors_per_question=3 wdown.kl.mask_neighbor_name=true ${DIST_EXTRA} ${EXTRA_DIST}"
   fi
   MODEL=${MODEL} FORGET_SPLIT=forget10 NEIGHBOR_SPLIT=neighbor10 RETAIN_SPLIT=retain90 HOLDOUT_SPLIT=holdout10 AUTHOR_OFFSET=${a0} \
   K=5 COEFF=${coeff} MODE=all LAYERS="${lay}" W_DOWN_LAYER="${lay}" TASK_NAME=${tag} \

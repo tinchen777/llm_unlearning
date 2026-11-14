@@ -4,6 +4,7 @@
 # (Q2: F vs retained)? `before the edit` = layers below the first edited layer, where the activations equal the original model's. Independent of the NEAR-Dist fix (NEAR-Dist = the ORIGINAL E8 here).
 # 3B, then 1B, then 8B (one 70-80 GB card). Per model: one forward pass over 60 names x 10 templates + the answer-probability proxy (~2-5 min). ROCR models are re-made if missing.
 # Result: saves/analysis/spa_p0_<3B|1B|8B>/summary.md (+ summary.json). Activations: saves/spa/p0/<scale>/<model>.npz (not uploaded: *.npz is ignored).
+# 2026-11-14: + NEAR-Dist-v2 rows; the 3B LUNAR row is now the real forget05 point (c1.5 l12; the earlier _ks folder was a forget10 run, TODO/exp/23 §4).
 #   bash scripts/exp/a2_p0_lane.sh <GPU>        # background, log logs/a2p0/lane.log;   FG=1 foreground;  DRY_RUN=1;  FORCE=1
 cd "$(dirname "$0")/../.." || exit 1
 source scripts/exp/_clean_env.sh
@@ -36,7 +37,8 @@ retain|hf:open-unlearning/tofu_Llama-3.2-3B-Instruct_retain95|
 full|hf:open-unlearning/tofu_Llama-3.2-3B-Instruct_full|
 NEAR-Act|near:saves/NEAR/forget05_Llama3B_v2/rw1_ans_increment_seq_c14_l12-13-14/k5_c14_all/l12-13-14|12,13,14
 NEAR-Dist|near:saves/NEAR/forget05_Llama3B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c8_l19-20-21/k5_c8_all/l19-20-21|19,20,21
-LUNAR|near:saves/LUNAR/forget05_Llama3B_v2/near_tofu_Llama-3.2-3B-Instruct_forget05_ks/c1.5_all/l14|14
+NEAR-Dist-v2|near:saves/NEAR/forget05_Llama3B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c8_l19-20-21/k5_c8_all/l19-20-21|19,20,21
+LUNAR|near:saves/LUNAR/single/lunar_tofu_Llama-3.2-3B-Instruct_forget05_LUNAR_harmful/c1.5_all/l12|12
 ROCR|hf:saves/ROCR/Llama-3.2-3B-Instruct_forget05_famous_l3-4-5/model|3,4,5
 GA|hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.2-3B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-21|
 NPO|hf:saves/tofu_unlearn/NPO/tofu_Llama-3.2-3B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14|
@@ -50,6 +52,7 @@ retain|hf:open-unlearning/tofu_Llama-3.2-1B-Instruct_retain95|
 full|hf:open-unlearning/tofu_Llama-3.2-1B-Instruct_full|
 NEAR-Act|near:saves/NEAR/forget05_Llama1B_v2/rw1_ans_increment_seq_c7_l7-8-9/k5_c7_all/l7-8-9|7,8,9
 NEAR-Dist|near:saves/NEAR/forget05_Llama1B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c7_l11-12-13/k5_c7_all/l11-12-13|11,12,13
+NEAR-Dist-v2|near:saves/NEAR/forget05_Llama1B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c7_l11-12-13/k5_c7_all/l11-12-13|11,12,13
 LUNAR|near:saves/LUNAR/single/lunar_tofu_Llama-3.2-1B-Instruct_forget05_LUNAR_harmful/c1.5_all/l11|11
 ROCR|hf:saves/ROCR/Llama-3.2-1B-Instruct_forget05_famous_l2-3-4/model|2,3,4
 GA|hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.2-1B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14|
@@ -64,6 +67,7 @@ retain|hf:open-unlearning/tofu_Llama-3.1-8B-Instruct_retain95|
 full|hf:open-unlearning/tofu_Llama-3.1-8B-Instruct_full|
 NEAR-Act|near:saves/NEAR/forget05_Llama8B_v2/rw1_ans_increment_seq_c7_l17-18-19/k5_c7_all/l17-18-19|17,18,19
 NEAR-Dist|near:saves/NEAR/forget05_Llama8B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c7_l16-17-18/k5_c7_all/l16-17-18|16,17,18
+NEAR-Dist-v2|near:saves/NEAR/forget05_Llama8B_v4/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment_seq_c7_l16-17-18/k5_c7_all/l16-17-18|16,17,18
 LUNAR|near:saves/LUNAR/single/lunar_tofu_Llama-3.1-8B-Instruct_forget05_LUNAR_harmful/c2.8_all/l23|23
 ROCR|hf:saves/ROCR/Llama-3.1-8B-Instruct_forget05_famous_l4-5-6/model|4,5,6
 GA|hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.1-8B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14|
