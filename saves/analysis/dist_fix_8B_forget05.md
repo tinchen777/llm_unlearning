@@ -1,0 +1,14 @@
+# NEAR-Dist likelihood fix, 8B forget05
+
+retain model: mia_loss 0.362, retain_Q_A_Prob 0.992
+
+| run | forget_Q_A_Prob | forget_answer_prob | holdout_answer_prob | mia_loss | retain_Q_A_Prob | retain_answer_prob | model_utility | ud_bb | ud_wb_unsup | ud_wb_sup | F/H ratio | C1 | C2 | C3 | C4 | C5 | C6 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NEAR-Dist (original) | 0.144 | 0.168 | 0.103 | 0.545 | 0.707 | 0.721 | 0.602 | 0.000 | 0.030 | 0.248 | 1.63 | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Dist rkl1 (s0) | 0.149 | 0.181 | 0.136 | 0.444 | 0.938 | 0.987 | 0.650 | 0.000 | 0.030 | 0.289 | 1.33 | ✓ | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Dist rkl1_tidk (s0) | 0.155 | 0.179 | 0.110 | 0.540 | 0.782 | 0.939 | 0.516 | 0.283 | 0.030 | 0.531 | 1.63 | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| Dist rkl1_tmismatched_neighbor (s0) | 0.154 | 0.180 | 0.147 | 0.414 | 0.878 | 0.976 | 0.627 | 0.000 | 0.030 | 0.430 | 1.22 | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ |
+| Dist rkl1_tshared_neighbor (s0) | 0.144 | 0.174 | 0.119 | 0.459 | 0.851 | 0.974 | 0.639 | 0.000 | 0.030 | 0.599 | 1.45 | ✓ | ✗ | ✓ | ✓ | ✗ | ✓ |
+| NEAR-Act (matched) | 0.193 | 0.208 | 0.130 | 0.629 | 0.909 | 0.968 | 0.580 | 0.077 | 1.000 | 0.907 | 1.60 | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ |
+
+C1 Prob <= 0.25; C2 forget/holdout answer prob in [0.8, 1.25]; C3 |mia - retain| <= 0.15; C4 retain_Q_A_Prob >= 0.70; C5 no trace above the original E8 + 0.05; C6 utility >= original - 0.01.
