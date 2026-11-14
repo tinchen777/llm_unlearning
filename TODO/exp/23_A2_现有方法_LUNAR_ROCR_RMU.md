@@ -39,6 +39,18 @@ KEEP_EDITED=1 SPA_GROUPS="0" bash scripts/exp/spa_lane_baselines.sh <GPU> 3B "lu
 
 试跑没问题后删掉试跑留下的模型（`KEEP_EDITED=1` 保留了它们），再跑全量；done 标记会跳过已完成的第 0 组。
 
+### 试跑结果（2026-11-14，3B 第 0 组）【数据】
+| 方法 | real（影子在 M' 上） | retain（影子在 retain95 上） |
+|---|---|---|
+| LUNAR | c0.5 → S_k 0.306；**c1 → 0.102（选中）** | c0.5 / 1 / 1.25 / 1.5 / 1.75 → 0.91 / 0.68 / 0.53 / 0.39 / 0.26；**c2 → 0.159（选中）** |
+| RMU | **第 2 步（第 1 个 epoch）停**，`forget_Q_A_Prob`(S_k) 0.004 | 第 2 步停，0.018 |
+| ROCR | 只编辑一次（强度看 collect 打印的代理概率，未上传） | 同左 |
+
+【我的判断】
+- LUNAR：在 M' 上需要的系数比 provider（c1.5）小，与 NEAR-Act 的情况一致（M' 已被编辑过，同样的系数会过冲）。c0.5 与 c1 之间跨度大（0.31 → 0.10），选中的 c1 比 provider 在 F 上的 0.238 更强，所以**网格加了 0.75**（8B 的网格前面加了 1）。
+- RMU：第一个可评测的点（每 epoch 2 步）就已经压到 0.004–0.018，没有更弱的选择。provider 自己的匹配点在 F 上也是 0.006（主表），所以强度是对得上的，不是影子特有的过冲。
+- 加了 0.75 之后，3B LUNAR real 的第 0 组要重做：删掉 `logs/spa/3B_lunar_real/acts_g0.v2.sel.done`（否则整组被跳过）。
+
 ## 二、全量（每个规模：3 个方法 × real / retain × 5 组 + 攻击）
 ```bash
 bash scripts/exp/spa_lane_baselines.sh <GPU> 3B

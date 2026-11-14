@@ -53,7 +53,8 @@ spa_cfg() {
   # answer probability of S_k to <= SPA_TAU (0.25). The provider's coefficient on M' over-shoots (3B Act c14: S_k 0.78 -> 0.008, holdout 0.13; on retain95 0.97 -> 0.13), so a fixed
   # coefficient does not reproduce the provider's strength. NEAR-Dist calibrates its own level (KL stage): no grid.
   if [ "${KIND}" = rocr ] || [ "${KIND}" = rmu ]; then SHADOW_COEFFS=x     # one edit (ROCR: no strength knob; RMU: the strength is the training length, chosen inside the run)
-  elif [ "${KIND}" = lunar ]; then case "$1" in 8B) SHADOW_COEFFS=${SPA_COEFFS:-"1.5 2 2.4 2.8 3.2 3.6 4"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"0.5 1 1.25 1.5 1.75 2 2.5 3"} ;; esac
+  # (3B pilot, group 0: real c0.5 -> S_k 0.31, c1 -> 0.10, so 0.75 was added; retain c1.75 -> 0.26, c2 -> 0.16. 8B starts lower than the provider's c2.8 for the same reason.)
+  elif [ "${KIND}" = lunar ]; then case "$1" in 8B) SHADOW_COEFFS=${SPA_COEFFS:-"1 1.5 2 2.4 2.8 3.2 3.6 4"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"0.5 0.75 1 1.25 1.5 1.75 2 2.5 3"} ;; esac
   elif [ "${DIST}" = 1 ]; then SHADOW_COEFFS=${SPA_COEFFS:-${COEFF}}
   # (3B pilot, group 0: c1 / c2 change nothing; real chose c8 -> S_k 0.177 = the provider's F on M', retain chose c14 -> 0.134. 1B / 8B: grids go past the provider's c7 for the retain control)
   else case "$1" in 3B) SHADOW_COEFFS=${SPA_COEFFS:-"4 6 8 10 12 14 16"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"2 3 4 5 6 7 9 11"} ;; esac; fi
