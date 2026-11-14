@@ -1,7 +1,7 @@
 #!/bin/bash
 # Functions of the A2 shadow-probe attack chains (TODO/exp/A2_SPEC.md). Source it, do not run it.  Used by spa_lane_*.sh.
 #   spa_cfg SCALE METHOD      -> MODEL COEFF LAYERS TARGET_SPEC DIST KIND (provider's configuration at forget05; the attacker knows the algorithm and its hyper-parameters)
-#                                METHOD: act (NEAR-Act) | near (NEAR = NEAR-Dist v2) | dist (NEAR-Dist v1) | lunar (LUNAR) | rocr (ROCR, original: Donald Trump) | rmu (RMU)   (TODO/exp/23 for the baselines)
+#                                METHOD: act (NEAR-Act) | near (NEAR = NEAR-Dist v2) | dist (NEAR-Dist v1) | lunar (LUNAR) | rocr (ROCR, original: Donald Trump) | rmu (RMU) | ga (GradAscent) | npo (NPO)   (TODO/exp/23, 26)
 #   spa_run SCALE METHOD COND -> everything of one condition: M' (COND=real) or the retain95 model (COND=retain, the negative control), 5 shadow edits of 2 authors each, activations, attack.
 # Shadow edit of group k: the SAME algorithm on M' with the forget set = rows [40k, 40k+40) of forget10 (= authors 181+2k, 182+2k), their own train neighbours, retain90, provider's layers and
 # coefficient. Nothing of F, of the provider's neighbours or of the full model M0 is read. The edited model is deleted after its activations are taken.
@@ -19,7 +19,7 @@ read -r -a SPA_GROUPS_A <<< "${SPA_GROUPS:-0 1 2 3 4}"
 GPU=${GPU:-0}
 
 spa_cfg() {
-  DIST=0; DIST_EXTRA=""; COEFF=""; RMU_LR=""; RMU_EXTRA=${SPA_RMU_EXTRA:-}     # (reset: the lanes call spa_cfg for several methods in one shell)
+  DIST=0; DIST_EXTRA=""; COEFF=""; RMU_LR=""; TRAINER=RMU; RMU_EXTRA=${SPA_RMU_EXTRA:-}     # (reset: the lanes call spa_cfg for several methods in one shell)
   case "$1/$2" in
     1B/act)  MODEL=Llama-3.2-1B-Instruct; COEFF=7;  LAYERS=7,8,9;    TARGET_SPEC=near:saves/NEAR/forget05_Llama1B_v2/rw1_ans_increment_seq_c7_l7-8-9/k5_c7_all/l7-8-9 ;;
     1B/dist) MODEL=Llama-3.2-1B-Instruct; COEFF=7;  LAYERS=11,12,13; DIST=1; KL_STEPS=${KL_STEPS:-300}; TARGET_SPEC=near:saves/NEAR/forget05_Llama1B_v3/rw1_ans_kl1_s300_fp1_ftunseen_fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment_seq_c7_l11-12-13/k5_c7_all/l11-12-13 ;;
@@ -45,14 +45,24 @@ spa_cfg() {
     3B/rmu) MODEL=Llama-3.2-3B-Instruct; LAYERS=7; RMU_LR=1e-4; TARGET_SPEC=hf:saves/tofu_unlearn/RMU/tofu_Llama-3.2-3B-Instruct_forget05_lr1e-4_ep5_ckpt ;;
     8B/rmu) MODEL=Llama-3.1-8B-Instruct; LAYERS=7; RMU_LR=1e-4; TARGET_SPEC=hf:saves/tofu_unlearn/RMU/tofu_Llama-3.1-8B-Instruct_forget05_lr1e-4_ep5_ckpt
             RMU_EXTRA=${SPA_RMU_EXTRA:-"trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true"} ;;  # same effective batch 32
+    # GA / NPO (TODO/exp/26): the provider's M' = the checkpoints of the A1 v2 / A2 P0 lanes (a2_p0_lane.sh; the main table's matched step can differ by one epoch where no model
+    # was kept: 3B GA uses step 21, the main table step 14). No edit layer (all parameters, no target layer): only the cv / cv_deepest rules apply. Same shadow training as RMU.
+    1B/ga)  MODEL=Llama-3.2-1B-Instruct; TRAINER=GradAscent; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.2-1B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14 ;;
+    3B/ga)  MODEL=Llama-3.2-3B-Instruct; TRAINER=GradAscent; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.2-3B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-21 ;;
+    8B/ga)  MODEL=Llama-3.1-8B-Instruct; TRAINER=GradAscent; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/GradAscent/tofu_Llama-3.1-8B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14
+            RMU_EXTRA=${SPA_RMU_EXTRA:-"trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true"} ;;
+    1B/npo) MODEL=Llama-3.2-1B-Instruct; TRAINER=NPO; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/NPO/tofu_Llama-3.2-1B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-35 ;;
+    3B/npo) MODEL=Llama-3.2-3B-Instruct; TRAINER=NPO; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/NPO/tofu_Llama-3.2-3B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-14 ;;
+    8B/npo) MODEL=Llama-3.1-8B-Instruct; TRAINER=NPO; RMU_LR=2e-5; LAYERS=""; TARGET_SPEC=hf:saves/tofu_unlearn/NPO/tofu_Llama-3.1-8B-Instruct_forget05_lr2e-5_ep5_ckpt/checkpoint-35
+            RMU_EXTRA=${SPA_RMU_EXTRA:-"trainer.args.per_device_train_batch_size=2 trainer.args.gradient_accumulation_steps=16 trainer.args.gradient_checkpointing=true"} ;;
     *) echo "spa_cfg: unknown $1/$2" >&2; return 1 ;;
   esac
-  case "$2" in act|dist|near) KIND=near ;; *) KIND=$2 ;; esac
+  case "$2" in act|dist|near) KIND=near ;; rmu|ga|npo) KIND=train ;; *) KIND=$2 ;; esac
   BASE=open-unlearning/tofu_${MODEL}_full
   # SHADOW selection rule (the provider's rule, applied by the attacker on its own shadow set S_k whose answers it has): the WEAKEST coefficient of the grid whose edit brings the
   # answer probability of S_k to <= SPA_TAU (0.25). The provider's coefficient on M' over-shoots (3B Act c14: S_k 0.78 -> 0.008, holdout 0.13; on retain95 0.97 -> 0.13), so a fixed
   # coefficient does not reproduce the provider's strength. NEAR-Dist calibrates its own level (KL stage): no grid.
-  if [ "${KIND}" = rocr ] || [ "${KIND}" = rmu ]; then SHADOW_COEFFS=x     # one edit (ROCR: no strength knob; RMU: the strength is the training length, chosen inside the run)
+  if [ "${KIND}" = rocr ] || [ "${KIND}" = train ]; then SHADOW_COEFFS=x     # one edit (ROCR: no strength knob; RMU: the strength is the training length, chosen inside the run)
   # (3B pilot, group 0: real c0.5 -> S_k 0.31, c1 -> 0.10, so 0.75 was added; retain c1.75 -> 0.26, c2 -> 0.16. 8B starts lower than the provider's c2.8 for the same reason.)
   elif [ "${KIND}" = lunar ]; then case "$1" in 8B) SHADOW_COEFFS=${SPA_COEFFS:-"1 1.5 2 2.4 2.8 3.2 3.6 4"} ;; *) SHADOW_COEFFS=${SPA_COEFFS:-"0.5 0.75 1 1.25 1.5 1.75 2 2.5 3"} ;; esac
   elif [ "${DIST}" = 1 ]; then SHADOW_COEFFS=${SPA_COEFFS:-${COEFF}}
@@ -117,15 +127,15 @@ spa_edit_rocr() {    # scale method mprime k cond
     --layers ${LAYERS//,/ } --scale 1 --dtype bfloat16 --out "$(dirname "$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}")")"
 }
 
-# RMU (the provider's trainer config and lr) on $mprime for group k: forget = S_k, retain90; stops at the first epoch with forget_Q_A_Prob(S_k) <= SPA_TAU (see SPA_RMU_EPOCHS)
-spa_edit_rmu() {     # scale method mprime k cond
+# RMU / GA / NPO (the provider's trainer config and lr; trainer = TRAINER) on $mprime for group k: forget = S_k, retain90; stops at the first epoch with forget_Q_A_Prob(S_k) <= SPA_TAU (see SPA_RMU_EPOCHS)
+spa_edit_train() {   # scale method mprime k cond
   local scale=$1 method=$2 mprime=$3 k=$4 cond=$5
   spa_cfg "${scale}" "${method}" || return 1
   local r0=$((40 * k)) r1=$((40 * k + 40))
   local out; out=$(spa_edited_dir "${scale}" "${method}" "${cond}" "${k}")
   local extra=(); [ -n "${RMU_EXTRA}" ] && read -r -a extra <<< "${RMU_EXTRA}"
   HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 STOP_AT_METRIC="forget_Q_A_Prob<=${SPA_TAU}" \
-  python src/train.py --config-name=unlearn experiment=unlearn/tofu/default trainer=RMU model=tofu/tofu_${MODEL}_full model.pretrained.name_or_path=${mprime} \
+  python src/train.py --config-name=unlearn experiment=unlearn/tofu/default trainer=${TRAINER} model=tofu/tofu_${MODEL}_full model.pretrained.name_or_path=${mprime} \
     forget_split=forget10 retain_split=retain90 holdout_split=holdout10 retain_logs_path=null \
     "data.train.dataset.forget.args.hf_args.split='train[${r0}:${r1}]'" eval=tofu_sprob "eval.tofu.forget_hf_split='train[${r0}:${r1}]'" \
     trainer.args.learning_rate=${RMU_LR} trainer.args.num_train_epochs=${SPA_RMU_EPOCHS} "${extra[@]}" \
@@ -138,7 +148,7 @@ spa_edit() {         # scale method mprime k cond coeff   (dispatch on the metho
     near)  spa_edit_near "$1" "$2" "$3" "$4" "$5" "$6" ;;
     lunar) spa_edit_lunar "$1" "$2" "$3" "$4" "$5" "$6" ;;
     rocr)  spa_edit_rocr "$1" "$2" "$3" "$4" "$5" ;;
-    rmu)   spa_edit_rmu "$1" "$2" "$3" "$4" "$5" ;;
+    train) spa_edit_train "$1" "$2" "$3" "$4" "$5" ;;
   esac
 }
 
@@ -148,14 +158,14 @@ spa_edited_dir() {   # scale method cond k [coeff]  -> the folder of the edited 
     near)  echo "saves/NEAR/spa/$1_$2_$3_g$4/k5_c$(printf "%g" "${5:-${COEFF}}")_all/l${LAYERS//,/-}/model" ;;
     lunar) echo "saves/LUNAR/spa/$1_$2_$3_g$4/c$(printf "%g" "${5:-${COEFF}}")_all/l${LAYERS//,/-}/model" ;;
     rocr)  echo "saves/ROCR/spa/$1_$2_$3_g$4/model" ;;
-    rmu)   echo "saves/tofu_unlearn/spa/$1_$2_$3_g$4" ;;
+    train) echo "saves/tofu_unlearn/spa/$1_$2_$3_g$4" ;;
   esac
 }
 
 spa_edit_root() {    # scale method cond k [coeff]  -> the folder that is deleted once the activations are taken (model + its small files)
   spa_cfg "$1" "$2" || return 1
   local d; d=$(spa_edited_dir "$@") || return 1
-  case "${KIND}" in rmu) echo "${d}" ;; *) dirname "${d}" ;; esac
+  case "${KIND}" in train) echo "${d}" ;; *) dirname "${d}" ;; esac
 }
 
 spa_keep_small() {   # src_dir dst_prefix: copy the small json files of an edit folder to the logs before the folder is deleted (provenance of the shadow strength)
@@ -181,11 +191,11 @@ spa_shadow() {   # scale method cond k mprime
     spa_step "edit ${scale} ${method} ${cond} g${k} c${c}" "${log}/edit_g${k}_c${c}.done" spa_edit "${scale}" "${method}" "${mprime}" "${k}" "${cond}" "${c}" || return 1
     chosen=${c}
     if [ "${KIND}" = rocr ]; then break; fi                                                      # one edit; strength = the proxy printed by the collect below
-    if [ "${KIND}" = rmu ]; then                                                                 # the stopping epoch was chosen inside the run (stop.json)
+    if [ "${KIND}" = train ]; then                                                                 # the stopping epoch was chosen inside the run (stop.json)
       if [ -n "${DRY_RUN}" ]; then echo "       (stops at the first epoch with forget_Q_A_Prob(S_k) <= ${SPA_TAU}; see ${root}/stop.json)"; break; fi
       p=$(python -c "import json; d=json.load(open('${root}/stop.json')); print(d['step'], d['forget_Q_A_Prob'], d['met'])")
       mkdir -p "$(dirname "${strength}")"; printf "g%s\tstep_Prob_met\t%s\n" "${k}" "${p}" >> "${strength}"
-      echo "       g${k} RMU stopped at step / forget_Q_A_Prob(S_k) / met: ${p}"
+      echo "       g${k} ${TRAINER} stopped at step / forget_Q_A_Prob(S_k) / met: ${p}"
       break
     fi
     if [ -n "${DRY_RUN}" ]; then echo "       (then: S_k answer prob of ${root}/responses_after_summary.json <= ${SPA_TAU} ? stop : next coefficient)"; break; fi
@@ -226,7 +236,7 @@ spa_run() {   # scale method cond
   if [ "${#SPA_GROUPS_A[@]}" -eq 5 ]; then
     spa_step "attack ${scale} ${method} ${cond}" "logs/spa/${scale}_${method}_${cond}/attack.${SETS_V}.rules.done" \
       python scripts/analysis/spa.py attack --sets "${SETS}" --shadow ${dir}/shadow0.npz ${dir}/shadow1.npz ${dir}/shadow2.npz ${dir}/shadow3.npz ${dir}/shadow4.npz \
-        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --kinds lr dm --edit-layers ${LAYERS//,/ } --title "A2 SPA ${scale} ${method} (${cond})"
+        --target "${dir}/target.npz" --out "${OUT_DIR}/spa_${scale}_${method}_${cond}" --kinds lr dm ${LAYERS:+--edit-layers ${LAYERS//,/ }} --title "A2 SPA ${scale} ${method} (${cond})"
   else
     echo "[note] SPA_GROUPS=${SPA_GROUPS_A[*]}: no attack (needs all 5 groups); shadow strength is printed by each collect"
   fi

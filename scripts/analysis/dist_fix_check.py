@@ -48,6 +48,13 @@ def rows_for(size, split, root="saves"):
         var = os.path.basename(d).split(E8)[1].split("_increment_seq")[0].lstrip("_") or "original config"
         seed = os.path.basename(os.path.dirname(d)).split(f"{pre}_v4")[1].lstrip("_") or "s0"
         rows.append((f"Dist {var} ({seed})", d))
+    seen = {d for _, d in rows}
+    for d in sorted(glob.glob(f"{root}/eval/NEAR/{pre}_v4*/rw1_ans_kl1*_rkl1*_k5_*")):   # component ablations of v2 (TODO/exp/26): they change the E8 stem itself
+        if d in seen:
+            continue
+        name = os.path.basename(d).split("_increment_seq")[0]
+        seed = os.path.basename(os.path.dirname(d)).split(f"{pre}_v4")[1].lstrip("_") or "s0"
+        rows.append((f"Abl {name.replace('rw1_ans_kl1_', '')} ({seed})", d))
     pts, _ = cells.load_cell(size, split, root)
     act, _, _ = cells.best_matched(pts, "NEAR-Act")
     if act and act.get("path"):
