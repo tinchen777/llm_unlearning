@@ -21,6 +21,8 @@ NEAR_PREFIX = {("1B", "forget01"): "single", ("3B", "forget01"): "Llama3B", ("8B
                **{(s, f): f"{f}_Llama{s}" for s in MODELS for f in ("forget05", "forget10")}}
 MAIN = ("GradAscent", "NPO", "RMU", "LUNAR", "NEAR-Act", "NEAR-Dist")
 APPENDIX = ("GradDiff", "SimNPO", "NEAR-Dist-v1")
+# folders of saves/eval/LUNAR that are NOT results of their name (TODO/exp/23 §4: the 3B "forget05 ..._ks" runs were forget10 runs) -> never read
+MISFILED = {"misfiled"}
 E8_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_increment")          # E8 exactly (no later suffix): NEAR-Dist-v1
 DIST_RE = re.compile(r"fmneighbor_scaled_initoriginal_kfw0_npq3_mn_rkl1_increment")    # + retain KL 1 only (no _dyn): NEAR-Dist
 
@@ -31,6 +33,8 @@ def load_cell(size, split, root="saves"):
     pre = NEAR_PREFIX[(size, split)]
     pts = pareto.collect([f"{root}/eval/NEAR/{pre}_v2", f"{root}/eval/NEAR/{pre}_v3", f"{root}/eval/NEAR/{pre}_v4"], f"{root}/eval/LUNAR/none", f"{root}/tofu_unlearn", model, split, "5")
     for d in sorted(glob.glob(f"{root}/eval/LUNAR/*")):
+        if os.path.basename(d) in MISFILED:
+            continue
         pts += [p for p in pareto.collect([], d, f"{root}/none", model, split) if p["family"] == "LUNAR"]
     out = []
     for p in pts:
@@ -75,7 +79,7 @@ def _locate(p, size, split, root="saves"):
     if m in ("NEAR-Act", "NEAR-Dist", "NEAR-Dist-v1"):
         hits = [d for v in ("v2", "v3", "v4") for d in glob.glob(f"{root}/eval/NEAR/{pre}_{v}/{run}_k5_*")]
     elif m == "LUNAR":
-        hits = glob.glob(f"{root}/eval/LUNAR/*/*_{model}_{split}_*_{run}_l*")
+        hits = [h for h in glob.glob(f"{root}/eval/LUNAR/*/*_{model}_{split}_*_{run}_l*") if h.split(os.sep)[-2] not in MISFILED]
     elif "@" in run:
         suffix, step = run.rsplit("@", 1)
         suffix = "" if suffix == "default" else "_" + suffix
